@@ -100,3 +100,18 @@
   - The vitest-setup.ts in setupFiles runs for ALL test files (including docker-client tests) — keep it minimal (just env var stubs)
   - Schemas separated into schemas.ts for clean testability; config files import from schemas.ts and add parsed config export
   - Services should import directly from their specific sub-path (e.g., `@claw/shared-config/control-plane`) not from the root `@claw/shared-config` to avoid triggering all 3 schemas' parse at startup
+- shared-config subpath exports (e.g. `@claw/shared-config/control-plane`) require `pnpm build` for the dist/*.d.ts to exist before dependent packages can typecheck
+
+---
+
+## 2026-03-16 - US-006
+- What was implemented: Fastify app scaffold for control-plane with startup reconciliation, /health route, Prisma migration deploy, and graceful shutdown
+- Files changed:
+  - apps/control-plane/src/index.ts (full implementation: Fastify app, Prisma client, reconcile(), /health route, main(), shutdown(), SIGTERM/SIGINT handlers)
+  - prd.json (US-006 passes: true)
+  - progress.txt (this entry)
+- **Learnings for future iterations:**
+  - The control-plane/src/index.ts was pre-scaffolded with the implementation already; the main blocker was that `@claw/shared-config` subpath exports needed `pnpm build` to generate dist/control-plane.d.ts
+  - Always build dependency packages before typechecking a consumer; `pnpm --filter @claw/shared-config build` resolves missing subpath type declarations
+  - Unused variables (`const logger = ...`) will cause issues in strict mode; remove dead code before committing
+---
