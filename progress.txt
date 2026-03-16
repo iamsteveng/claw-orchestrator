@@ -231,3 +231,16 @@
   - pollUntilHealthy is background-safe: caller uses `void pollUntilHealthy(...)` without awaiting
   - UNHEALTHY is only set when previousStatus === TenantStatus.ACTIVE; provisioning timeout leaves status for caller rollback
 ---
+
+## 2026-03-16 - US-011
+- What was implemented: Tenant wake-up flow (POST /v1/tenants/:tenantId/start)
+- Files changed:
+  - apps/control-plane/src/index.ts (added /v1/tenants/:tenantId/start route)
+  - prisma/schema.prisma (added queued_for_start_at Int? to Tenant model)
+  - prisma/migrations/20260316170453_add_queued_for_start_at/migration.sql (ALTER TABLE to add column)
+- **Learnings for future iterations:**
+  - The start endpoint: acquires startup lock → checks MAX_ACTIVE_TENANTS cap → dockerStart → pollUntilHealthy in background
+  - releaseStartupLock is called in .finally() after pollUntilHealthy (not in a try block)
+  - If at capacity, sets queued_for_start_at and returns {status: 'queued'} without starting
+  - IMAGE_UPDATED audit event emitted when imageTag in body differs from tenant.image_tag
+---

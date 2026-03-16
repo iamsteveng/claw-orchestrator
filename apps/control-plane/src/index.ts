@@ -6,6 +6,8 @@ import { execSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { seedWorkspace } from './seed-workspace.js';
+import { acquireStartupLock, releaseStartupLock } from './startup-lock.js';
+import { pollUntilHealthy } from './health-poll.js';
 
 const startedAt = Date.now();
 
@@ -178,6 +180,96 @@ app.post<{
     });
 
     return reply.status(500).send({ error: 'Provisioning failed' });
+  }
+});
+
+// POST /v1/tenants/:tenantId/start
+app.post<{
+  Params: { tenantId: string };
+  Body: { imageTag?: string };
+}>('/v1/tenants/:tenantId/start', async (req, reply) => {
+  const { tenantId } = req.params;
+  const { imageTag } = req.body ?? {};
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) {
+    return reply.status(404).send({ error: 'Tenant not found' });
+  }
+
+  // Cannot start a DELETING tenant
+  if (tenant.status === TenantStatus.DELETING) {
+    return reply.status(409).send({ error: 'Tenant is being deleted' });
+  }
+
+  // Idempotent: already active
+  if (tenant.status === TenantStatus.ACTIVE) {
+    return reply.send({ status: 'active' });
+  }
+
+  const requestId = crypto.randomUUID();
+
+  // Try to acquire startup lock
+  const { acquired } = await acquireStartupLock(prisma, tenantId, requestId);
+  if (!acquired) {
+    return reply.status(202).send({ status: 'already_starting' });
+  }
+
+  try {
+    // Check capacity cap
+    const activeCount = await prisma.tenant.count({
+      where: { status: TenantStatus.ACTIVE },
+    });
+
+    if (activeCount >= controlPlaneConfig.MAX_ACTIVE_TENANTS) {
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { queued_for_start_at: Date.now(), updated_at: Date.now() },
+      });
+      return reply.status(202).send({ status: 'queued' });
+    }
+
+    const now = Date.now();
+    const containerName = `claw-tenant-${tenantId}`;
+    const previousStatus = tenant.status;
+
+    // Write IMAGE_UPDATED audit event if image_tag changed
+    if (imageTag && imageTag !== tenant.image_tag) {
+      await prisma.auditLog.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          event_type: AuditEventType.IMAGE_UPDATED,
+          actor: 'system',
+          metadata: JSON.stringify({ oldTag: tenant.image_tag, newTag: imageTag }),
+          created_at: now,
+        },
+      });
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { image_tag: imageTag, updated_at: now },
+      });
+    }
+
+    // Set status to STARTING
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { status: TenantStatus.STARTING, last_started_at: now, updated_at: now },
+    });
+
+    // Start the container (dynamic import required: docker-client is ESM-only)
+    const { DockerClient } = await import('@claw/docker-client');
+    await DockerClient.start(containerName);
+
+    // Launch health polling in background (does not block response)
+    void pollUntilHealthy(prisma, tenantId, containerName, previousStatus, app.log)
+      .finally(() => void releaseStartupLock(prisma, tenantId, requestId));
+
+    app.log.info({ tenantId }, 'Container start initiated');
+    return reply.status(202).send({ status: 'starting' });
+  } catch (err) {
+    await releaseStartupLock(prisma, tenantId, requestId);
+    app.log.error({ tenantId, err }, 'Failed to start tenant container');
+    return reply.status(500).send({ error: 'Failed to start container' });
   }
 });
 
