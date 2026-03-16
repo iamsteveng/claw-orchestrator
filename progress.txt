@@ -1,0 +1,28 @@
+## Codebase Patterns
+- pnpm workspaces used: apps/* and packages/*; use `workspace:*` protocol for cross-package deps
+- TypeScript module system: `module: Node16`, `moduleResolution: Node16`, `target: ES2023` (required for Node.js 22)
+- Each package/app has its own tsconfig.json extending ../../tsconfig.json with rootDir/outDir overrides
+- Build command per package: `tsc -p tsconfig.json`; typecheck: `tsc -p tsconfig.json --noEmit`
+- Root vitest.config.ts covers all *.test.ts in packages/*/src/** and apps/*/src/**
+- `pnpm.onlyBuiltDependencies: ["esbuild"]` required in root package.json to allow esbuild (vitest dep) post-install scripts in pnpm v10
+- Path aliases in root tsconfig.json: @claw/shared-types -> packages/shared-types/src/index.ts, etc. (for IDE support)
+
+---
+
+## 2026-03-16 - US-001
+- What was implemented: Full pnpm workspace monorepo scaffold with TypeScript 5.x + Node.js 22 (ES2023)
+- Files changed:
+  - package.json (root, with pnpm workspaces, onlyBuiltDependencies for esbuild)
+  - pnpm-workspace.yaml (apps/*, packages/*)
+  - tsconfig.json (root base config with ES2023, Node16 module, strict, path aliases)
+  - vitest.config.ts (root-level test config)
+  - .gitignore (node_modules, dist, *.js.map)
+  - packages/shared-types/, shared-config/, docker-client/, test-utils/ (package.json, tsconfig.json, src/index.ts)
+  - apps/control-plane/, slack-relay/, scheduler/ (package.json, tsconfig.json, src/index.ts)
+  - pnpm-lock.yaml (auto-generated)
+- **Learnings for future iterations:**
+  - pnpm v10 requires `pnpm.onlyBuiltDependencies` in package.json (or interactive `pnpm approve-builds`) for packages with post-install scripts like esbuild
+  - `module: Node16` + `moduleResolution: Node16` is the correct choice for Node.js 22 projects using tsc directly
+  - TypeScript 5.9.3 was installed (latest)
+  - All 7 packages/apps build and typecheck successfully with minimal stub src/index.ts files
+---
