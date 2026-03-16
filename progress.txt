@@ -184,3 +184,28 @@
   - releaseStartupLock uses deleteMany (not delete) to avoid error if row doesn't exist
   - waitForTenantActive polls every 2s for up to 3min; returns {queued: true, message: '...'} on timeout
 ---
+
+## 2026-03-16 - US-008
+- What was implemented: Workspace template seeding with AGENTS.md merge logic
+- Files changed:
+  - templates/workspace/AGENTS.md (new: template with ## Task Execution section)
+  - apps/control-plane/src/seed-workspace.ts (seedWorkspace function with 3-scenario AGENTS.md merge logic)
+  - apps/control-plane/src/seed-workspace.test.ts (4 unit tests covering all 3 AGENTS.md scenarios + other files)
+  - apps/control-plane/src/provision.ts (added seedWorkspace call after directory creation)
+  - packages/shared-config/src/schemas.ts (added TEMPLATES_DIR with default /opt/claw-orchestrator/templates/workspace)
+- **Learnings for future iterations:**
+  - seedWorkspace reads templatesDir, iterates files, copies all except AGENTS.md which has merge logic
+  - TEMPLATES_DIR is configurable via env var (Zod default = /opt/claw-orchestrator/templates/workspace)
+  - provision.ts is the actual provisioning module (index.ts delegates to it); both files now import seedWorkspace
+---
+
+## 2026-03-16 - US-009
+- What was implemented: Startup lock mechanism using SQLite UNIQUE constraint as distributed mutex
+- Files changed:
+  - apps/control-plane/src/startup-lock.ts (acquireStartupLock, releaseStartupLock, waitForTenantActive)
+  - apps/control-plane/src/startup-lock.test.ts (4 tests: successful acquire, blocked acquire, stale takeover, release)
+- **Learnings for future iterations:**
+  - acquireStartupLock uses INSERT catch pattern (not SELECT-then-INSERT) to avoid TOCTOU race
+  - Stale lock detection: expires_at < now → delete + retry INSERT once
+  - waitForTenantActive polls every 2s for up to 3min; returns {queued: true, status} on ACTIVE or {queued: false, message} on timeout
+---

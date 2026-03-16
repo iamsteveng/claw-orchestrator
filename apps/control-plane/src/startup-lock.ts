@@ -95,12 +95,13 @@ export async function releaseStartupLock(
 
 /**
  * Non-holder behavior: polls tenant status every 2s for up to 3 minutes.
- * Returns {queued: true, ...} if tenant becomes ACTIVE, or a wait message if it times out.
+ * Returns {active: true} if tenant becomes ACTIVE within the timeout.
+ * Returns {queued: true, message: ...} if tenant is still starting after 3 minutes.
  */
 export async function waitForTenantActive(
   prisma: PrismaClient,
   tenantId: string,
-): Promise<{ queued: true; status: string } | { queued: false; message: string }> {
+): Promise<{ active: true } | { active: false; queued: true; message: string }> {
   const deadline = Date.now() + POLL_MAX_MS;
 
   while (Date.now() < deadline) {
@@ -110,13 +111,13 @@ export async function waitForTenantActive(
     });
 
     if (tenant?.status === 'ACTIVE') {
-      return { queued: true, status: 'ACTIVE' };
+      return { active: true };
     }
 
     await sleep(POLL_INTERVAL_MS);
   }
 
-  return { queued: false, message: 'tenant is starting, please wait' };
+  return { active: false, queued: true, message: 'tenant is starting, please wait' };
 }
 
 function sleep(ms: number): Promise<void> {
