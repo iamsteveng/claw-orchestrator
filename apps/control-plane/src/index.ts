@@ -273,6 +273,109 @@ app.post<{
   }
 });
 
+// POST /v1/tenants/:tenantId/message
+app.post<{
+  Params: { tenantId: string };
+  Body: import('@claw/shared-types').RelayMessageRequest;
+}>('/v1/tenants/:tenantId/message', async (req, reply) => {
+  const { tenantId } = req.params;
+  const relayToken = req.headers['x-relay-token'];
+  const startedAt = Date.now();
+
+  // Container hostname derived from tenantId (no DB lookup needed)
+  const containerName = `claw-tenant-${tenantId}`;
+
+  // Fetch tenant for token validation and status check
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) {
+    return reply.status(404).send({ ok: false, error: 'Tenant not found' });
+  }
+
+  // Validate relay token
+  if (!relayToken || relayToken !== tenant.relay_token) {
+    return reply.status(401).send({ ok: false, error: 'Unauthorized' });
+  }
+
+  // Tenant must be ACTIVE
+  if (tenant.status !== TenantStatus.ACTIVE) {
+    return reply.status(503).send({ ok: false, error: 'Tenant not active' });
+  }
+
+  const { slackEventId } = req.body;
+  const runtimeUrl = `http://${containerName}:3100/message`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4 * 60 * 1000); // 4-minute timeout
+
+  let success = false;
+  let responseBody: import('@claw/shared-types').RelayMessageResponse;
+
+  try {
+    const res = await fetch(runtimeUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-relay-token': tenant.relay_token,
+      },
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
+    });
+
+    const duration_ms = Date.now() - startedAt;
+    responseBody = await res.json() as import('@claw/shared-types').RelayMessageResponse;
+
+    if (res.ok && responseBody.ok) {
+      success = true;
+      const now = Date.now();
+
+      // Update last_activity_at
+      await prisma.tenant.update({
+        where: { id: tenantId },
+        data: { last_activity_at: now, updated_at: now },
+      });
+
+      // Write MESSAGE_DELIVERED audit event
+      await prisma.auditLog.create({
+        data: {
+          id: crypto.randomUUID(),
+          tenant_id: tenantId,
+          event_type: AuditEventType.MESSAGE_DELIVERED,
+          actor: 'system',
+          metadata: JSON.stringify({ slackEventId, duration_ms }),
+          created_at: now,
+        },
+      });
+
+      app.log.info({ tenantId, slackEventId, duration_ms }, 'Message delivered');
+      return reply.send(responseBody);
+    }
+
+    // Non-200 response from runtime
+    app.log.warn({ tenantId, slackEventId, duration_ms, status: res.status }, 'Message delivery failed');
+  } catch (err) {
+    const duration_ms = Date.now() - startedAt;
+    app.log.error({ tenantId, slackEventId, duration_ms, err }, 'Message forwarding error');
+    responseBody = { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!success) {
+    const now = Date.now();
+    await prisma.auditLog.create({
+      data: {
+        id: crypto.randomUUID(),
+        tenant_id: tenantId,
+        event_type: AuditEventType.MESSAGE_FAILED,
+        actor: 'system',
+        metadata: JSON.stringify({ slackEventId }),
+        created_at: now,
+      },
+    });
+  }
+
+  return reply.status(502).send(responseBody! ?? { ok: false, error: 'Message delivery failed' });
+});
+
 // ─── Server startup ───────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {

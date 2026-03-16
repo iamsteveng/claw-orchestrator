@@ -244,3 +244,16 @@
   - If at capacity, sets queued_for_start_at and returns {status: 'queued'} without starting
   - IMAGE_UPDATED audit event emitted when imageTag in body differs from tenant.image_tag
 ---
+
+## 2026-03-16 - US-012
+- What was implemented: Message forwarding endpoint (POST /v1/tenants/:tenantId/message)
+- Files changed:
+  - apps/control-plane/src/index.ts (added /v1/tenants/:tenantId/message route)
+  - Fixed import: health-poller.js -> health-poll.js (health-poller.ts was deleted by concurrent agent)
+- **Learnings for future iterations:**
+  - X-Relay-Token from header validated against tenant.relay_token (fetch as string, not array)
+  - Container hostname derived as `claw-tenant-${tenantId}` without DB lookup
+  - 4-minute AbortController timeout for fetch to runtime
+  - On success: update last_activity_at + MESSAGE_DELIVERED audit event
+  - On failure: MESSAGE_FAILED audit event (no retry counting in this story)
+---
