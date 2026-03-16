@@ -2,9 +2,10 @@ import { PrismaClient } from '@prisma/client';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { seedWorkspace } from './seed-workspace.js';
+import { rollbackProvisioning } from './rollback-provisioning.js';
 
 export interface ProvisionRequest {
   slackTeamId: string;
@@ -125,48 +126,8 @@ export async function provisionTenant(
     return { tenantId: tenant.id, status: TenantStatus.NEW };
   } catch (err) {
     log.error({ tenantId, err }, 'Tenant provisioning failed, rolling back');
-
-    // Write TENANT_PROVISION_FAILED audit event
-    try {
-      await prisma.auditLog.create({
-        data: {
-          id: randomUUID(),
-          tenant_id: tenantId,
-          event_type: AuditEventType.TENANT_PROVISION_FAILED,
-          actor: 'control-plane',
-          metadata: JSON.stringify({
-            slackTeamId,
-            slackUserId,
-            error: err instanceof Error ? err.message : String(err),
-          }),
-          created_at: Date.now(),
-        },
-      });
-    } catch (auditErr) {
-      log.error({ tenantId, auditErr }, 'Failed to write TENANT_PROVISION_FAILED audit event');
-    }
-
-    // Update tenant status to FAILED
-    try {
-      await prisma.tenant.update({
-        where: { id: tenantId },
-        data: {
-          status: TenantStatus.FAILED,
-          error_message: err instanceof Error ? err.message : String(err),
-          updated_at: Date.now(),
-        },
-      });
-    } catch (updateErr) {
-      log.error({ tenantId, updateErr }, 'Failed to update tenant status to FAILED');
-    }
-
-    // Cleanup directories
-    try {
-      await rm(dataDir, { recursive: true, force: true });
-    } catch (rmErr) {
-      log.error({ tenantId, rmErr }, 'Failed to cleanup tenant directories during rollback');
-    }
-
+    const rollbackError = err instanceof Error ? err : new Error(String(err));
+    await rollbackProvisioning(prisma, tenantId, dataDir, rollbackError, log);
     throw err;
   }
 }

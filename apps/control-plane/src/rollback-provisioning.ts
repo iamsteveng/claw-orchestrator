@@ -1,73 +1,67 @@
 import type { PrismaClient } from '@prisma/client';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
+import { randomUUID } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 
+export type RollbackLog = {
+  warn: (ctx: object, msg: string) => void;
+  error: (ctx: object, msg: string) => void;
+};
+
 /**
- * Rolls back a failed provisioning attempt.
- * - Sets tenant status to FAILED with error_message
- * - Increments provision_attempts
- * - Removes the tenant data directory (best-effort)
- * - Removes the Docker container (best-effort, ignores not-found errors)
- * - Writes TENANT_PROVISION_FAILED audit event
+ * Rolls back a failed tenant provisioning attempt:
+ * 1. Sets tenant status=FAILED, error_message, increments provision_attempts
+ * 2. Removes /data/tenants/<id>/ directory tree (best-effort)
+ * 3. Calls dockerRm('claw-tenant-<id>') to remove Docker container (best-effort, ignores not-found)
+ * 4. Writes TENANT_PROVISION_FAILED audit event
+ *
+ * Safe to call multiple times (idempotent on directory removal).
  */
 export async function rollbackProvisioning(
   prisma: PrismaClient,
   tenantId: string,
   dataDir: string,
-  error: Error | unknown,
-  rmContainer?: (name: string) => Promise<void>,
+  error: Error,
+  log: RollbackLog,
 ): Promise<void> {
-  const errorMessage = error instanceof Error ? error.message : String(error);
   const containerName = `claw-tenant-${tenantId}`;
   const now = Date.now();
 
-  // Update tenant to FAILED
-  try {
-    await prisma.tenant.update({
-      where: { id: tenantId },
-      data: {
-        status: TenantStatus.FAILED,
-        error_message: errorMessage,
-        provision_attempts: { increment: 1 },
-        updated_at: now,
-      },
-    });
-  } catch {
-    // best-effort
-  }
+  // 1. Update DB: FAILED + increment provision_attempts
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      status: TenantStatus.FAILED,
+      error_message: error.message,
+      provision_attempts: { increment: 1 },
+      updated_at: now,
+    },
+  });
 
-  // Remove data directory
+  // 2. Remove tenant data directory (best-effort)
   try {
     await rm(dataDir, { recursive: true, force: true });
-  } catch {
-    // best-effort
+  } catch (rmErr) {
+    log.warn({ tenantId, rmErr }, 'rollbackProvisioning: failed to remove data directory');
   }
 
-  // Remove container (ignore not-found errors)
+  // 3. Remove Docker container (best-effort; ignore not-found)
   try {
-    if (rmContainer) {
-      await rmContainer(containerName);
-    } else {
-      const { DockerClient } = await import('@claw/docker-client');
-      await DockerClient.rm(containerName);
-    }
-  } catch {
-    // Container may not exist — ignore
+    const { DockerClient } = await import('@claw/docker-client');
+    await DockerClient.rm(containerName);
+  } catch (dockerErr) {
+    log.warn({ tenantId, dockerErr }, 'rollbackProvisioning: dockerRm failed (may not exist)');
   }
 
-  // Write audit event
-  try {
-    await prisma.auditLog.create({
-      data: {
-        id: crypto.randomUUID(),
-        tenant_id: tenantId,
-        event_type: AuditEventType.TENANT_PROVISION_FAILED,
-        actor: 'system',
-        metadata: JSON.stringify({ error: errorMessage }),
-        created_at: now,
-      },
-    });
-  } catch {
-    // best-effort
-  }
+  // 4. Write TENANT_PROVISION_FAILED audit event
+  await prisma.auditLog.create({
+    data: {
+      id: randomUUID(),
+      tenant_id: tenantId,
+      event_type: AuditEventType.TENANT_PROVISION_FAILED,
+      actor: 'system',
+      metadata: JSON.stringify({ error: error.message, containerName }),
+      created_at: now,
+    },
+  });
 }
