@@ -361,16 +361,32 @@ app.post<{
 
   if (!success) {
     const now = Date.now();
-    await prisma.auditLog.create({
-      data: {
-        id: crypto.randomUUID(),
-        tenant_id: tenantId,
-        event_type: AuditEventType.MESSAGE_FAILED,
-        actor: 'system',
-        metadata: JSON.stringify({ slackEventId }),
-        created_at: now,
-      },
+
+    // Increment message attempts; write MESSAGE_FAILED audit only if attempts >= 3
+    const queueRow = await prisma.messageQueue.findUnique({
+      where: { slack_event_id: slackEventId },
     });
+
+    if (queueRow) {
+      const newAttempts = queueRow.attempts + 1;
+      await prisma.messageQueue.update({
+        where: { id: queueRow.id },
+        data: { attempts: newAttempts, updated_at: now },
+      });
+
+      if (newAttempts >= 3) {
+        await prisma.auditLog.create({
+          data: {
+            id: crypto.randomUUID(),
+            tenant_id: tenantId,
+            event_type: AuditEventType.MESSAGE_FAILED,
+            actor: 'system',
+            metadata: JSON.stringify({ slackEventId, attempts: newAttempts }),
+            created_at: now,
+          },
+        });
+      }
+    }
   }
 
   return reply.status(502).send(responseBody! ?? { ok: false, error: 'Message delivery failed' });
@@ -427,6 +443,94 @@ app.post<{
 
   app.log.info({ tenantId, actor }, 'Tenant stopped');
   return reply.send({ status: 'stopped' });
+});
+
+// DELETE /v1/tenants/:tenantId
+app.delete<{
+  Params: { tenantId: string };
+}>('/v1/tenants/:tenantId', async (req, reply) => {
+  const { tenantId } = req.params;
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) {
+    return reply.status(404).send({ error: 'Tenant not found' });
+  }
+
+  if (tenant.status === TenantStatus.DELETING || tenant.deleted_at !== null) {
+    return reply.status(409).send({ error: 'Tenant is already being deleted or was deleted' });
+  }
+
+  const now = Date.now();
+
+  // Immediately mark as DELETING
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { status: TenantStatus.DELETING, deletion_requested_at: now, updated_at: now },
+  });
+
+  const containerName = `claw-tenant-${tenantId}`;
+  const { DockerClient } = await import('@claw/docker-client');
+
+  // Stop container (best-effort)
+  try {
+    await DockerClient.stop(containerName, 10);
+  } catch (err) {
+    app.log.warn({ tenantId, err }, 'dockerStop failed during deletion (continuing)');
+  }
+
+  // Remove container (best-effort)
+  try {
+    await DockerClient.rm(containerName);
+  } catch (err) {
+    app.log.warn({ tenantId, err }, 'dockerRm failed during deletion (continuing)');
+  }
+
+  // Archive tenant directory
+  const srcDir = tenant.data_dir;
+  const archiveBase = srcDir.replace('/data/tenants/', '/data/tenants-archive/');
+  let archiveDir = archiveBase;
+  try {
+    const { access } = await import('node:fs/promises');
+    try {
+      await access(archiveDir);
+      // Archive path already exists — append timestamp to avoid collision
+      archiveDir = `${archiveBase}-${now}`;
+    } catch {
+      // Path doesn't exist — we can use archiveBase
+    }
+    const { rename } = await import('node:fs/promises');
+    await rename(srcDir, archiveDir);
+  } catch (err) {
+    app.log.warn({ tenantId, err }, 'Failed to archive tenant directory (continuing)');
+  }
+
+  // Purge message queue rows
+  await prisma.messageQueue.deleteMany({ where: { tenant_id: tenantId } });
+
+  // Purge startup lock
+  await prisma.startupLock.deleteMany({ where: { tenant_id: tenantId } });
+
+  // Soft-delete tenant row
+  const deletedAt = Date.now();
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: { deleted_at: deletedAt, updated_at: deletedAt },
+  });
+
+  // Write audit event
+  await prisma.auditLog.create({
+    data: {
+      id: crypto.randomUUID(),
+      tenant_id: tenantId,
+      event_type: AuditEventType.TENANT_DELETED,
+      actor: 'admin',
+      metadata: JSON.stringify({ containerName, archiveDir }),
+      created_at: deletedAt,
+    },
+  });
+
+  app.log.info({ tenantId }, 'Tenant deleted');
+  return reply.send({ deleted: true });
 });
 
 // ─── Server startup ───────────────────────────────────────────────────────────
