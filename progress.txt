@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- shared-config: schemas in `schemas.ts`, per-service config files (control-plane.ts etc.) import schemas and call `parse(process.env)` at module level; vitest-setup.ts sets required env vars so tests can import these modules
+- Root vitest.config.ts `setupFiles` includes `packages/shared-config/src/vitest-setup.ts` — applies to ALL test files in the monorepo
 - docker-client uses `"type": "module"` (ESM) to support execa v9 (ESM-only); other packages are CJS
 - ExecaError in execa v9 has no public constructor — in tests, cast via `ExecaError as unknown as new (...) => ExecaError` for instantiation
 - pnpm workspaces used: apps/* and packages/*; use `workspace:*` protocol for cross-package deps
@@ -79,3 +81,43 @@
   - readOnlyBindMounts appends ':ro' suffix to each mount path in docker run args
   - DockerInspect returns null on exit code 1 (container not found) but throws DockerError for other failures
 ---
+
+## 2026-03-16 - US-005
+- What was implemented: Shared config package with Zod validation for all environment variables
+- Files changed:
+  - packages/shared-config/src/schemas.ts (all 3 Zod schemas + types: controlPlaneConfigSchema, slackRelayConfigSchema, schedulerConfigSchema)
+  - packages/shared-config/src/control-plane.ts (imports from schemas.ts, exports schema+type+parsed config)
+  - packages/shared-config/src/slack-relay.ts (imports from schemas.ts, exports schema+type+parsed config)
+  - packages/shared-config/src/scheduler.ts (imports from schemas.ts, exports schema+type+parsed config)
+  - packages/shared-config/src/index.ts (re-exports schemas+types from all three modules)
+  - packages/shared-config/src/config.test.ts (9 unit tests for schema validation)
+  - packages/shared-config/src/vitest-setup.ts (sets required env vars so modules can be imported in tests)
+  - packages/shared-config/package.json (added zod dependency)
+  - vitest.config.ts (added setupFiles pointing to vitest-setup.ts)
+  - .env.example (all env vars documented with auth-profiles.json bind-mount explanation)
+- **Learnings for future iterations:**
+  - When config modules call `schema.parse(process.env)` at module level, importing them in tests throws if required env vars are absent; solution: create a vitest-setup.ts that sets stub values before module evaluation
+  - The vitest-setup.ts in setupFiles runs for ALL test files (including docker-client tests) — keep it minimal (just env var stubs)
+  - Schemas separated into schemas.ts for clean testability; config files import from schemas.ts and add parsed config export
+  - Services should import directly from their specific sub-path (e.g., `@claw/shared-config/control-plane`) not from the root `@claw/shared-config` to avoid triggering all 3 schemas' parse at startup
+---
+
+---
+
+## 2026-03-16 - US-005
+- What was implemented: Shared config package with Zod validation for all environment variables
+- Files changed:
+  - packages/shared-config/src/schemas.ts (all 3 Zod schemas)
+  - packages/shared-config/src/control-plane.ts (re-exports schema + parses process.env at import)
+  - packages/shared-config/src/slack-relay.ts (same)
+  - packages/shared-config/src/scheduler.ts (same)
+  - packages/shared-config/src/index.ts (re-exports schemas and types)
+  - packages/shared-config/src/config.test.ts (unit tests for schema validation)
+  - packages/shared-config/src/vitest-setup.ts (sets required env vars for test imports)
+  - vitest.config.ts (added setupFiles: vitest-setup.ts)
+  - .env.example (created at repo root)
+  - packages/shared-config/package.json (added zod, vitest deps)
+- **Learnings for future iterations:**
+  - Module-level parse(process.env) in config modules conflicts with test imports; fix via vitest-setup.ts that sets default env vars
+  - The vitest setup file is loaded globally (affects ALL tests in monorepo) - keep it minimal
+  - docker-client needs NodeNext module resolution (not Node16) to work with ESM execa v9
