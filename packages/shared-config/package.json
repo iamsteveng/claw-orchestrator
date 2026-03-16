@@ -9,6 +9,21 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./control-plane": {
+      "import": "./dist/control-plane.js",
+      "require": "./dist/control-plane.js",
+      "types": "./dist/control-plane.d.ts"
+    },
+    "./slack-relay": {
+      "import": "./dist/slack-relay.js",
+      "require": "./dist/slack-relay.js",
+      "types": "./dist/slack-relay.d.ts"
+    },
+    "./scheduler": {
+      "import": "./dist/scheduler.js",
+      "require": "./dist/scheduler.js",
+      "types": "./dist/scheduler.d.ts"
     }
   },
   "scripts": {
