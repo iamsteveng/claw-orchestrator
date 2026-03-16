@@ -8,6 +8,7 @@ import { mkdir, writeFile, rm } from 'node:fs/promises';
 import { seedWorkspace } from './seed-workspace.js';
 import { acquireStartupLock, releaseStartupLock } from './startup-lock.js';
 import { pollUntilHealthy } from './health-poll.js';
+import { isAllowed } from './allowlist.js';
 
 const startedAt = Date.now();
 
@@ -80,6 +81,22 @@ app.post<{
   Body: { slackTeamId: string; slackUserId: string };
 }>('/v1/tenants/provision', async (req, reply) => {
   const { slackTeamId, slackUserId } = req.body;
+
+  // Allowlist check
+  const allowed = await isAllowed(prisma, slackTeamId, slackUserId);
+  if (!allowed) {
+    await prisma.auditLog.create({
+      data: {
+        id: crypto.randomUUID(),
+        tenant_id: null,
+        event_type: AuditEventType.ACCESS_DENIED,
+        actor: 'system',
+        metadata: JSON.stringify({ slackTeamId, slackUserId }),
+        created_at: Date.now(),
+      },
+    });
+    return reply.status(403).send({ error: 'Access denied' });
+  }
 
   const principal = `${slackTeamId}:${slackUserId}`;
   const tenantId = createHash('sha256').update(principal).digest('hex').slice(0, 16);
@@ -294,6 +311,12 @@ app.post<{
   // Validate relay token
   if (!relayToken || relayToken !== tenant.relay_token) {
     return reply.status(401).send({ ok: false, error: 'Unauthorized' });
+  }
+
+  // Check allowlist: revoked access should block message delivery
+  const allowed = await isAllowed(prisma, tenant.slack_team_id, tenant.slack_user_id);
+  if (!allowed) {
+    return reply.status(403).send({ ok: false, error: 'Access revoked' });
   }
 
   // Tenant must be ACTIVE
@@ -531,6 +554,70 @@ app.delete<{
 
   app.log.info({ tenantId }, 'Tenant deleted');
   return reply.send({ deleted: true });
+});
+
+// POST /v1/admin/allowlist
+app.post<{
+  Body: { slack_team_id: string; slack_user_id?: string; added_by: string; note?: string };
+}>('/v1/admin/allowlist', async (req, reply) => {
+  const { slack_team_id, slack_user_id, added_by, note } = req.body;
+  const now = Date.now();
+  const id = crypto.randomUUID();
+
+  await prisma.allowlist.create({
+    data: {
+      id,
+      slack_team_id,
+      slack_user_id: slack_user_id ?? null,
+      added_by,
+      note: note ?? null,
+      created_at: now,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      id: crypto.randomUUID(),
+      tenant_id: null,
+      event_type: AuditEventType.ACCESS_GRANTED,
+      actor: added_by,
+      metadata: JSON.stringify({ slack_team_id, slack_user_id }),
+      created_at: now,
+    },
+  });
+
+  return reply.send({ id, created_at: now });
+});
+
+// DELETE /v1/admin/allowlist/:id
+app.delete<{
+  Params: { id: string };
+}>('/v1/admin/allowlist/:id', async (req, reply) => {
+  const { id } = req.params;
+  const now = Date.now();
+
+  const entry = await prisma.allowlist.findUnique({ where: { id } });
+  if (!entry) {
+    return reply.status(404).send({ error: 'Allowlist entry not found' });
+  }
+
+  await prisma.allowlist.update({
+    where: { id },
+    data: { revoked_at: now },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      id: crypto.randomUUID(),
+      tenant_id: null,
+      event_type: AuditEventType.ACCESS_REVOKED,
+      actor: 'admin',
+      metadata: JSON.stringify({ slack_team_id: entry.slack_team_id, slack_user_id: entry.slack_user_id }),
+      created_at: now,
+    },
+  });
+
+  return reply.send({ revoked: true });
 });
 
 // ─── Server startup ───────────────────────────────────────────────────────────
