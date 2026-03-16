@@ -152,3 +152,20 @@
   - The data_dir should use controlPlaneConfig.DATA_DIR (set via env var) not a hardcoded path, even when the spec shows a literal path in the AC
   - provision_attempts starts at 0 on create; increments on failure; 409 triggered when existing tenant has provision_attempts >= 3 AND status=FAILED
 ---
+
+---
+
+## 2026-03-16 - US-007 + US-008
+- What was implemented: Tenant provisioning endpoint and workspace template seeding
+- Files changed:
+  - apps/control-plane/src/index.ts (POST /v1/tenants/provision route)
+  - apps/control-plane/src/provision.ts (provisionTenant function with audit events, rollback)
+  - apps/control-plane/src/seed-workspace.ts (seedWorkspace function with AGENTS.md merge logic)
+  - apps/control-plane/src/seed-workspace.test.ts (unit tests for 3 AGENTS.md scenarios)
+  - templates/workspace/AGENTS.md (template file with Task Execution section)
+  - packages/shared-config/src/schemas.ts (added TEMPLATES_DIR env var)
+- **Learnings for future iterations:**
+  - tenant_id = sha256(principal).digest('hex').slice(0, 16) using node:crypto built-in
+  - Always use try/finally for audit event writes on failure
+  - fs.promises.rm({ recursive: true, force: true }) for rollback cleanup
+  - seed-workspace.ts is imported by provision.ts for workspace template seeding
