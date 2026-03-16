@@ -366,3 +366,14 @@ US-021: Control plane: resource limits applied per container via docker run flag
 - Env vars: HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME
 - Modified start endpoint: NEW tenants use DockerClient.run(), others use DockerClient.start()
 - 5 unit tests; 76 total passing
+
+---
+US-024: Slack relay: tenant routing with immediate 200 ack and async processing
+- Implemented POST /slack/events in apps/slack-relay/src/index.ts
+- Immediate 200 ack with fire-and-forget processSlackEvent()
+- URL verification challenge handled synchronously
+- computeTenantId(teamId, userId): sha256(team_id:user_id).slice(0,16)
+- postSlackDm() for rejection messages
+- processSlackEvent(): provision→start→message forward→chat.postMessage
+- Fixed schemas.ts: removed erroneous DATABASE_URL from slackRelayConfigSchema
+- 4 unit tests in events.test.ts; 80 total passing
