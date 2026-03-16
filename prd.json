@@ -31,9 +31,9 @@
         "packages/shared-types/src/tenant.ts exports Tenant interface matching all columns in the tenants DB table",
         "packages/shared-types/src/message.ts exports MessageStatus enum: PENDING, PROCESSING, DELIVERED, FAILED",
         "packages/shared-types/src/message.ts exports MessageQueueRow interface matching all columns in message_queue table",
-        "packages/shared-types/src/protocol.ts exports RelayMessageRequest and RelayMessageResponse interfaces matching \u00a715 request/response schemas",
-        "packages/shared-types/src/health.ts exports TenantHealthResponse interface matching \u00a719 health endpoint JSON shape",
-        "packages/shared-types/src/audit.ts exports AuditEventType enum with all 18 event types from \u00a725",
+        "packages/shared-types/src/protocol.ts exports RelayMessageRequest and RelayMessageResponse interfaces matching §15 request/response schemas",
+        "packages/shared-types/src/health.ts exports TenantHealthResponse interface matching §19 health endpoint JSON shape",
+        "packages/shared-types/src/audit.ts exports AuditEventType enum with all 18 event types from §25",
         "packages/shared-types/src/index.ts re-exports everything from all sub-modules",
         "All other packages can import from @claw/shared-types without errors",
         "Typecheck passes"
@@ -48,7 +48,7 @@
       "description": "As a developer, I want a complete Prisma schema so that all database tables are defined, migrations can be applied, and WAL mode is enabled for concurrent reads.",
       "acceptanceCriteria": [
         "prisma/schema.prisma defines datasource with provider=sqlite and url from DATABASE_URL env",
-        "Tenant model has all 23 columns listed in \u00a716 with correct types and defaults",
+        "Tenant model has all 23 columns listed in §16 with correct types and defaults",
         "MessageQueue model has all 10 columns with UNIQUE constraint on slack_event_id",
         "StartupLock model has tenant_id as PK with locked_by, acquired_at, expires_at columns",
         "AuditLog model has all 5 columns; tenant_id is nullable",
@@ -149,12 +149,12 @@
       "title": "Control plane: workspace template seeding with AGENTS.md merge logic",
       "description": "As the system, I want workspace templates to be seeded into new tenant workspaces so that tenants start with the required operational files.",
       "acceptanceCriteria": [
-        "templates/workspace/AGENTS.md exists in the repo with a '## Task Execution' section containing the exact text from \u00a78.2.1",
+        "templates/workspace/AGENTS.md exists in the repo with a '## Task Execution' section containing the exact text from §8.2.1",
         "A seedWorkspace(tenantId, workspacePath) function copies all files from templates/workspace/ into the tenant workspace",
         "If AGENTS.md does not exist in tenant workspace: file is copied directly from template",
         "If AGENTS.md exists and already contains '## Task Execution': file is left untouched",
         "If AGENTS.md exists but is missing '## Task Execution': the section is appended verbatim to the end of the file",
-        "seedWorkspace is called during provisioning flow (step 5 from \u00a78.2) before docker run",
+        "seedWorkspace is called during provisioning flow (step 5 from §8.2) before docker run",
         "Template source path is resolved relative to /opt/claw-orchestrator/templates/workspace/ (configurable via TEMPLATES_DIR env var)",
         "Unit tests cover all three AGENTS.md merge scenarios",
         "Typecheck passes"
@@ -264,7 +264,7 @@
     {
       "id": "US-014",
       "title": "Control plane: tenant deletion endpoint (DELETE /v1/tenants/:tenantId)",
-      "description": "As an admin, I want to call DELETE /v1/tenants/:tenantId so that a tenant's container and resources are fully cleaned up following the offboarding flow from \u00a712.",
+      "description": "As an admin, I want to call DELETE /v1/tenants/:tenantId so that a tenant's container and resources are fully cleaned up following the offboarding flow from §12.",
       "acceptanceCriteria": [
         "DELETE /v1/tenants/:tenantId immediately sets status=DELETING and deletion_requested_at=now",
         "Stops container if running: dockerStop('claw-tenant-<id>', 10)",
@@ -329,7 +329,7 @@
       "description": "As an operator, I want an append-only audit log so that I can trace all significant system events for debugging, compliance, and incident response.",
       "acceptanceCriteria": [
         "writeAuditLog({tenantId?, eventType, actor, metadata?}) inserts a row into audit_log with a UUID v4 id and created_at=Date.now()",
-        "All 18 event types from \u00a725 are used at their correct call sites across control-plane, relay, and scheduler",
+        "All 18 event types from §25 are used at their correct call sites across control-plane, relay, and scheduler",
         "GET /v1/admin/audit accepts query params: tenant_id, event_type, limit (default 100, max 500), before (Unix ms timestamp)",
         "Returns {events: AuditLog[], total: number} ordered by created_at DESC",
         "Audit log rows are never deleted or updated",
@@ -389,14 +389,14 @@
         "resource_overrides JSON on the tenant row is parsed and merged over defaults before calling dockerRun",
         "resource_overrides supports fields: cpus (number), memory_mb (number), pids_limit (number)",
         "auth-profiles.json is bind-mounted read-only: -v ~/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json:ro",
-        "Tenant data dirs are bind-mounted: home dir \u2192 /home/agent, workspace \u2192 /workspace, config \u2192 /home/agent/.config",
+        "Tenant data dirs are bind-mounted: home dir → /home/agent, workspace → /workspace, config → /home/agent/.config",
         "Environment variables set in container: HOME=/home/agent, XDG_CONFIG_HOME=/home/agent/.config, XDG_CACHE_HOME=/home/agent/.cache, XDG_STATE_HOME=/home/agent/.local/state",
         "Container name is set to 'claw-tenant-<tenantId>'",
         "Unit test verifies that dockerRun is called with correct flags for both default and override cases",
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
@@ -479,11 +479,11 @@
     },
     {
       "id": "US-026",
-      "title": "Slack relay: '\u23f3 Working on it' interim message at 15s timeout and 4-minute max wait",
+      "title": "Slack relay: '⏳ Working on it' interim message at 15s timeout and 4-minute max wait",
       "description": "As a Slack user, I want to receive an interim message if my request takes longer than 15 seconds so that I know the system is working and haven't been ignored.",
       "acceptanceCriteria": [
         "When forwarding a message to the tenant runtime, a 15-second timer is started",
-        "If no response is received within 15 seconds, relay calls Slack chat.postMessage with text '\u23f3 Working on it...' in the user's DM channel",
+        "If no response is received within 15 seconds, relay calls Slack chat.postMessage with text '⏳ Working on it...' in the user's DM channel",
         "The interim message is sent only once per message delivery attempt",
         "Relay continues waiting for the tenant response for up to 4 minutes total (240 seconds)",
         "On receiving the final response, relay calls chat.postMessage with the actual response text (or blocks if blocks field is non-null)",
@@ -663,7 +663,7 @@
       "description": "As the system, I want a workspace template directory committed to the repo so that all new tenants start with the correct operational guidance pre-seeded in their workspace.",
       "acceptanceCriteria": [
         "templates/workspace/ directory exists in the repo root",
-        "templates/workspace/AGENTS.md exists and contains a '## Task Execution' section with exact text from \u00a78.2.1: 'For any task that is complex enough to take more than ~2 minutes:\\n- Spawn a sub-agent or background process to handle it\\n- Don't block the conversation\\n- When it's done, report back with a concise summary of what was done'",
+        "templates/workspace/AGENTS.md exists and contains a '## Task Execution' section with exact text from §8.2.1: 'For any task that is complex enough to take more than ~2 minutes:\\n- Spawn a sub-agent or background process to handle it\\n- Don't block the conversation\\n- When it's done, report back with a concise summary of what was done'",
         "templates/workspace/AGENTS.md is a well-formed markdown file (parseable without errors)",
         "Template directory is referenced in the deployment layout at /opt/claw-orchestrator/templates/workspace/",
         "TEMPLATES_DIR environment variable defaults to <repo-root>/templates in development and /opt/claw-orchestrator/templates in production",
@@ -684,8 +684,8 @@
         "deploy/systemd/claw-scheduler.service exists with same structure, independent of relay",
         "All unit files have [Install] WantedBy=multi-user.target",
         "A deploy/scripts/install-services.sh script copies unit files to /etc/systemd/system/, runs systemctl daemon-reload, and enables all three services",
-        "A deploy/scripts/update.sh script implements the update procedure from \u00a731: git pull, pnpm install, pnpm build, prisma migrate deploy, systemctl restart for all three",
-        "Unit file comments document the startup order from \u00a731",
+        "A deploy/scripts/update.sh script implements the update procedure from §31: git pull, pnpm install, pnpm build, prisma migrate deploy, systemctl restart for all three",
+        "Unit file comments document the startup order from §31",
         "Typecheck passes"
       ],
       "priority": 5,
@@ -701,7 +701,7 @@
         "deploy/scripts/setup-dirs.sh creates the 'claw' system user if it does not exist",
         "scripts/tenant-shell.sh accepts a tenant_id argument and runs: docker exec -it --user agent claw-tenant-<tenant_id> /bin/bash",
         "scripts/tenant-shell.sh validates that the container is running before exec and prints a helpful error if not",
-        "deploy/scripts/backup.sh implements the backup procedure from \u00a730: SQLite checkpoint, copy db.sqlite to /data/backups/<date>/, tar.gz tenant data excluding caches, optional S3 sync",
+        "deploy/scripts/backup.sh implements the backup procedure from §30: SQLite checkpoint, copy db.sqlite to /data/backups/<date>/, tar.gz tenant data excluding caches, optional S3 sync",
         "A systemd timer file deploy/systemd/claw-backup.timer is provided for daily 03:00 UTC backups",
         "All scripts are executable (chmod +x) and have a #!/bin/bash shebang",
         "Typecheck passes"
@@ -758,7 +758,7 @@
         "tests/e2e/first-message.test.ts sends a fake Slack event HTTP POST to the relay's /slack/events endpoint with valid signature",
         "Test pre-seeds an allowlist entry for the test user's team_id and user_id",
         "Test verifies: relay returns HTTP 200 immediately (before provisioning completes)",
-        "Test verifies: control plane tenant row transitions through PROVISIONING \u2192 STARTING \u2192 ACTIVE states",
+        "Test verifies: control plane tenant row transitions through PROVISIONING → STARTING → ACTIVE states",
         "Test verifies: tenant directories were created at DATA_DIR/<tenantId>/home, /workspace, /config, /logs, /secrets",
         "Test verifies: AGENTS.md was seeded in the tenant workspace containing '## Task Execution'",
         "Test verifies: message_queue row was created with status=DELIVERED after processing",

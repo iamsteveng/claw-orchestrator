@@ -207,10 +207,9 @@ app.post<{
 // POST /v1/tenants/:tenantId/start
 app.post<{
   Params: { tenantId: string };
-  Body: { imageTag?: string };
+  Body: Record<string, never>;
 }>('/v1/tenants/:tenantId/start', async (req, reply) => {
   const { tenantId } = req.params;
-  const { imageTag } = req.body ?? {};
 
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
   if (!tenant) {
@@ -253,8 +252,14 @@ app.post<{
     const containerName = `claw-tenant-${tenantId}`;
     const previousStatus = tenant.status;
 
-    // Write IMAGE_UPDATED audit event if image_tag changed
-    if (imageTag && imageTag !== tenant.image_tag) {
+    // Resolve the current default image tag from DB.
+    // Canary validation (manual for MVP): before promoting a new image, operators should
+    // start a single canary tenant, verify smoke tests pass, then call
+    // POST /v1/admin/images/:id/promote to roll out lazily to all tenants on next restart.
+    const imageTag = await getDefaultImage(prisma);
+
+    // Write IMAGE_UPDATED audit event if image_tag changed from previously recorded value
+    if (imageTag !== tenant.image_tag) {
       await prisma.auditLog.create({
         data: {
           id: crypto.randomUUID(),
