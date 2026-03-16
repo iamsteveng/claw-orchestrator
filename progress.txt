@@ -305,3 +305,24 @@
   - Allowlist check in provision endpoint writes ACCESS_DENIED audit event on denial
   - Allowlist check in message endpoint returns 403 {ok: false, error: 'Access revoked'} on denial
 ---
+
+## 2026-03-16 - US-017, US-018, US-019
+- What was implemented:
+  - US-017: UNHEALTHY auto-recovery (health-poll.ts tracks consecutive failures, recovery.ts handles auto-recovery)
+  - US-018: Audit log helper (audit-log.ts), GET /v1/admin/audit endpoint
+  - US-019: Provisioning rollback function (rollback-provisioning.ts)
+- Files changed:
+  - apps/control-plane/src/health-poll.ts (consecutive failure tracking, auto-recovery trigger)
+  - apps/control-plane/src/recovery.ts (attemptAutoRecovery with 30s cooldown, dockerStart, TENANT_RECOVERED)
+  - apps/control-plane/src/recovery.test.ts (unit tests for recovery success/failure paths)
+  - apps/control-plane/src/audit-log.ts (writeAuditLog helper)
+  - apps/control-plane/src/rollback-provisioning.ts (rollbackProvisioning with best-effort cleanup)
+  - apps/control-plane/src/rollback-provisioning.test.ts (3 unit tests)
+  - prisma/schema.prisma (recovery_attempted_at field added)
+  - prisma/migrations/20260316171632_add_recovery_attempted_at/
+- **Learnings for future iterations:**
+  - recovery.ts uses recovery_attempted_at field to prevent repeated auto-recovery (at most once)
+  - Dynamic imports of ESM docker-client must use `await import('@claw/docker-client')` (not static)
+  - vi.mock('@claw/docker-client', ...) at top level in test files is required for ESM mocking
+  - rollbackProvisioning accepts optional rmContainer fn for test injection (avoids ESM import issue)
+---
