@@ -377,3 +377,8 @@ US-024: Slack relay: tenant routing with immediate 200 ack and async processing
 - processSlackEvent(): provision→start→message forward→chat.postMessage
 - Fixed schemas.ts: removed erroneous DATABASE_URL from slackRelayConfigSchema
 - 4 unit tests in events.test.ts; 80 total passing
+
+[US-025] Slack relay: message queuing and ordered replay
+- Created apps/slack-relay/src/event-handler.ts with enqueueMessage, waitForTenantActive, deliverPendingMessages, resetStuckProcessingRows
+- Direct Prisma access for queue management; relay shares SQLite DB with control plane
+- 9/9 tests pass, typecheck clean
