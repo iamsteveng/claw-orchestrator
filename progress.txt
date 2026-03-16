@@ -338,3 +338,11 @@
   - slackRelayConfig is imported from @claw/shared-config/slack-relay (subpath)
   - service='slack-relay' is set in Fastify logger base option for all log lines
 ---
+
+---
+US-023: Slack relay: Slack event signature verification
+- Created apps/slack-relay/src/verify-signature.ts: verifySlackSignature(rawBody, headers, signingSecret) 
+- HMAC-SHA256 of "v0:<timestamp>:<rawBody>", timingSafeEqual comparison
+- 5-minute replay window check
+- 5 unit tests (valid sig, invalid sig, expired timestamp, missing headers)
+- All 62 tests pass
