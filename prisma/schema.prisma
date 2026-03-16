@@ -36,6 +36,7 @@ model Tenant {
   deleted_at            Int?
   deletion_requested_at Int?
   queued_for_start_at   Int?
+  recovery_attempted_at Int?
   error_message         String?
 
   allowlist_entry Allowlist?    @relation(fields: [allowlist_entry_id], references: [id])

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { pollUntilHealthy } from './health-poll.js';
 
+// Mock recovery module to avoid docker/network calls in tests
+vi.mock('./recovery.js', () => ({
+  attemptAutoRecovery: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Minimal mock Prisma
 function makePrisma() {
   return {
@@ -54,27 +59,50 @@ describe('pollUntilHealthy', () => {
     );
   });
 
+  it('sets UNHEALTHY after 3 consecutive failures when previousStatus=ACTIVE', async () => {
+    const prisma = makePrisma();
+
+    // Always fail
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Connection refused')));
+    vi.useFakeTimers();
+
+    const promise = pollUntilHealthy(prisma, 'tenant-2', 'claw-tenant-xyz', 'ACTIVE', log);
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    vi.useRealTimers();
+
+    expect(result).toBe('timeout');
+    expect(prisma.tenant.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'tenant-2' },
+        data: expect.objectContaining({ status: 'UNHEALTHY' }),
+      })
+    );
+    expect(prisma.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ event_type: 'TENANT_UNHEALTHY' }),
+      })
+    );
+  });
+
   it('returns timeout and sets UNHEALTHY when previousStatus=ACTIVE and polling times out', async () => {
     const prisma = makePrisma();
 
     // Always fail
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Connection refused')));
 
-    // Use very short timeout for the test
     vi.useFakeTimers();
+    const promise = pollUntilHealthy(prisma, 'tenant-3', 'claw-tenant-xyz', 'ACTIVE', log);
 
-    // Start polling (don't await yet)
-    const promise = pollUntilHealthy(prisma, 'tenant-2', 'claw-tenant-xyz', 'ACTIVE', log);
-
-    // Fast-forward 91 seconds
+    // Fast-forward past 90 seconds
     await vi.runAllTimersAsync();
-
     const result = await promise;
 
     expect(result).toBe('timeout');
     expect(prisma.tenant.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'tenant-2' },
+        where: { id: 'tenant-3' },
         data: expect.objectContaining({ status: 'UNHEALTHY' }),
       })
     );
@@ -93,10 +121,9 @@ describe('pollUntilHealthy', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Connection refused')));
     vi.useFakeTimers();
 
-    const promise = pollUntilHealthy(prisma, 'tenant-3', 'claw-tenant-def', 'PROVISIONING', log);
+    const promise = pollUntilHealthy(prisma, 'tenant-4', 'claw-tenant-def', 'PROVISIONING', log);
 
     await vi.runAllTimersAsync();
-
     const result = await promise;
 
     expect(result).toBe('timeout');

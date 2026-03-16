@@ -620,6 +620,34 @@ app.delete<{
   return reply.send({ revoked: true });
 });
 
+// GET /v1/admin/audit
+app.get<{
+  Querystring: { tenant_id?: string; event_type?: string; limit?: string; before?: string };
+}>('/v1/admin/audit', async (req, reply) => {
+  const { tenant_id, event_type, limit: limitStr, before: beforeStr } = req.query;
+  const limit = Math.min(parseInt(limitStr ?? '100', 10) || 100, 500);
+  const before = beforeStr ? parseInt(beforeStr, 10) : undefined;
+
+  const where: Record<string, unknown> = {};
+  if (tenant_id) where.tenant_id = tenant_id;
+  if (event_type) where.event_type = event_type;
+  if (before) where.created_at = { lt: before };
+
+  const [events, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { created_at: 'desc' },
+      take: limit,
+    }),
+    prisma.auditLog.count({ where }),
+  ]);
+
+  return reply.send({
+    events: events.map((e: (typeof events)[number]) => ({ ...e, metadata: e.metadata ? JSON.parse(e.metadata) as unknown : null })),
+    total,
+  });
+});
+
 // ─── Server startup ───────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
