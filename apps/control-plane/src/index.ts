@@ -112,7 +112,7 @@ app.post<{
     if (existing.status === TenantStatus.FAILED && existing.provision_attempts >= 3) {
       return reply.status(409).send({ error: 'Max provision attempts reached' });
     }
-    return reply.send({ tenantId: existing.id, status: existing.status });
+    return reply.send({ tenantId: existing.id, status: existing.status, relayToken: existing.relay_token });
   }
 
   const dataDir = `${controlPlaneConfig.DATA_DIR}/${tenantId}`;
@@ -167,7 +167,7 @@ app.post<{
     });
 
     app.log.info({ tenantId }, 'Tenant provisioned');
-    return reply.send({ tenantId, status: TenantStatus.NEW });
+    return reply.send({ tenantId, status: TenantStatus.NEW, relayToken });
   } catch (err) {
     app.log.error({ err, tenantId }, 'Tenant provisioning failed');
 

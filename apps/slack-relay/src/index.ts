@@ -7,13 +7,15 @@ import { verifySlackSignature } from './verify-signature.js';
 const startedAt = Date.now();
 
 const app = Fastify({
-  logger: {
-    level: 'info',
-    transport: process.env.NODE_ENV !== 'production'
-      ? { target: 'pino-pretty' }
-      : undefined,
-    base: { service: 'slack-relay' },
-  },
+  logger: process.env.NODE_ENV === 'test'
+    ? false
+    : {
+        level: 'info',
+        transport: process.env.NODE_ENV !== 'production'
+          ? { target: 'pino-pretty' }
+          : undefined,
+        base: { service: 'slack-relay' },
+      },
   genReqId: () => crypto.randomUUID(),
 });
 
@@ -90,6 +92,11 @@ export async function postSlackDm(
   });
 }
 
+const ACTIVE_POLL_INTERVAL_MS = 2000;
+const ACTIVE_WAIT_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
+const INTERIM_DELAY_MS = 15_000;               // 15 seconds
+const MAX_DELIVERY_MS = 4 * 60 * 1000;         // 4 minutes
+
 export async function processSlackEvent(
   envelope: SlackEventEnvelope,
   log: typeof app.log,
@@ -98,21 +105,21 @@ export async function processSlackEvent(
   const slackTeamId = envelope.team_id ?? '';
   const slackUserId = envelope.event?.user ?? '';
   const slackEventId = envelope.event_id ?? '';
+  const channel = envelope.event?.channel ?? slackUserId;
 
   if (!slackTeamId || !slackUserId) {
     log.warn({ envelope }, 'Slack event missing team_id or user');
     return;
   }
 
-  // Provision tenant — control plane checks allowlist internally, returns 403 if denied
-  const provisionRes = await fetchFn(
-    `${slackRelayConfig.CONTROL_PLANE_URL}/v1/tenants/provision`,
-    {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ slackTeamId, slackUserId }),
-    },
-  );
+  const cpBase = slackRelayConfig.CONTROL_PLANE_URL;
+
+  // Step 1: Provision tenant — control plane checks allowlist, returns 403 if denied
+  const provisionRes = await fetchFn(`${cpBase}/v1/tenants/provision`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ slackTeamId, slackUserId }),
+  });
 
   if (provisionRes.status === 403) {
     log.warn({ slackTeamId, slackUserId }, 'ACCESS_DENIED: user not on allowlist');
@@ -131,31 +138,50 @@ export async function processSlackEvent(
     return;
   }
 
-  const provisionBody = await provisionRes.json() as { tenantId: string; status: string };
-  const tenantId = provisionBody.tenantId;
+  const provisionBody = await provisionRes.json() as { tenantId: string; status: string; relayToken: string };
+  const { tenantId, relayToken } = provisionBody;
+  let currentStatus = provisionBody.status;
 
-  // Start tenant (wake it up if stopped; no-op if already active)
-  try {
-    await fetchFn(
-      `${slackRelayConfig.CONTROL_PLANE_URL}/v1/tenants/${tenantId}/start`,
-      {
+  // Step 2: Wake tenant if not already active or starting
+  if (currentStatus !== 'ACTIVE' && currentStatus !== 'STARTING') {
+    try {
+      await fetchFn(`${cpBase}/v1/tenants/${tenantId}/start`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({}),
-      },
-    );
-  } catch (err) {
-    log.warn({ err, tenantId }, 'Failed to start tenant; continuing to queue message');
+      });
+    } catch (err) {
+      log.warn({ err, tenantId }, 'Failed to start tenant; continuing');
+    }
   }
 
-  // Forward/queue message to tenant via control plane
-  // The relay_token is obtained from the provision response or we look it up.
-  // Control plane's message endpoint requires X-Relay-Token for auth.
-  // We pass an empty relay token for now; the control plane will validate it.
-  // In production the relay_token should be persisted by the relay or re-fetched.
-  const messageId = crypto.randomUUID();
+  // Step 3: Poll until tenant becomes ACTIVE (up to 3 minutes)
+  if (currentStatus !== 'ACTIVE') {
+    const deadline = Date.now() + ACTIVE_WAIT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      await sleep(Math.min(ACTIVE_POLL_INTERVAL_MS, deadline - Date.now()));
+      const pollRes = await fetchFn(`${cpBase}/v1/tenants/provision`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ slackTeamId, slackUserId }),
+      });
+      if (pollRes.ok) {
+        const pollBody = await pollRes.json() as { status: string };
+        currentStatus = pollBody.status;
+        if (currentStatus === 'ACTIVE') break;
+      }
+    }
+
+    if (currentStatus !== 'ACTIVE') {
+      log.warn({ tenantId }, 'Tenant did not become ACTIVE within 3 minutes');
+      await postSlackDm(slackUserId, 'Your workspace is starting, please wait a moment and try again.', slackRelayConfig.SLACK_BOT_TOKEN, fetchFn);
+      return;
+    }
+  }
+
+  // Step 4: Forward message with relay token; 15s interim + 4-min hard timeout
   const msgPayload = {
-    messageId,
+    messageId: crypto.randomUUID(),
     slackEventId,
     userId: slackUserId,
     teamId: slackTeamId,
@@ -164,40 +190,66 @@ export async function processSlackEvent(
     timestamp: Date.now(),
   };
 
+  const controller = new AbortController();
+  let interimSent = false;
+
+  // 15-second interim timer: notify user we're working on it
+  const interimTimer = setTimeout(() => {
+    interimSent = true;
+    void postSlackDm(slackUserId, '⏳ Working on it...', slackRelayConfig.SLACK_BOT_TOKEN, fetchFn);
+  }, INTERIM_DELAY_MS);
+
+  const deliveryTimer = setTimeout(() => controller.abort(), MAX_DELIVERY_MS);
+
   try {
-    const msgRes = await fetchFn(
-      `${slackRelayConfig.CONTROL_PLANE_URL}/v1/tenants/${tenantId}/message`,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify(msgPayload),
+    const msgRes = await fetchFn(`${cpBase}/v1/tenants/${tenantId}/message`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-relay-token': relayToken,
       },
-    );
+      body: JSON.stringify(msgPayload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(interimTimer);
+    clearTimeout(deliveryTimer);
 
     if (msgRes.ok) {
-      const msgBody = await msgRes.json() as { ok?: boolean; response?: string };
-      if (msgBody.ok && msgBody.response && envelope.event?.channel) {
-        // Post agent's response back to the Slack channel
-        await fetchFn('https://slack.com/api/chat.postMessage', {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            authorization: `Bearer ${slackRelayConfig.SLACK_BOT_TOKEN}`,
-          },
-          body: JSON.stringify({
-            channel: envelope.event.channel,
-            text: msgBody.response,
-          }),
-        });
+      const msgBody = await msgRes.json() as { ok?: boolean; response?: string; blocks?: unknown[] | null };
+      if (msgBody.ok) {
+        if (msgBody.blocks != null && Array.isArray(msgBody.blocks)) {
+          await fetchFn('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${slackRelayConfig.SLACK_BOT_TOKEN}` },
+            body: JSON.stringify({ channel, blocks: msgBody.blocks }),
+          });
+        } else if (msgBody.response) {
+          await fetchFn('https://slack.com/api/chat.postMessage', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: `Bearer ${slackRelayConfig.SLACK_BOT_TOKEN}` },
+            body: JSON.stringify({ channel, text: msgBody.response }),
+          });
+        }
       }
     }
   } catch (err) {
+    clearTimeout(interimTimer);
+    clearTimeout(deliveryTimer);
+
+    if (!interimSent) {
+      // Delivery aborted by 4-minute timeout
+      await postSlackDm(slackUserId, "I'm still working on this. I'll follow up when complete.", slackRelayConfig.SLACK_BOT_TOKEN, fetchFn);
+    }
+
     log.warn({ err, tenantId, slackEventId }, 'Failed to forward message to tenant');
   }
 
   log.info({ tenantId, slackEventId }, 'Slack event processed');
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ─── Health route ─────────────────────────────────────────────────────────────
