@@ -26,3 +26,17 @@
   - TypeScript 5.9.3 was installed (latest)
   - All 7 packages/apps build and typecheck successfully with minimal stub src/index.ts files
 ---
+
+## 2026-03-16 - US-002
+- What was implemented: Shared types package with all tenant states, message types, protocol types, health types, and audit event types
+- Files changed:
+  - packages/shared-types/src/tenant.ts (TenantStatus enum, Tenant interface)
+  - packages/shared-types/src/message.ts (MessageStatus enum, MessageQueueRow interface)
+  - packages/shared-types/src/protocol.ts (RelayMessageRequest, RelayMessageResponse interfaces)
+  - packages/shared-types/src/health.ts (TenantHealthResponse interface)
+  - packages/shared-types/src/audit.ts (AuditEventType enum with 18 event types)
+  - packages/shared-types/src/index.ts (re-exports all sub-modules)
+- **Learnings for future iterations:**
+  - Node16 moduleResolution requires `.js` extensions in relative imports (e.g., `./tenant.js` not `./tenant`)
+  - All 5 type files typecheck and build cleanly with no external dependencies needed
+---
