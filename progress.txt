@@ -406,3 +406,7 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
 - apps/scheduler/src/index.ts: setInterval job loop + SIGTERM/SIGINT shutdown
 - Added DATABASE_URL + CONTROL_PLANE_URL to schedulerConfigSchema
 - 5 unit tests for idle-stop logic; 114 total passing
+
+[US-027] Scheduler: service scaffold with idle tenant stop
+- Code already existed in apps/scheduler/src/; idle-stop.ts + index.ts
+- 5/5 tests pass, typecheck clean
