@@ -6,13 +6,23 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
-    "dev": "pnpm -r --parallel dev"
+    "dev": "pnpm -r --parallel dev",
+    "prisma": "prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "@prisma/engines",
+      "@prisma/client",
+      "prisma"
+    ]
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "prisma": "^5.22.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }

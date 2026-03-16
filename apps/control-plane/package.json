@@ -10,9 +10,10 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@claw/shared-types": "workspace:*",
+    "@claw/docker-client": "workspace:*",
     "@claw/shared-config": "workspace:*",
-    "@claw/docker-client": "workspace:*"
+    "@claw/shared-types": "workspace:*",
+    "@prisma/client": "^5.22.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
