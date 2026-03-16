@@ -277,3 +277,18 @@
   - actor field in body defaults to 'system'; callers can pass 'admin:<user>'
   - Clears queued_for_start_at (null) when stopping
 ---
+
+## 2026-03-16 - US-015
+- What was implemented: Allowlist enforcement with admin CRUD endpoints
+- Files changed:
+  - apps/control-plane/src/allowlist.ts (isAllowed function using prisma.allowlist.count)
+  - apps/control-plane/src/allowlist.test.ts (4 tests: team allow, user allow, revoked, no entry)
+  - apps/control-plane/src/index.ts (isAllowed check in provision endpoint + admin routes)
+- **Learnings for future iterations:**
+  - isAllowed uses .count() (not .findFirst()) for performance; returns count > 0
+  - Team-level allow: slack_user_id = null in DB, matches all users on that team
+  - Provision endpoint checks allowlist first, writes ACCESS_DENIED audit event on deny
+  - Message delivery endpoint also checks allowlist to handle revoked access mid-session
+  - Admin POST /v1/admin/allowlist creates entry + writes ACCESS_GRANTED
+  - Admin DELETE /v1/admin/allowlist/:id sets revoked_at + writes ACCESS_REVOKED
+---
