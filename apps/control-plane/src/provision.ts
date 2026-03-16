@@ -1,8 +1,10 @@
 import { PrismaClient } from '@prisma/client';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
+import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
+import { seedWorkspace } from './seed-workspace.js';
 
 export interface ProvisionRequest {
   slackTeamId: string;
@@ -90,6 +92,9 @@ export async function provisionTenant(
     }
 
     await writeFile(`${dataDir}/secrets/relay-token`, relayToken, 'utf8');
+
+    // Seed workspace template files (including AGENTS.md merge logic)
+    await seedWorkspace(`${dataDir}/workspace`, controlPlaneConfig.TEMPLATES_DIR);
 
     log.info({ tenantId }, 'Tenant directories and relay token created');
 
