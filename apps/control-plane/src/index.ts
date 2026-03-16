@@ -90,7 +90,7 @@ app.post<{
     return reply.send({ tenantId: existing.id, status: existing.status });
   }
 
-  const dataDir = `/data/tenants/${tenantId}`;
+  const dataDir = `${controlPlaneConfig.DATA_DIR}/${tenantId}`;
   const relayToken = randomBytes(32).toString('hex');
   const now = Date.now();
 
