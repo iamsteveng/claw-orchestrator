@@ -20,34 +20,33 @@
 10. [Provisioning Failure Rollback](#10-provisioning-failure-rollback)
 11. [UNHEALTHY State Behavior](#11-unhealthy-state-behavior)
 12. [Tenant Deletion / Offboarding Flow](#12-tenant-deletion--offboarding-flow)
-13. [Capacity Cap: MAX\_ACTIVE\_TENANTS](#13-capacity-cap-max_active_tenants)
-14. [Message Queue Design](#14-message-queue-design)
-15. [Tenant-to-Runtime Message Protocol](#15-tenant-to-runtime-message-protocol)
-16. [Database Schema](#16-database-schema)
-17. [Container Image Design](#17-container-image-design)
-18. [Container Image Update / Rollout Strategy](#18-container-image-update--rollout-strategy)
-19. [Tenant Container Health Endpoint](#19-tenant-container-health-endpoint)
-20. [Resource Limits Per Container](#20-resource-limits-per-container)
-21. [Disk Pressure / Quota Enforcement](#21-disk-pressure--quota-enforcement)
-22. [Control Plane Responsibilities & API](#22-control-plane-responsibilities--api)
-23. [API Versioning Strategy](#23-api-versioning-strategy)
-24. [Tenant Allowlist / Registration Gating](#24-tenant-allowlist--registration-gating)
-25. [Audit Log Format and Storage](#25-audit-log-format-and-storage)
-26. [Observability / Metrics Strategy](#26-observability--metrics-strategy)
-27. [Interactive Access Design](#27-interactive-access-design)
-28. [Host-Side Directory Layout](#28-host-side-directory-layout)
-29. [EC2 Recommendation and Cost](#29-ec2-recommendation-and-cost)
-30. [Backup and Disaster Recovery](#30-backup-and-disaster-recovery)
-31. [Deployment / Startup Procedure](#31-deployment--startup-procedure)
-32. [Technology Stack](#32-technology-stack)
-33. [Repository Structure](#33-repository-structure)
-34. [Development Environment Requirements](#34-development-environment-requirements)
-35. [Local Development Workflow](#35-local-development-workflow)
-36. [Testing Strategy](#36-testing-strategy)
-37. [Detailed End-to-End Test Cases](#37-detailed-end-to-end-test-cases)
-38. [Acceptance Criteria](#38-acceptance-criteria)
-39. [Implementation Order](#39-implementation-order)
-40. [Non-Goals for MVP](#40-non-goals-for-mvp)
+13. [Message Queue Design](#13-message-queue-design)
+14. [Tenant-to-Runtime Message Protocol](#14-tenant-to-runtime-message-protocol)
+15. [Database Schema](#15-database-schema)
+16. [Container Image Design](#16-container-image-design)
+17. [Container Image Update / Rollout Strategy](#17-container-image-update--rollout-strategy)
+18. [Tenant Container Health Endpoint](#18-tenant-container-health-endpoint)
+19. [Resource Limits Per Container](#19-resource-limits-per-container)
+20. [Disk Pressure / Quota Enforcement](#20-disk-pressure--quota-enforcement)
+21. [Control Plane Responsibilities & API](#21-control-plane-responsibilities--api)
+22. [API Versioning Strategy](#22-api-versioning-strategy)
+23. [Tenant Allowlist / Registration Gating](#23-tenant-allowlist--registration-gating)
+24. [Audit Log Format and Storage](#24-audit-log-format-and-storage)
+25. [Observability / Metrics Strategy](#25-observability--metrics-strategy)
+26. [Interactive Access Design](#26-interactive-access-design)
+27. [Host-Side Directory Layout](#27-host-side-directory-layout)
+28. [EC2 Recommendation and Cost](#28-ec2-recommendation-and-cost)
+29. [Backup and Disaster Recovery](#29-backup-and-disaster-recovery)
+30. [Deployment / Startup Procedure](#30-deployment--startup-procedure)
+31. [Technology Stack](#31-technology-stack)
+32. [Repository Structure](#32-repository-structure)
+33. [Development Environment Requirements](#33-development-environment-requirements)
+34. [Local Development Workflow](#34-local-development-workflow)
+35. [Testing Strategy](#35-testing-strategy)
+36. [Detailed End-to-End Test Cases](#36-detailed-end-to-end-test-cases)
+37. [Acceptance Criteria](#37-acceptance-criteria)
+38. [Implementation Order](#38-implementation-order)
+39. [Non-Goals for MVP](#39-non-goals-for-mvp)
 
 ---
 
@@ -403,10 +402,6 @@ When a message arrives for a stopped tenant:
 5. Replay queued messages in order
 6. Mark tenant `ACTIVE`
 
-### 8.5 Capacity Check
-
-Before starting a new tenant (provisioning or wake-up), the control plane checks `MAX_ACTIVE_TENANTS` (see §13). If the cap is reached, the request is rejected or queued per configured policy.
-
 ---
 
 ## 9. Startup Lock Mechanism
@@ -571,64 +566,7 @@ Within the 30-day retention window, an admin can restore a tenant by:
 
 ---
 
-## 13. Capacity Cap: MAX\_ACTIVE\_TENANTS
-
-### Problem
-
-There is a finite amount of CPU, RAM, and disk on the host. Without an explicit cap, more than 10 tenants could attempt to start simultaneously, exceeding the sizing assumptions in §29 and causing resource exhaustion across all running containers.
-
-### Configuration
-
-`MAX_ACTIVE_TENANTS` is an environment variable (default: `10`) read by the control plane at startup. It represents the maximum number of containers that may be in `ACTIVE` or `STARTING` state simultaneously.
-
-```
-MAX_ACTIVE_TENANTS=10   # in /opt/claw-orchestrator/.env
-```
-
-### Enforcement Point
-
-Before any container start — whether triggered by provisioning (§8.2), wake-up (§8.4), or manual admin restart — the control plane queries:
-
-```sql
-SELECT COUNT(*) FROM tenants
-WHERE status IN ('ACTIVE', 'STARTING')
-```
-
-If the result equals or exceeds `MAX_ACTIVE_TENANTS`, the start is blocked.
-
-### Behavior When Cap Is Reached
-
-**Default policy: `reject`**
-
-- The requesting message is enqueued in `message_queue` as `PENDING`.
-- The tenant remains in `STOPPED` state.
-- The relay posts a Slack message to the user:
-  > "⚠️ The system is at capacity right now. Your message has been queued and will be processed as soon as space becomes available."
-- The control plane logs an `ACCESS_DENIED` audit event with `reason: capacity_cap`.
-
-**Alternative policy: `queue` (configurable)**
-
-If `ACTIVE_TENANTS_OVERFLOW_POLICY=queue`, the tenant's start is retried automatically every **60 seconds** until capacity is available, with no manual user action required. This is the recommended policy for production.
-
-Operators may also configure `ACTIVE_TENANTS_OVERFLOW_POLICY=reject` to give users an explicit error rather than silent queuing, depending on expected usage patterns.
-
-### Schema Addition
-
-Add to the `tenants` table:
-
-```
-queued_for_start_at  INTEGER   -- Unix epoch ms; set when start is deferred due to cap
-```
-
-The scheduler checks for rows with `status = STOPPED` and `queued_for_start_at IS NOT NULL`, retrying starts when capacity is available.
-
-### Relationship to Idle Stop
-
-The idle-stop scheduler (§8.3) should run frequently enough that STOPPED tenants free capacity slots in a timely manner. The 48-hour idle threshold is unchanged; the cap does not reduce this threshold.
-
----
-
-## 14. Message Queue Design
+## 13. Message Queue Design
 
 ### Purpose
 
@@ -678,7 +616,7 @@ Delivery is ordered by `created_at ASC` within a tenant. The relay processes one
 
 ---
 
-## 15. Tenant-to-Runtime Message Protocol
+## 14. Tenant-to-Runtime Message Protocol
 
 ### Purpose
 
@@ -741,7 +679,7 @@ Container name convention: `claw-tenant-<tenant_id>` (e.g. `claw-tenant-a1b2c3d4
 
 ---
 
-## 16. Database Schema
+## 15. Database Schema
 
 ### Engine and Location
 
@@ -772,7 +710,6 @@ Container name convention: `claw-tenant-<tenant_id>` (e.g. `claw-tenant-a1b2c3d4
 | `provision_attempts` | INTEGER | NOT NULL DEFAULT 0 | Count of failed provisioning attempts |
 | `resource_overrides` | TEXT | | JSON object; per-tenant resource limit overrides (see §20) |
 | `disk_quota_exceeded` | INTEGER | NOT NULL DEFAULT 0 | Boolean flag; set by disk quota enforcement (see §21) |
-| `queued_for_start_at` | INTEGER | | Unix epoch ms; set when start is deferred due to capacity cap (see §13) |
 | `allowlist_entry_id` | TEXT | FK → `allowlist.id` | Which allowlist entry granted access |
 | `created_at` | INTEGER | NOT NULL | Unix epoch ms |
 | `updated_at` | INTEGER | NOT NULL | Unix epoch ms |
@@ -859,7 +796,7 @@ Append-only. No updates or deletes.
 
 ---
 
-## 17. Container Image Design
+## 16. Container Image Design
 
 The tenant image must include:
 
@@ -892,7 +829,7 @@ Build for both `linux/arm64` and `linux/amd64` in CI. Production may run on AWS 
 
 ---
 
-## 18. Container Image Update / Rollout Strategy
+## 17. Container Image Update / Rollout Strategy
 
 ### When a New Image Is Available
 
@@ -922,7 +859,7 @@ Revert `is_default` to the previous image tag via `POST /v1/admin/images/:id/pro
 
 ---
 
-## 19. Tenant Container Health Endpoint
+## 18. Tenant Container Health Endpoint
 
 ### Endpoint Definition
 
@@ -986,7 +923,7 @@ On timeout: trigger provisioning failure rollback if provisioning new tenant; se
 
 ---
 
-## 20. Resource Limits Per Container
+## 19. Resource Limits Per Container
 
 ### Default Quotas
 
@@ -1019,7 +956,7 @@ If null, defaults apply.
 
 ---
 
-## 21. Disk Pressure / Quota Enforcement
+## 20. Disk Pressure / Quota Enforcement
 
 ### Per-Tenant Disk Quotas
 
@@ -1052,7 +989,7 @@ Runs every minute monitoring total disk usage on `/data`:
 
 ---
 
-## 22. Control Plane Responsibilities & API
+## 21. Control Plane Responsibilities & API
 
 The control plane handles: idempotent tenant provisioning, container lifecycle management, tenant status transitions, health checks, message routing integration, activity timestamps, audit logs, concurrency/locking during startup, stop/reset/delete operations, and capacity enforcement.
 
@@ -1089,7 +1026,7 @@ On startup, the control plane:
 
 ---
 
-## 23. API Versioning Strategy
+## 22. API Versioning Strategy
 
 ### Approach: URL Path Versioning
 
@@ -1113,7 +1050,7 @@ For MVP there is only v1. No breaking changes to v1 without bumping to v2.
 
 ---
 
-## 24. Tenant Allowlist / Registration Gating
+## 23. Tenant Allowlist / Registration Gating
 
 ### Purpose
 
@@ -1170,7 +1107,7 @@ For MVP, the allowlist is seeded manually via a migration or admin script before
 
 ---
 
-## 25. Audit Log Format and Storage
+## 24. Audit Log Format and Storage
 
 ### Purpose
 
@@ -1226,7 +1163,7 @@ Audit log rows are never deleted from the DB. If the SQLite file grows large (>5
 
 ---
 
-## 26. Observability / Metrics Strategy
+## 25. Observability / Metrics Strategy
 
 ### Structured Logging
 
@@ -1276,7 +1213,7 @@ No automated alerting in MVP. Operator reviews logs manually. Post-MVP: CloudWat
 
 ---
 
-## 27. Interactive Access Design
+## 26. Interactive Access Design
 
 ### Recommended MVP Approach
 
@@ -1300,7 +1237,7 @@ Per-tenant sshd adds more processes, more hardening needs, more key management, 
 
 ---
 
-## 28. Host-Side Directory Layout
+## 27. Host-Side Directory Layout
 
 ```text
 /opt/claw-orchestrator/
@@ -1348,7 +1285,7 @@ This layout makes backup, inspection, restore, and deletion straightforward.
 
 ---
 
-## 29. EC2 Recommendation and Cost
+## 28. EC2 Recommendation and Cost
 
 ### Recommended Instance
 
@@ -1366,11 +1303,11 @@ This provides a better safety margin if users run coding tasks or CLIs heavily. 
 
 ### Important Caveats
 
-Actual sizing depends on concurrency, repo size, install/build frequency, OpenClaw workload intensity, and how much Claude Code / Codex / Vercel / Convex activity occurs. The `MAX_ACTIVE_TENANTS` cap (§13) enforces the 10-user assumption at the software level.
+Actual sizing depends on concurrency, repo size, install/build frequency, OpenClaw workload intensity, and how much Claude Code / Codex / Vercel / Convex activity occurs.
 
 ---
 
-## 30. Backup and Disaster Recovery
+## 29. Backup and Disaster Recovery
 
 ### What to Back Up
 
@@ -1427,7 +1364,7 @@ If the EC2 instance is lost: launch a new instance, restore from EBS snapshot or
 
 ---
 
-## 31. Deployment / Startup Procedure
+## 30. Deployment / Startup Procedure
 
 ### Service Management
 
@@ -1477,8 +1414,6 @@ DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
 TENANT_IMAGE=claw-tenant:sha-latest
 LOG_LEVEL=info
-MAX_ACTIVE_TENANTS=10
-ACTIVE_TENANTS_OVERFLOW_POLICY=queue   # or: reject
 
 # Slack Relay
 SLACK_RELAY_PORT=3000
@@ -1528,7 +1463,7 @@ systemctl restart claw-control-plane claw-slack-relay claw-scheduler
 
 ---
 
-## 32. Technology Stack
+## 31. Technology Stack
 
 | Concern | Choice | Rationale |
 |---|---|---|
@@ -1546,7 +1481,7 @@ Python is explicitly not used. One language keeps the system simpler.
 
 ---
 
-## 33. Repository Structure
+## 32. Repository Structure
 
 ```text
 repo/
@@ -1580,7 +1515,7 @@ repo/
 
 ---
 
-## 34. Development Environment Requirements
+## 33. Development Environment Requirements
 
 ### Host OS
 
@@ -1608,7 +1543,7 @@ Build and test `linux/arm64` for production Graviton compatibility. Also keep `l
 
 ---
 
-## 35. Local Development Workflow
+## 34. Local Development Workflow
 
 The local environment must support:
 
@@ -1626,7 +1561,7 @@ Prefer a **fake Slack event generator** for most development and automated tests
 
 ---
 
-## 36. Testing Strategy
+## 35. Testing Strategy
 
 The system is not complete unless automated tests prove isolation and lifecycle correctness.
 
@@ -1640,7 +1575,6 @@ Cover:
 - tenant mapping (`team_id + user_id → tenant_id`)
 - idle stop eligibility
 - lock logic
-- capacity cap enforcement (§13)
 
 ### Integration Tests
 
@@ -1663,7 +1597,7 @@ Cover:
 
 ---
 
-## 37. Detailed End-to-End Test Cases
+## 36. Detailed End-to-End Test Cases
 
 ### A. Provisioning Tests
 
@@ -1784,17 +1718,9 @@ Attempt risky operations such as destructive git or system modification. Assert:
 
 ---
 
-### I. Capacity Cap Tests
-
-**I1. Reject at capacity**
-Spin up `MAX_ACTIVE_TENANTS` tenants. Attempt to start a new one. Assert: start is blocked; Slack user receives capacity message; message is queued.
-
-**I2. Queue resumes on capacity available**
-With `ACTIVE_TENANTS_OVERFLOW_POLICY=queue`: stop one active tenant. Assert: queued tenant starts automatically; message is delivered.
-
 ---
 
-## 38. Acceptance Criteria
+## 37. Acceptance Criteria
 
 The MVP is ready only if all of the following are true:
 
@@ -1806,12 +1732,11 @@ The MVP is ready only if all of the following are true:
 - Startup is idempotent and race-safe.
 - One tenant crash does not break other tenants.
 - Access is gated by allowlist; unauthorized users receive a rejection message.
-- Capacity cap (`MAX_ACTIVE_TENANTS`) is enforced and behaves correctly at the limit.
 - Automated E2E tests prove all of the above.
 
 ---
 
-## 39. Implementation Order
+## 38. Implementation Order
 
 A coding agent should implement in this sequence:
 
@@ -1819,7 +1744,7 @@ A coding agent should implement in this sequence:
 Repo structure, Node monorepo, shared types/config, SQLite schema (all tables), basic Fastify services.
 
 ### Phase 2 — Tenant Control Plane
-Tenant table, provision/start/stop/delete APIs, Docker wrapper (`execa`), health polling, tenant directory creation, startup lock, provisioning rollback, capacity cap enforcement. Implement workspace template seeding (§8.2.1), including `AGENTS.md` copy/merge logic. Implement the read-only bind-mount of the host's `auth-profiles.json` into every tenant container on `docker run` (§6.5, §8.2).
+Tenant table, provision/start/stop/delete APIs, Docker wrapper (`execa`), health polling, tenant directory creation, startup lock, provisioning rollback. Implement workspace template seeding (§8.2.1), including `AGENTS.md` copy/merge logic. Implement the read-only bind-mount of the host's `auth-profiles.json` into every tenant container on `docker run` (§6.5, §8.2).
 
 ### Phase 3 — Slack Relay
 Slack signature verification, user-to-tenant resolution, allowlist check, immediate-ack pattern, message forwarding, queued wake-up behavior, `chat.postMessage` delivery.
@@ -1828,10 +1753,10 @@ Slack signature verification, user-to-tenant resolution, allowlist check, immedi
 Non-root `agent` user, OpenClaw installation, required CLIs, health server on port `3101`, message server on port `3100`, entrypoint script. The image must **not** embed or expect `ANTHROPIC_API_KEY` in the environment. Instead, the entrypoint should verify that `/root/.openclaw/agents/main/agent/auth-profiles.json` is present (bind-mounted read-only by the control plane at start time — see §6.5) and surface a clear error in logs if it is missing.
 
 ### Phase 5 — Scheduler
-Idle-stop logic (48h inactivity checks), disk usage sampling, capacity-queue retry, message queue reaping, stale lock sweep.
+Idle-stop logic (48h inactivity checks), disk usage sampling, message queue reaping, stale lock sweep.
 
 ### Phase 6 — Tests
-Unit tests, integration tests, isolation E2E tests, wake-up and race tests, capacity cap tests.
+Unit tests, integration tests, isolation E2E tests, wake-up and race tests.
 
 ### Phase 7 — Operator Access
 Host-side `tenant-shell` helper, admin/debug scripts, backup cron job.
