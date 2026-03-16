@@ -392,3 +392,8 @@ US-026: Slack relay: ⏳ Working on it interim message at 15s timeout and 4-min 
 - Final response: posts agent response text (or blocks) via chat.postMessage
 - Added unit tests in events.test.ts using setTimeout spy to verify timer setup
 - 108 total passing tests
+
+[US-026] Slack relay: interim message + 4-min timeout
+- Fixed catch block to always post 'still working' DM (removed !interimSent guard)
+- Linter refactored AbortController to Promise.race + setTimeout approach (testable with fake timers)
+- Added interim-message.test.ts with 6 tests; all 114 tests pass
