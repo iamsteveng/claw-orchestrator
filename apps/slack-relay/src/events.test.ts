@@ -559,3 +559,114 @@ describe('processSlackEvent — deduplication (AC #9)', () => {
     ).resolves.not.toThrow();
   });
 });
+
+// ─── US-026: ⏳ Working on it interim message ────────────────────────────────
+
+describe('processSlackEvent — US-026: interim message and 4-min timeout', () => {
+  const makeLog = () => ({ warn: vi.fn(), error: vi.fn(), info: vi.fn(), debug: vi.fn(), trace: vi.fn(), fatal: vi.fn() });
+
+  it('registers 15-second interim timer and sends ⏳ DM when timer fires', async () => {
+    // Capture all setTimeout calls to find the 15s interim timer
+    const timerCallbacks = new Map<number, () => void>();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(
+      (fn: (...args: unknown[]) => unknown, delay?: number) => {
+        const id = Math.random();
+        timerCallbacks.set(delay ?? 0, fn as () => void);
+        return id as unknown as ReturnType<typeof setTimeout>;
+      },
+    );
+
+    const dmTexts: string[] = [];
+    let resolveMessage!: (r: Response) => void;
+
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes('/provision')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ tenantId: 'abc123def456abcd', status: 'ACTIVE', relayToken: 'tok' }), { status: 200 }),
+        );
+      }
+      if (u.includes('/message')) {
+        return new Promise<Response>((res) => { resolveMessage = res; });
+      }
+      if (u.includes('conversations.open')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true, channel: { id: 'D001' } }), { status: 200 }));
+      }
+      if (u.includes('chat.postMessage')) {
+        const opts = (fetchFn as ReturnType<typeof vi.fn>).mock.calls.at(-1)![1] as RequestInit;
+        const body = JSON.parse(opts?.body as string) as { text?: string };
+        if (body.text) dmTexts.push(body.text);
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    const envelope: SlackEventEnvelope = {
+      type: 'event_callback',
+      team_id: 'T123',
+      event_id: 'Ev010',
+      event: { user: 'U456', text: 'long task', type: 'message' },
+    };
+
+    const processPromise = processSlackEvent(envelope, makeLog() as never, fetchFn);
+
+    // Flush multiple microtask batches to let provision + json() awaits complete
+    // Each await call in processSlackEvent needs one tick: fetchFn + .json()
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    // The 15-second timer should have been registered
+    const interimCallback = timerCallbacks.get(15_000);
+    expect(interimCallback).toBeDefined();
+
+    setTimeoutSpy.mockRestore();
+
+    // Fire the interim timer callback manually
+    if (interimCallback) {
+      interimCallback();
+      // Allow the postSlackDm async work to run
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    // Resolve the message endpoint to finish processSlackEvent
+    resolveMessage!(new Response('{}', { status: 200 }));
+    await processPromise;
+
+    expect(dmTexts.some((t) => t.includes('⏳') || t.includes('Working on it'))).toBe(true);
+  });
+
+  it('posts final response to Slack channel on successful delivery', async () => {
+    const dmTexts: string[] = [];
+
+    const fetchFn = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes('/provision')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ tenantId: 'abc123def456abcd', status: 'ACTIVE', relayToken: 'tok' }), { status: 200 }),
+        );
+      }
+      if (String(url).includes('/message')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, response: 'Here is your answer!' }), { status: 200 }),
+        );
+      }
+      if (String(url).includes('chat.postMessage')) {
+        const body = JSON.parse((vi.mocked(fetchFn).mock.calls.at(-1)![1] as RequestInit).body as string) as { text?: string };
+        if (body.text) dmTexts.push(body.text);
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    }) as unknown as typeof fetch;
+
+    const envelope: SlackEventEnvelope = {
+      type: 'event_callback',
+      team_id: 'T123',
+      event_id: 'Ev011',
+      event: { user: 'U456', text: 'quick task', type: 'message', channel: 'C001' },
+    };
+
+    await processSlackEvent(envelope, makeLog() as never, fetchFn);
+
+    expect(dmTexts).toContain('Here is your answer!');
+  });
+});
