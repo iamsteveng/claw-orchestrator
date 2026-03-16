@@ -77,18 +77,28 @@ describe('slackRelayConfigSchema', () => {
 });
 
 describe('schedulerConfigSchema', () => {
-  it('uses defaults when vars are absent', () => {
-    const config = schedulerConfigSchema.parse({});
+  const required = {
+    DATABASE_URL: 'file:/tmp/scheduler.db',
+    CONTROL_PLANE_URL: 'http://localhost:3200',
+  };
+
+  it('uses defaults when optional vars are absent', () => {
+    const config = schedulerConfigSchema.parse(required);
     expect(config.SCHEDULER_INTERVAL_MS).toBe(60000);
     expect(config.IDLE_STOP_HOURS).toBe(48);
   });
 
   it('accepts overrides', () => {
     const config = schedulerConfigSchema.parse({
+      ...required,
       SCHEDULER_INTERVAL_MS: '30000',
       IDLE_STOP_HOURS: '24',
     });
     expect(config.SCHEDULER_INTERVAL_MS).toBe(30000);
     expect(config.IDLE_STOP_HOURS).toBe(24);
+  });
+
+  it('throws ZodError when DATABASE_URL is missing', () => {
+    expect(() => schedulerConfigSchema.parse({ CONTROL_PLANE_URL: 'http://localhost:3200' })).toThrow(ZodError);
   });
 });

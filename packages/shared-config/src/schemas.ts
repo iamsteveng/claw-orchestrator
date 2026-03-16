@@ -25,6 +25,8 @@ export type SlackRelayConfig = z.infer<typeof slackRelayConfigSchema>;
 export const schedulerConfigSchema = z.object({
   SCHEDULER_INTERVAL_MS: z.coerce.number().int().positive().default(60000),
   IDLE_STOP_HOURS: z.coerce.number().int().positive().default(48),
+  DATABASE_URL: z.string().min(1),
+  CONTROL_PLANE_URL: z.string().url(),
 });
 
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>;
