@@ -10,6 +10,7 @@ import { acquireStartupLock, releaseStartupLock } from './startup-lock.js';
 import { pollUntilHealthy } from './health-poll.js';
 import { isAllowed } from './allowlist.js';
 import { seedDefaultImage, getDefaultImage } from './container-image.js';
+import { buildDockerRunOptions } from './docker-run-options.js';
 
 const startedAt = Date.now();
 
@@ -284,7 +285,19 @@ app.post<{
 
     // Start the container (dynamic import required: docker-client is ESM-only)
     const { DockerClient } = await import('@claw/docker-client');
-    await DockerClient.start(containerName);
+    if (previousStatus === TenantStatus.NEW) {
+      // First-time start: create and run a new container with resource limits + bind mounts
+      const runOpts = buildDockerRunOptions({
+        tenantId,
+        image: imageTag,
+        dataDir: tenant.data_dir,
+        resourceOverrides: tenant.resource_overrides,
+      });
+      await DockerClient.run(runOpts);
+    } else {
+      // Restart an existing (stopped) container
+      await DockerClient.start(containerName);
+    }
 
     // Launch health polling in background (does not block response)
     void pollUntilHealthy(prisma, tenantId, containerName, previousStatus, app.log)
