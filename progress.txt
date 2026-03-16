@@ -209,3 +209,25 @@
   - Stale lock detection: expires_at < now → delete + retry INSERT once
   - waitForTenantActive polls every 2s for up to 3min; returns {queued: true, status} on ACTIVE or {queued: false, message} on timeout
 ---
+
+## 2026-03-16 - US-008 (integration fix)
+- What was implemented: Integrated seedWorkspace call into provision.ts provisioning flow; templates/workspace/AGENTS.md and seed-workspace.ts were already committed by previous iteration but the call was missing from provision.ts
+- Files changed:
+  - apps/control-plane/src/provision.ts (added seedWorkspace import + call after directory creation)
+- **Learnings for future iterations:**
+  - seedWorkspace(workspacePath, templatesDir) signature: workspacePath first, then templatesDir
+  - TEMPLATES_DIR config key already added to controlPlaneConfigSchema with default '/opt/claw-orchestrator/templates/workspace'
+---
+
+## 2026-03-16 - US-010
+- What was implemented: Health polling loop for tenant containers
+- Files changed:
+  - apps/control-plane/src/health-poll.ts (pollUntilHealthy function with 2s interval, 90s timeout, 3s per-request timeout)
+  - apps/control-plane/src/health-poll.test.ts (3 unit tests mocking fetch: healthy, timeout+ACTIVE→UNHEALTHY, timeout+non-ACTIVE)
+- **Learnings for future iterations:**
+  - Node.js 22 has global `fetch` and `AbortController` - no http client library needed
+  - vi.stubGlobal('fetch', ...) works in vitest for mocking the global fetch
+  - vi.useFakeTimers() + vi.runAllTimersAsync() needed for testing 90s timeout without real waiting
+  - pollUntilHealthy is background-safe: caller uses `void pollUntilHealthy(...)` without awaiting
+  - UNHEALTHY is only set when previousStatus === TenantStatus.ACTIVE; provisioning timeout leaves status for caller rollback
+---
