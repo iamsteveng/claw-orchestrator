@@ -190,8 +190,8 @@ export async function processSlackEvent(
     timestamp: Date.now(),
   };
 
-  const controller = new AbortController();
   let interimSent = false;
+  let deliveryTimerId: ReturnType<typeof setTimeout> | undefined;
 
   // 15-second interim timer: notify user we're working on it
   const interimTimer = setTimeout(() => {
@@ -199,21 +199,28 @@ export async function processSlackEvent(
     void postSlackDm(slackUserId, '⏳ Working on it...', slackRelayConfig.SLACK_BOT_TOKEN, fetchFn);
   }, INTERIM_DELAY_MS);
 
-  const deliveryTimer = setTimeout(() => controller.abort(), MAX_DELIVERY_MS);
-
   try {
-    const msgRes = await fetchFn(`${cpBase}/v1/tenants/${tenantId}/message`, {
+    // Promise.race with a timeout so fake timers work in tests (AbortSignal is not intercepted by vi.useFakeTimers)
+    const fetchPromise = fetchFn(`${cpBase}/v1/tenants/${tenantId}/message`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         'x-relay-token': relayToken,
       },
       body: JSON.stringify(msgPayload),
-      signal: controller.signal,
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      deliveryTimerId = setTimeout(
+        () => reject(Object.assign(new Error('Message delivery timed out'), { name: 'AbortError' })),
+        MAX_DELIVERY_MS,
+      );
+    });
+
+    const msgRes = await Promise.race([fetchPromise, timeoutPromise]);
+
     clearTimeout(interimTimer);
-    clearTimeout(deliveryTimer);
+    clearTimeout(deliveryTimerId);
 
     if (msgRes.ok) {
       const msgBody = await msgRes.json() as { ok?: boolean; response?: string; blocks?: unknown[] | null };
@@ -235,12 +242,10 @@ export async function processSlackEvent(
     }
   } catch (err) {
     clearTimeout(interimTimer);
-    clearTimeout(deliveryTimer);
+    clearTimeout(deliveryTimerId);
 
-    if (!interimSent) {
-      // Delivery aborted by 4-minute timeout
-      await postSlackDm(slackUserId, "I'm still working on this. I'll follow up when complete.", slackRelayConfig.SLACK_BOT_TOKEN, fetchFn);
-    }
+    // Delivery failed or aborted by 4-minute timeout — notify user
+    await postSlackDm(slackUserId, "I'm still working on this. I'll follow up when complete.", slackRelayConfig.SLACK_BOT_TOKEN, fetchFn);
 
     log.warn({ err, tenantId, slackEventId }, 'Failed to forward message to tenant');
   }
