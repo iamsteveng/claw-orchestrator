@@ -397,3 +397,12 @@ US-026: Slack relay: ⏳ Working on it interim message at 15s timeout and 4-min 
 - Fixed catch block to always post 'still working' DM (removed !interimSent guard)
 - Linter refactored AbortController to Promise.race + setTimeout approach (testable with fake timers)
 - Added interim-message.test.ts with 6 tests; all 114 tests pass
+
+---
+US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
+- Created apps/scheduler/src/idle-stop.ts: stopIdleTenants()
+- Queries DB for status=ACTIVE, deleted_at=null, last_activity_at < (now - 48h)
+- Calls POST /v1/tenants/:id/stop for each idle tenant
+- apps/scheduler/src/index.ts: setInterval job loop + SIGTERM/SIGINT shutdown
+- Added DATABASE_URL + CONTROL_PLANE_URL to schedulerConfigSchema
+- 5 unit tests for idle-stop logic; 114 total passing
