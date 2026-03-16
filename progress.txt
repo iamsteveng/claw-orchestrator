@@ -382,3 +382,13 @@ US-024: Slack relay: tenant routing with immediate 200 ack and async processing
 - Created apps/slack-relay/src/event-handler.ts with enqueueMessage, waitForTenantActive, deliverPendingMessages, resetStuckProcessingRows
 - Direct Prisma access for queue management; relay shares SQLite DB with control plane
 - 9/9 tests pass, typecheck clean
+
+---
+US-026: Slack relay: ⏳ Working on it interim message at 15s timeout and 4-min max wait
+- Already implemented in apps/slack-relay/src/index.ts processSlackEvent()
+- 15s timer posts '⏳ Working on it...' via postSlackDm
+- 4-min AbortController cuts off message fetch
+- On 4-min timeout: posts "I'm still working on this. I'll follow up when complete."
+- Final response: posts agent response text (or blocks) via chat.postMessage
+- Added unit tests in events.test.ts using setTimeout spy to verify timer setup
+- 108 total passing tests
