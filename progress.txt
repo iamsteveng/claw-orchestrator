@@ -142,3 +142,13 @@
   - For rollback pattern: always do best-effort rm with `force: true` then update DB status to FAILED regardless
   - node:crypto `createHash` + `randomBytes` are available in Node.js 22 without install; `crypto.randomUUID()` is global in Node 22
 ---
+
+## 2026-03-16 - US-007
+- What was implemented: Tenant provisioning endpoint POST /v1/tenants/provision
+- Files changed:
+  - apps/control-plane/src/index.ts (provision route was pre-scaffolded; fixed data_dir to use controlPlaneConfig.DATA_DIR instead of hardcoded /data/tenants)
+- **Learnings for future iterations:**
+  - US-006 pre-scaffolded the provision route in index.ts — always check for pre-existing implementations before writing new code
+  - The data_dir should use controlPlaneConfig.DATA_DIR (set via env var) not a hardcoded path, even when the spec shows a literal path in the AC
+  - provision_attempts starts at 0 on create; increments on failure; 409 triggered when existing tenant has provision_attempts >= 3 AND status=FAILED
+---
