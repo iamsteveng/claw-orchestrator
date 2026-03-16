@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { execSync } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
+import { mkdir, writeFile, rm } from 'node:fs/promises';
 
 const startedAt = Date.now();
 
@@ -68,6 +70,111 @@ async function reconcile(): Promise<void> {
 
 app.get('/health', async (_req, reply) => {
   return reply.send({ ok: true, uptime: Date.now() - startedAt });
+});
+
+// POST /v1/tenants/provision
+app.post<{
+  Body: { slackTeamId: string; slackUserId: string };
+}>('/v1/tenants/provision', async (req, reply) => {
+  const { slackTeamId, slackUserId } = req.body;
+
+  const principal = `${slackTeamId}:${slackUserId}`;
+  const tenantId = createHash('sha256').update(principal).digest('hex').slice(0, 16);
+
+  // Check for existing tenant (idempotency)
+  const existing = await prisma.tenant.findUnique({ where: { principal } });
+  if (existing) {
+    if (existing.status === TenantStatus.FAILED && existing.provision_attempts >= 3) {
+      return reply.status(409).send({ error: 'Max provision attempts reached' });
+    }
+    return reply.send({ tenantId: existing.id, status: existing.status });
+  }
+
+  const dataDir = `/data/tenants/${tenantId}`;
+  const relayToken = randomBytes(32).toString('hex');
+  const now = Date.now();
+
+  // Create DB row with status=PROVISIONING
+  await prisma.tenant.create({
+    data: {
+      id: tenantId,
+      principal,
+      slack_team_id: slackTeamId,
+      slack_user_id: slackUserId,
+      status: TenantStatus.PROVISIONING,
+      relay_token: relayToken,
+      container_name: `claw-tenant-${tenantId}`,
+      data_dir: dataDir,
+      provision_attempts: 0,
+      created_at: now,
+      updated_at: now,
+    },
+  });
+
+  try {
+    // Create tenant directories
+    for (const subdir of ['home', 'workspace', 'config', 'logs', 'secrets']) {
+      await mkdir(`${dataDir}/${subdir}`, { recursive: true });
+    }
+
+    // Write relay token to secrets
+    await writeFile(`${dataDir}/secrets/relay-token`, relayToken, { encoding: 'utf8' });
+
+    // Mark tenant as NEW (provisioning complete; container start is separate)
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { status: TenantStatus.NEW, updated_at: Date.now() },
+    });
+
+    // Write audit event
+    await prisma.auditLog.create({
+      data: {
+        id: crypto.randomUUID(),
+        tenant_id: tenantId,
+        event_type: AuditEventType.TENANT_PROVISIONED,
+        actor: 'system',
+        metadata: JSON.stringify({ slackTeamId, slackUserId }),
+        created_at: Date.now(),
+      },
+    });
+
+    app.log.info({ tenantId }, 'Tenant provisioned');
+    return reply.send({ tenantId, status: TenantStatus.NEW });
+  } catch (err) {
+    app.log.error({ err, tenantId }, 'Tenant provisioning failed');
+
+    // Rollback: cleanup directories
+    try {
+      await rm(dataDir, { recursive: true, force: true });
+    } catch {
+      // best-effort cleanup
+    }
+
+    // Mark as FAILED, increment provision_attempts
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: {
+        status: TenantStatus.FAILED,
+        error_message: err instanceof Error ? err.message : String(err),
+        provision_attempts: { increment: 1 },
+        updated_at: Date.now(),
+      },
+    });
+
+    // Write failure audit event
+    await prisma.auditLog.create({
+      data: {
+        id: crypto.randomUUID(),
+        tenant_id: tenantId,
+        event_type: AuditEventType.TENANT_PROVISION_FAILED,
+        actor: 'system',
+        metadata: JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
+        created_at: Date.now(),
+      },
+    });
+
+    return reply.status(500).send({ error: 'Provisioning failed' });
+  }
 });
 
 // ─── Server startup ───────────────────────────────────────────────────────────
