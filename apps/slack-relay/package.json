@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@claw/shared-types": "workspace:*",
-    "@claw/shared-config": "workspace:*"
+    "@claw/shared-config": "workspace:*",
+    "fastify": "^5.8.2",
+    "pino": "^10.3.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.0"
   }
 }
