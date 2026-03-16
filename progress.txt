@@ -292,3 +292,16 @@
   - Admin POST /v1/admin/allowlist creates entry + writes ACCESS_GRANTED
   - Admin DELETE /v1/admin/allowlist/:id sets revoked_at + writes ACCESS_REVOKED
 ---
+
+## 2026-03-16 - US-015
+- What was implemented: Allowlist enforcement with admin CRUD endpoints
+- Files changed:
+  - apps/control-plane/src/allowlist.ts (isAllowed function using findFirst with OR for team/user-level)
+  - apps/control-plane/src/allowlist.test.ts (4 unit tests: team-level, user-level, revoked, no entry)
+  - apps/control-plane/src/index.ts (POST /v1/admin/allowlist, DELETE /v1/admin/allowlist/:id, allowlist check in provision + message endpoints)
+- **Learnings for future iterations:**
+  - isAllowed uses findFirst with OR [slack_user_id=user, slack_user_id=null] for team/user-level matching
+  - Test mock for allowlist must use `findFirst` (not `count`) to match implementation
+  - Allowlist check in provision endpoint writes ACCESS_DENIED audit event on denial
+  - Allowlist check in message endpoint returns 403 {ok: false, error: 'Access revoked'} on denial
+---
