@@ -376,6 +376,59 @@ app.post<{
   return reply.status(502).send(responseBody! ?? { ok: false, error: 'Message delivery failed' });
 });
 
+// POST /v1/tenants/:tenantId/stop
+app.post<{
+  Params: { tenantId: string };
+  Body: { actor?: string };
+}>('/v1/tenants/:tenantId/stop', async (req, reply) => {
+  const { tenantId } = req.params;
+  const actor = req.body?.actor ?? 'system';
+
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant) {
+    return reply.status(404).send({ error: 'Tenant not found' });
+  }
+
+  if (tenant.status === TenantStatus.STOPPED) {
+    return reply.send({ status: 'already_stopped' });
+  }
+
+  const containerName = `claw-tenant-${tenantId}`;
+  const now = Date.now();
+
+  // Stop container (best-effort: if it fails, still mark STOPPED)
+  try {
+    const { DockerClient } = await import('@claw/docker-client');
+    await DockerClient.stop(containerName, 10);
+  } catch (err) {
+    app.log.warn({ tenantId, err }, 'dockerStop failed; marking STOPPED anyway');
+  }
+
+  await prisma.tenant.update({
+    where: { id: tenantId },
+    data: {
+      status: TenantStatus.STOPPED,
+      last_stopped_at: now,
+      queued_for_start_at: null,
+      updated_at: now,
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      id: crypto.randomUUID(),
+      tenant_id: tenantId,
+      event_type: AuditEventType.TENANT_STOPPED,
+      actor,
+      metadata: JSON.stringify({ containerName }),
+      created_at: now,
+    },
+  });
+
+  app.log.info({ tenantId, actor }, 'Tenant stopped');
+  return reply.send({ status: 'stopped' });
+});
+
 // ─── Server startup ───────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
