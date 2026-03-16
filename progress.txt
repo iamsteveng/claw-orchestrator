@@ -257,3 +257,23 @@
   - On success: update last_activity_at + MESSAGE_DELIVERED audit event
   - On failure: MESSAGE_FAILED audit event (no retry counting in this story)
 ---
+
+## 2026-03-16 - US-012
+- What was implemented: Message forwarding endpoint POST /v1/tenants/:tenantId/message
+- Files changed:
+  - apps/control-plane/src/index.ts (added proper attempts tracking in failure path)
+- **Learnings for future iterations:**
+  - The message endpoint was pre-scaffolded but lacked attempts tracking per MessageQueue row
+  - On failure: look up MessageQueue by slack_event_id, increment attempts, write MESSAGE_FAILED only if attempts >= 3
+  - The endpoint already existed with relay token validation, ACTIVE check, 4-min timeout, and logs
+---
+
+## 2026-03-16 - US-013
+- What was implemented: Tenant stop endpoint (POST /v1/tenants/:tenantId/stop)
+- Files changed:
+  - apps/control-plane/src/index.ts (added /v1/tenants/:tenantId/stop route)
+- **Learnings for future iterations:**
+  - dockerStop best-effort: log warning on failure but still mark STOPPED in DB
+  - actor field in body defaults to 'system'; callers can pass 'admin:<user>'
+  - Clears queued_for_start_at (null) when stopping
+---
