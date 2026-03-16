@@ -5,6 +5,7 @@ export const controlPlaneConfigSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DATA_DIR: z.string().min(1),
   TENANT_IMAGE: z.string().min(1),
+  TEMPLATES_DIR: z.string().min(1).default('/opt/claw-orchestrator/templates/workspace'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   MAX_ACTIVE_TENANTS: z.coerce.number().int().positive().default(10),
   ACTIVE_TENANTS_OVERFLOW_POLICY: z.enum(['queue', 'reject']).default('queue'),
