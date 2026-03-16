@@ -355,3 +355,14 @@ US-023: Slack relay: Slack event signature verification
 - IMAGE_UPDATED audit event fires whenever imageTag !== tenant.image_tag (includes first-ever tag recording)
 - Canary validation comment added in code: operators promote via POST /v1/admin/images/:id/promote after manual canary verification
 - The promote transaction: sets all other rows is_default=0 + deprecated_at=now, sets target is_default=1
+
+---
+US-021: Control plane: resource limits applied per container via docker run flags
+- Created apps/control-plane/src/docker-run-options.ts: buildDockerRunOptions()
+- Default: --cpus=1.0, --memory=1536m, --memory-swap=1536m, --pids-limit=256, --ulimit nofile=1024:1024
+- resource_overrides JSON parsed and merged over defaults (cpus, memory_mb, pids_limit)
+- auth-profiles.json bind-mounted read-only from homedir()/.openclaw/agents/main/agent/auth-profiles.json
+- Tenant data dirs: home→/home/agent, workspace→/workspace, config→/home/agent/.config
+- Env vars: HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME
+- Modified start endpoint: NEW tenants use DockerClient.run(), others use DockerClient.start()
+- 5 unit tests; 76 total passing
