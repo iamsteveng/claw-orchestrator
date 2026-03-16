@@ -5,6 +5,7 @@ import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { execSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { seedWorkspace } from './seed-workspace.js';
 
 const startedAt = Date.now();
 
@@ -119,6 +120,9 @@ app.post<{
 
     // Write relay token to secrets
     await writeFile(`${dataDir}/secrets/relay-token`, relayToken, { encoding: 'utf8' });
+
+    // Seed workspace template files (including AGENTS.md merge logic)
+    await seedWorkspace(`${dataDir}/workspace`, controlPlaneConfig.TEMPLATES_DIR);
 
     // Mark tenant as NEW (provisioning complete; container start is separate)
     await prisma.tenant.update({

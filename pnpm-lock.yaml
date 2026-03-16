@@ -58,6 +58,9 @@ importers:
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.0
+        version: 4.1.0(@types/node@22.19.15)(vite@5.4.21(@types/node@22.19.15))
 
   apps/scheduler:
     dependencies:
