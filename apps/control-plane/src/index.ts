@@ -9,6 +9,7 @@ import { seedWorkspace } from './seed-workspace.js';
 import { acquireStartupLock, releaseStartupLock } from './startup-lock.js';
 import { pollUntilHealthy } from './health-poll.js';
 import { isAllowed } from './allowlist.js';
+import { seedDefaultImage, getDefaultImage } from './container-image.js';
 
 const startedAt = Date.now();
 
@@ -66,6 +67,9 @@ async function reconcile(): Promise<void> {
       created_at: now,
     },
   });
+
+  // Seed default container image if not already set
+  await seedDefaultImage(prisma);
 
   app.log.info('Startup reconciliation complete');
 }
@@ -646,6 +650,57 @@ app.get<{
     events: events.map((e: (typeof events)[number]) => ({ ...e, metadata: e.metadata ? JSON.parse(e.metadata) as unknown : null })),
     total,
   });
+});
+
+// GET /v1/admin/images
+app.get('/v1/admin/images', async (_req, reply) => {
+  const images = await prisma.containerImage.findMany({
+    orderBy: { created_at: 'desc' },
+  });
+  return reply.send({ images });
+});
+
+// POST /v1/admin/images/:id/promote
+app.post<{
+  Params: { id: string };
+}>('/v1/admin/images/:id/promote', async (req, reply) => {
+  const { id } = req.params;
+
+  const target = await prisma.containerImage.findUnique({ where: { id } });
+  if (!target) {
+    return reply.status(404).send({ error: 'Image not found' });
+  }
+
+  const now = Date.now();
+
+  // In a transaction: set all is_default=0, set target is_default=1
+  await prisma.$transaction(async (tx: typeof prisma) => {
+    // Deprecate current defaults
+    await tx.containerImage.updateMany({
+      where: { is_default: 1, id: { not: id } },
+      data: { is_default: 0, deprecated_at: now },
+    });
+    // Promote target
+    await tx.containerImage.update({
+      where: { id },
+      data: { is_default: 1 },
+    });
+  });
+
+  // Write IMAGE_UPDATED audit event
+  await prisma.auditLog.create({
+    data: {
+      id: crypto.randomUUID(),
+      tenant_id: null,
+      event_type: AuditEventType.IMAGE_UPDATED,
+      actor: 'admin',
+      metadata: JSON.stringify({ promotedTag: target.tag }),
+      created_at: now,
+    },
+  });
+
+  app.log.info({ imageId: id, tag: target.tag }, 'Image promoted to default');
+  return reply.send({ promoted: true, tag: target.tag });
 });
 
 // ─── Server startup ───────────────────────────────────────────────────────────
