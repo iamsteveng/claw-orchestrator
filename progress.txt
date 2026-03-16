@@ -1,4 +1,6 @@
 ## Codebase Patterns
+- docker-client uses `"type": "module"` (ESM) to support execa v9 (ESM-only); other packages are CJS
+- ExecaError in execa v9 has no public constructor — in tests, cast via `ExecaError as unknown as new (...) => ExecaError` for instantiation
 - pnpm workspaces used: apps/* and packages/*; use `workspace:*` protocol for cross-package deps
 - TypeScript module system: `module: Node16`, `moduleResolution: Node16`, `target: ES2023` (required for Node.js 22)
 - Each package/app has its own tsconfig.json extending ../../tsconfig.json with rootDir/outDir overrides
@@ -61,4 +63,19 @@
   - Prisma 5.x @prisma/client runs a postinstall script to generate the client; it needs to be in pnpm.onlyBuiltDependencies
   - WAL PRAGMA must be the first statement in the migration SQL; Prisma SQLite does support PRAGMA in migrations
   - dev.db files get created in prisma/ relative to schema.prisma location; always add *.db patterns to .gitignore
+---
+
+## 2026-03-16 - US-004
+- What was implemented: Docker client package with typed wrapper for Docker CLI operations via execa v9
+- Files changed:
+  - packages/docker-client/src/index.ts (DockerError class, DockerRunOptions/DockerInspectResult interfaces, dockerRun/Start/Stop/Rm/Inspect/Exec functions, DockerClient exported object)
+  - packages/docker-client/src/index.test.ts (10 unit tests mocking execa, verifying CLI arg construction for all functions)
+  - packages/docker-client/package.json (added "type": "module", execa ^9.0.0 dependency, vitest devDependency)
+  - pnpm-lock.yaml (updated for execa v9 in docker-client)
+- **Learnings for future iterations:**
+  - docker-client must be ESM ("type": "module") because execa v9 is ESM-only; this is the only ESM package in the monorepo
+  - execa v5 was the pre-existing stub in package.json but the implementation used v9 API — updated to v9
+  - ExecaError in execa v9 cannot be instantiated with `new ExecaError(msg, code, stderr)` per its types; use a cast helper in tests: `ExecaError as unknown as new (message: string, exitCode?: number, stderr?: string) => ExecaError`
+  - readOnlyBindMounts appends ':ro' suffix to each mount path in docker run args
+  - DockerInspect returns null on exit code 1 (container not found) but throws DockerError for other failures
 ---
