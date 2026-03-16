@@ -169,3 +169,18 @@
   - Always use try/finally for audit event writes on failure
   - fs.promises.rm({ recursive: true, force: true }) for rollback cleanup
   - seed-workspace.ts is imported by provision.ts for workspace template seeding
+---
+
+## 2026-03-16 - US-009
+- What was implemented: Startup lock mechanism using SQLite as distributed mutex
+- Files changed:
+  - apps/control-plane/src/startup-lock.ts (acquireStartupLock, releaseStartupLock, waitForTenantActive functions)
+  - apps/control-plane/src/startup-lock.test.ts (unit tests for lock acquire, blocked duplicate, stale lock takeover)
+  - apps/control-plane/src/index.ts (import of startup lock added)
+  - apps/control-plane/package.json (added uuid dependency for requestId generation)
+- **Learnings for future iterations:**
+  - SQLite UNIQUE constraint on startup_locks.tenant_id acts as the mutex; Prisma create() throws on duplicate
+  - Stale lock detection: compare existing.expires_at < Date.now(); delete + retry insert on stale
+  - releaseStartupLock uses deleteMany (not delete) to avoid error if row doesn't exist
+  - waitForTenantActive polls every 2s for up to 3min; returns {queued: true, message: '...'} on timeout
+---
