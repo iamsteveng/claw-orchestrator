@@ -13,10 +13,14 @@
     "@claw/docker-client": "workspace:*",
     "@claw/shared-config": "workspace:*",
     "@claw/shared-types": "workspace:*",
-    "@prisma/client": "^5.22.0"
+    "@prisma/client": "^5.22.0",
+    "fastify": "^5.8.2",
+    "pino": "^10.3.1"
   },
   "devDependencies": {
+    "@fastify/type-provider-typebox": "^6.1.0",
     "@types/node": "^22.0.0",
+    "@types/pino": "^7.0.5",
     "typescript": "^5.5.0"
   }
 }
