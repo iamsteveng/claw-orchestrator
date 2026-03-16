@@ -213,9 +213,12 @@ HOME=/home/agent
 XDG_CONFIG_HOME=/home/agent/.config
 XDG_CACHE_HOME=/home/agent/.cache
 XDG_STATE_HOME=/home/agent/.local/state
+ANTHROPIC_API_KEY=<injected from host at container start>
 ```
 
 This ensures `gh`, `vercel`, `convex`, Claude Code, Codex, git, and SSH state stay inside the tenant.
+
+`ANTHROPIC_API_KEY` is **not** a per-tenant secret — it is a shared credential read from the host environment and forwarded to every tenant container via `--env ANTHROPIC_API_KEY` at start time (see §6.5 for the exception this creates to the per-tenant secrets model, and §8.2 / §8.4 for how it is injected).
 
 ### 6.3 Per-Tenant Mounts
 
@@ -236,6 +239,15 @@ Each tenant runs in its own container with an isolated process namespace, isolat
 ### 6.5 Secrets Isolation
 
 Tenant secrets must be stored and injected per tenant. Shared control plane services should hold only the minimum metadata required (e.g., the relay token for routing auth — see §15).
+
+**Exception — Shared Anthropic Credential:**
+The Anthropic model authentication credential (`ANTHROPIC_API_KEY` or equivalent Claude OAuth token) is **shared across all tenants**. It is sourced from the host environment and injected into every tenant container at start time. This has several implications:
+
+- There is no per-tenant Anthropic API key stored in the database or secrets directory.
+- The credential is **never cached in the database**; the control plane reads it fresh from the host environment variable on every `docker run` / `docker start` call. This ensures that a key rotation takes effect immediately on the next container start without a DB migration.
+- If the host credential is rotated or expires, **all tenants simultaneously lose Claude / Claude Code access** until the host environment is updated and the affected containers are restarted.
+- All tenant model usage is billed to the single account associated with the shared credential. Operators must account for aggregate usage when estimating costs (§29).
+- Operators are responsible for keeping `ANTHROPIC_API_KEY` current in the host environment (e.g. in `/opt/claw-orchestrator/.env` or the systemd `EnvironmentFile`). A monitoring alert or health check that detects `401 Unauthorized` responses from the Anthropic API should be considered for post-MVP observability.
 
 ---
 
@@ -312,14 +324,46 @@ Triggered on first user message (after allowlist check passes):
 2. Create tenant directories at `/data/tenants/<tenant_id>/`
 3. Generate config from templates
 4. Generate per-tenant relay token and optionally a tenant SSH keypair
-5. Run `docker run` to create and start the tenant container
-6. Poll health endpoint (see §19) until healthy or timeout
-7. Mark tenant `ACTIVE`
-8. Process message
+5. Copy workspace template files into the tenant's workspace directory, including `AGENTS.md` (see §8.2.1 below)
+6. Run `docker run` to create and start the tenant container, injecting `ANTHROPIC_API_KEY` from the host environment via `--env ANTHROPIC_API_KEY` (credential is read fresh from `process.env` at this point — never from DB)
+7. Poll health endpoint (see §19) until healthy or timeout
+8. Mark tenant `ACTIVE`
+9. Process message
 
 On failure at any step → rollback (see §10).
 
 `provision_attempts` is tracked in the tenant row. After 3 failed attempts, status is set to `FAILED` permanently. An admin must manually reset the tenant to `NEW` to retry.
+
+#### 8.2.1 Workspace Template Seeding
+
+During provisioning (step 5 above), the control plane copies the workspace template directory into the new tenant's `/workspace/`:
+
+```
+templates/workspace/  →  /data/tenants/<id>/workspace/
+```
+
+The template directory lives at `templates/workspace/` in the repository and is included in the deployed package at `/opt/claw-orchestrator/templates/workspace/`.
+
+**Required template files:**
+
+- `AGENTS.md` — pre-seeded with the following section at minimum:
+
+```markdown
+## Task Execution
+
+For any task that is complex enough to take more than ~2 minutes:
+- Spawn a sub-agent or background process to handle it
+- Don't block the conversation
+- When it's done, report back with a concise summary of what was done
+```
+
+**Merge behavior on re-provisioning:** If the tenant's workspace already contains an `AGENTS.md` (e.g. the tenant was previously active and the file has been modified), the provisioning script must not blindly overwrite it. Instead:
+
+1. If `AGENTS.md` does not exist → copy the template file directly.
+2. If `AGENTS.md` exists and already contains the `## Task Execution` section → leave it untouched.
+3. If `AGENTS.md` exists but is missing the `## Task Execution` section → append the section verbatim to the end of the existing file.
+
+This ensures the required operational behaviour is always present without destroying tenant customizations.
 
 ### 8.3 Idle Stop Flow
 
@@ -336,7 +380,7 @@ When a message arrives for a stopped tenant:
 
 1. Resolve tenant
 2. Acquire per-tenant startup lock (see §9)
-3. Start the tenant container
+3. Start the tenant container via `docker start`, passing `--env ANTHROPIC_API_KEY` read fresh from the host environment at this moment (not from DB). This ensures that any key rotation since the container was last running takes effect immediately.
 4. Wait for readiness — health endpoint returns `ok: true`:
    - gateway alive
    - config mounted
@@ -1248,6 +1292,8 @@ Per-tenant sshd adds more processes, more hardening needs, more key management, 
 /opt/claw-orchestrator/
   apps/
   templates/
+    workspace/
+      AGENTS.md          ← pre-seeded with Task Execution section
   scripts/
 
 /data/
@@ -1421,6 +1467,12 @@ CONTROL_PLANE_URL=http://localhost:3200
 # Scheduler
 SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
+
+# Shared Anthropic Credential (injected into ALL tenant containers at start)
+# This is a host-level credential — there is no per-tenant Anthropic API key.
+# Rotating this key takes effect on the next container start for each tenant.
+# If this value is missing or invalid, all tenants lose Claude/Claude Code access simultaneously.
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### First-Time Deployment
@@ -1486,6 +1538,8 @@ repo/
     tenant-image/
     compose/
   templates/
+    workspace/
+      AGENTS.md          ← base tenant workspace template (includes Task Execution section)
   scripts/
   tests/
     unit/
@@ -1738,13 +1792,13 @@ A coding agent should implement in this sequence:
 Repo structure, Node monorepo, shared types/config, SQLite schema (all tables), basic Fastify services.
 
 ### Phase 2 — Tenant Control Plane
-Tenant table, provision/start/stop/delete APIs, Docker wrapper (`execa`), health polling, tenant directory creation, startup lock, provisioning rollback, capacity cap enforcement.
+Tenant table, provision/start/stop/delete APIs, Docker wrapper (`execa`), health polling, tenant directory creation, startup lock, provisioning rollback, capacity cap enforcement. Implement workspace template seeding (§8.2.1), including `AGENTS.md` copy/merge logic. Implement fresh `ANTHROPIC_API_KEY` injection from host env on every `docker run` / `docker start` (§6.5, §8.4).
 
 ### Phase 3 — Slack Relay
 Slack signature verification, user-to-tenant resolution, allowlist check, immediate-ack pattern, message forwarding, queued wake-up behavior, `chat.postMessage` delivery.
 
 ### Phase 4 — Tenant Image
-Non-root `agent` user, OpenClaw installation, required CLIs, health server on port `3101`, message server on port `3100`, entrypoint script.
+Non-root `agent` user, OpenClaw installation, required CLIs, health server on port `3101`, message server on port `3100`, entrypoint script. Ensure the image entrypoint accepts and surfaces `ANTHROPIC_API_KEY` from the injected environment so Claude Code and other Anthropic-dependent tools authenticate correctly without any per-tenant key configuration.
 
 ### Phase 5 — Scheduler
 Idle-stop logic (48h inactivity checks), disk usage sampling, capacity-queue retry, message queue reaping, stale lock sweep.
