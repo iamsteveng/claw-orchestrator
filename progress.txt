@@ -131,3 +131,14 @@
   - shared-config needs explicit `exports` entries for subpaths (e.g. `/control-plane`) in package.json
   - Build packages before typechecking apps: `pnpm --filter @claw/shared-types build && pnpm --filter @claw/shared-config build`
   - Fastify logger: use pino-pretty transport only in non-production environments
+
+## 2026-03-16 - US-007
+- What was implemented: POST /v1/tenants/provision endpoint with idempotent tenant creation, directory setup, relay token generation
+- Files changed:
+  - apps/control-plane/src/index.ts (added provision route with node:crypto and node:fs/promises imports)
+- **Learnings for future iterations:**
+  - Fastify generic route typing: `app.post<{ Body: {...} }>('/path', handler)` for typed request bodies
+  - Prisma increment shorthand: `{ provision_attempts: { increment: 1 } }` in updateMany/update data
+  - For rollback pattern: always do best-effort rm with `force: true` then update DB status to FAILED regardless
+  - node:crypto `createHash` + `randomBytes` are available in Node.js 22 without install; `crypto.randomUUID()` is global in Node 22
+---
