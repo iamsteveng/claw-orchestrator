@@ -115,3 +115,19 @@
   - Always build dependency packages before typechecking a consumer; `pnpm --filter @claw/shared-config build` resolves missing subpath type declarations
   - Unused variables (`const logger = ...`) will cause issues in strict mode; remove dead code before committing
 ---
+
+---
+
+## 2026-03-16 - US-006
+- What was implemented: Control plane Fastify app scaffold with startup reconciliation
+- Files changed:
+  - apps/control-plane/src/index.ts (Fastify app, startup reconciliation, health endpoint, graceful shutdown)
+  - apps/control-plane/tsconfig.json (added "paths": {} to clear root tsconfig path aliases)
+  - apps/scheduler/tsconfig.json (same fix)
+  - apps/slack-relay/tsconfig.json (same fix)
+  - packages/shared-config/package.json (added subpath exports for /control-plane, /slack-relay, /scheduler)
+- **Learnings for future iterations:**
+  - Apps MUST add `"paths": {}` to their tsconfig to clear root path aliases; otherwise tsc follows paths to package source files outside rootDir
+  - shared-config needs explicit `exports` entries for subpaths (e.g. `/control-plane`) in package.json
+  - Build packages before typechecking apps: `pnpm --filter @claw/shared-types build && pnpm --filter @claw/shared-config build`
+  - Fastify logger: use pino-pretty transport only in non-production environments
