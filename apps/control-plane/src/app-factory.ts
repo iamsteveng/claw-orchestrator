@@ -11,9 +11,17 @@ import { isAllowed } from './allowlist.js';
 import { getDefaultImage } from './container-image.js';
 import { buildDockerRunOptions } from './docker-run-options.js';
 
+// Minimal interface for the docker operations used by the control plane
+export interface DockerClientLike {
+  run: (opts: import('@claw/docker-client').DockerRunOptions) => Promise<void>;
+  start: (containerName: string) => Promise<void>;
+  stop: (containerName: string, timeoutSeconds?: number) => Promise<void>;
+  rm: (containerName: string) => Promise<void>;
+}
+
 export async function buildApp(
   prisma: PrismaClient,
-  options?: { logger?: boolean },
+  options?: { logger?: boolean; dockerClient?: DockerClientLike },
 ): Promise<FastifyInstance> {
   const startedAt = Date.now();
   const enableLogger = options?.logger ?? false;
@@ -235,8 +243,9 @@ export async function buildApp(
         data: { status: TenantStatus.STARTING, last_started_at: now, updated_at: now },
       });
 
-      // Start the container (dynamic import required: docker-client is ESM-only)
-      const { DockerClient } = await import('@claw/docker-client');
+      // Start the container
+      // Use injected dockerClient if provided (for testing), otherwise dynamic import
+      const dc = options?.dockerClient ?? (await import('@claw/docker-client')).DockerClient;
       if (previousStatus === TenantStatus.NEW) {
         // First-time start: create and run a new container with resource limits + bind mounts
         const runOpts = buildDockerRunOptions({
@@ -245,10 +254,10 @@ export async function buildApp(
           dataDir: tenant.data_dir,
           resourceOverrides: tenant.resource_overrides,
         });
-        await DockerClient.run(runOpts);
+        await dc.run(runOpts);
       } else {
         // Restart an existing (stopped) container
-        await DockerClient.start(containerName);
+        await dc.start(containerName);
       }
 
       // Launch health polling in background (does not block response)
@@ -416,8 +425,8 @@ export async function buildApp(
 
     // Stop container (best-effort: if it fails, still mark STOPPED)
     try {
-      const { DockerClient } = await import('@claw/docker-client');
-      await DockerClient.stop(containerName, 10);
+      const dc = options?.dockerClient ?? (await import('@claw/docker-client')).DockerClient;
+      await dc.stop(containerName, 10);
     } catch (err) {
       app.log.warn({ tenantId, err }, 'dockerStop failed; marking STOPPED anyway');
     }
@@ -471,18 +480,18 @@ export async function buildApp(
     });
 
     const containerName = `claw-tenant-${tenantId}`;
-    const { DockerClient } = await import('@claw/docker-client');
+    const dc = options?.dockerClient ?? (await import('@claw/docker-client')).DockerClient;
 
     // Stop container (best-effort)
     try {
-      await DockerClient.stop(containerName, 10);
+      await dc.stop(containerName, 10);
     } catch (err) {
       app.log.warn({ tenantId, err }, 'dockerStop failed during deletion (continuing)');
     }
 
     // Remove container (best-effort)
     try {
-      await DockerClient.rm(containerName);
+      await dc.rm(containerName);
     } catch (err) {
       app.log.warn({ tenantId, err }, 'dockerRm failed during deletion (continuing)');
     }
