@@ -698,3 +698,25 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **Standard TC-015 pattern works cleanly**: Add allowlist → provision → start → revoke → attempt message. No special edge cases needed.
   - **mockNow = 27_000_000** for TC-027 to avoid SQLite Int32 overflow and conflicts with other tests.
 ---
+
+### TC-027 [PASS] Allowlist revocation → existing tenant blocked
+- **Evidence:** All 8 TC-027 tests passed in 1640ms (413/413 total suite): - DELETE /v1/admin/allowlist/:id returns {revoked: true} ✓ - allowlist.revoked_at set in DB ✓ - ACCESS_REVOKED audit event written (actor=admin, tenant_id=null, metadata with slack_team_id/slack_user_id) ✓ - POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} for revoked tenant ✓ - No MESSAGE_DELIVERED event written for blocked message ✓
+- **Learnings:**
+  - - `isAllowed()` checks `revoked_at IS NULL` on every message delivery — revoking an allowlist entry immediately blocks the already-active tenant with no extra state changes needed - Revocation is a soft delete: sets `revoked_at=now`, does NOT delete the tenant or container - `ACCESS_REVOKED` audit event has `tenant_id=null` — it's recorded at the allowlist level, not the tenant level; team/user IDs go in metadata - Standard pattern from TC-015 (allowlist → provision → start → revoke → message) works cleanly with no special edge cases - `mockNow = 27_000_000` keeps timestamps unique and within SQLite Int32 range
+---
+
+### TC-027 [PASS] Allowlist revocation → existing tenant blocked
+- All 8 TC-027 tests passed in 1789ms (413/413 total suite)
+- Flow: POST /v1/admin/allowlist → provision → start (ACTIVE) → DELETE allowlist → POST message → 403
+- DELETE /v1/admin/allowlist/:id returns {revoked: true} ✓
+- revoked_at set in allowlist table ✓
+- ACCESS_REVOKED audit event written (actor=admin, tenant_id=null, metadata with team/user IDs) ✓
+- POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} ✓
+- No MESSAGE_DELIVERED event written for blocked message ✓
+- **Learnings:**
+  - `isAllowed()` checks `revoked_at IS NULL` on EVERY message delivery — no caching, so revocation takes effect immediately on next request
+  - Revocation is a soft delete on allowlist: sets `revoked_at=now`, does NOT touch the tenant row or container
+  - `ACCESS_REVOKED` audit event has `tenant_id=null` — it's at the allowlist level; team/user IDs go in metadata
+  - The message endpoint checks allowlist BEFORE checking tenant status — so even ACTIVE tenants get 403 immediately after revocation
+  - `mockNow = 27_000_000` for TC-027 (continuing from TC-025's 25M baseline, +2M gap to avoid collisions)
+---
