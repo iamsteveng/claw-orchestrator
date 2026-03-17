@@ -1,27 +1,3 @@
-TC-014 Agent Output Evidence
-============================
-Test: TC-014: Provisioning rollback → cleanup on failure
-Run: 2026-03-17
-Result: PASS (11/11 tests)
-
-Test output summary:
-  ✓ tests/integration/tc-014.test.ts (11 tests) 1475ms
-    ✓ TC-014: provision fails → HTTP 500 returned
-    ✓ TC-014: tenant status = FAILED after rollback
-    ✓ TC-014: provision_attempts = 1 after first failure
-    ✓ TC-014: data_dir directory does NOT exist (cleaned up by rollback)
-    ✓ TC-014: TENANT_PROVISION_FAILED audit log entry exists
-    ✓ TC-014: TENANT_PROVISIONED audit log entry does NOT exist (no success)
-    ✓ TC-014: retry provision (attempts < 3) → returns 200 with FAILED status
-    ✓ TC-014: provision_attempts still = 1 (returning existing record, no re-attempt)
-    ✓ TC-014: directly set attempts=2, provision → still 200 FAILED (cap not yet hit)
-    ✓ TC-014: set attempts=3 → provision returns HTTP 409 (cap enforced)
-    ✓ TC-014: tenant status permanently FAILED with attempts >= 3
-
-Total: Test Files 50 passed (50), Tests 341 passed (341)
-
-----
-
 TC-001 Agent Output Evidence
 ============================
 Tenant ID: 3f34637c0fb5a0d6
@@ -35,3 +11,29 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
+
+TC-015 Agent Output Evidence
+============================
+Test: TC-015 Audit log → events recorded for all system actions
+Result: PASS
+Tests: 13/13 passed in 1965ms (354/354 total tests across 51 files)
+
+Event Types Verified:
+  ✓ ACCESS_DENIED    — blocked user provision attempt → audit written with actor=system, tenant_id=null
+  ✓ ACCESS_GRANTED   — POST /v1/admin/allowlist → audit written with actor=admin:tc015
+  ✓ TENANT_PROVISIONED — successful provision → audit written with actor=system
+  ✓ TENANT_STARTED   — start + pollUntilHealthy completes → audit written with actor=system
+  ✓ MESSAGE_DELIVERED — POST /message with mocked container response → audit written with slackEventId in metadata
+  ✓ TENANT_STOPPED   — POST /stop → audit written with actor=system
+  ✓ TENANT_DELETED   — DELETE /tenant → audit written with actor=admin
+  ✓ ACCESS_REVOKED   — DELETE /admin/allowlist/:id → audit written with actor=admin
+
+Audit API:
+  ✓ GET /v1/admin/audit → total >= 8, all 8 event types present
+  ✓ GET /v1/admin/audit?tenant_id=X → events in descending created_at order
+  ✓ DELETE /v1/admin/audit → 404 (no delete endpoint)
+  ✓ PUT /v1/admin/audit → 404 (no update endpoint)
+  ✓ PATCH /v1/admin/audit → 404 (no patch endpoint)
+
+Key fix: passing dockerClient explicitly to buildApp bypasses dynamic import() of @claw/docker-client
+inside the /start endpoint, which could fail to pick up vi.mock in some test configurations.
