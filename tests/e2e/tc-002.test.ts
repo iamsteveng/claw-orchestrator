@@ -308,9 +308,9 @@ describe('TC-002: Repeated messages from same user → same tenant reused', () =
     });
     expect(rows.length).toBeGreaterThanOrEqual(2);
 
-    // Verify second message text is present
-    const secondMsg = rows.find((r: { slack_event_text?: string | null }) =>
-      r.slack_event_text === 'Second message from TC-002'
+    // Verify second message is present by its slack_event_id
+    const secondMsg = rows.find((r: { slack_event_id: string }) =>
+      r.slack_event_id === 'Ev_TC002_002'
     );
     expect(secondMsg).toBeDefined();
     expect(secondMsg!.status).toBe('DELIVERED');
