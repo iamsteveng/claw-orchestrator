@@ -1,3 +1,27 @@
+TC-014 Agent Output Evidence
+============================
+Test: TC-014: Provisioning rollback → cleanup on failure
+Run: 2026-03-17
+Result: PASS (11/11 tests)
+
+Test output summary:
+  ✓ tests/integration/tc-014.test.ts (11 tests) 1475ms
+    ✓ TC-014: provision fails → HTTP 500 returned
+    ✓ TC-014: tenant status = FAILED after rollback
+    ✓ TC-014: provision_attempts = 1 after first failure
+    ✓ TC-014: data_dir directory does NOT exist (cleaned up by rollback)
+    ✓ TC-014: TENANT_PROVISION_FAILED audit log entry exists
+    ✓ TC-014: TENANT_PROVISIONED audit log entry does NOT exist (no success)
+    ✓ TC-014: retry provision (attempts < 3) → returns 200 with FAILED status
+    ✓ TC-014: provision_attempts still = 1 (returning existing record, no re-attempt)
+    ✓ TC-014: directly set attempts=2, provision → still 200 FAILED (cap not yet hit)
+    ✓ TC-014: set attempts=3 → provision returns HTTP 409 (cap enforced)
+    ✓ TC-014: tenant status permanently FAILED with attempts >= 3
+
+Total: Test Files 50 passed (50), Tests 341 passed (341)
+
+----
+
 TC-001 Agent Output Evidence
 ============================
 Tenant ID: 3f34637c0fb5a0d6
