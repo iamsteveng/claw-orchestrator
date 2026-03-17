@@ -50,7 +50,13 @@ RUN useradd --create-home --home-dir /home/agent --shell /bin/bash agent
 
 WORKDIR /home/agent
 
+# Copy entrypoint script (runs as root to set up dirs; drops to agent via USER below)
+COPY --chown=root:root entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 USER agent
 
-# Expose health check port (agents serve on 3000 by default)
-EXPOSE 3000
+# Expose agent runtime ports
+EXPOSE 3100 3101
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
