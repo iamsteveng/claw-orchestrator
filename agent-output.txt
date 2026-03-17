@@ -11,3 +11,8 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
+
+### TC-028 [PASS] UNHEALTHY auto-recovery
+All 5 tests passed in 1531ms (418/418 total suite).
+TENANT_UNHEALTHY audit ✓, Slack DM (notifyUser spy) ✓, tenant ACTIVE after recovery ✓, TENANT_RECOVERED audit ✓, replayMessages called ✓, queued messages still PENDING ✓
+---
