@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Mock execa before importing DockerClient
-vi.mock('execa', () => {
+/**
+ * TC-036: Docker client wrapper → correct CLI flags constructed
+ *
+ * The docker-client package has its own execa in packages/docker-client/node_modules/execa.
+ * We must mock that path directly; mocking 'execa' from root context doesn't intercept it
+ * because pnpm doesn't hoist execa to the workspace root.
+ */
+vi.mock('../../packages/docker-client/node_modules/execa/index.js', () => {
   const execaMock = vi.fn();
   const ExecaErrorMock = class ExecaError extends Error {
     exitCode: number | undefined;
@@ -16,8 +22,8 @@ vi.mock('execa', () => {
   return { execa: execaMock, ExecaError: ExecaErrorMock };
 });
 
-import { execa } from 'execa';
-import { DockerClient } from '@claw/docker-client';
+import { execa } from '../../packages/docker-client/node_modules/execa/index.js';
+import { DockerClient } from '../../packages/docker-client/src/index.js';
 
 const execaMock = vi.mocked(execa);
 
