@@ -1,14 +1,3 @@
-TC-030 Agent Output Evidence
-============================
-Test: TC-030 Queue reaping → DELIVERED rows older than 7 days deleted
-Result: PASS (1 test, 1546ms)
-All assertions:
-  ✓ 8-day-old DELIVERED row deleted (created_at = MOCK_NOW - 8*86400000)
-  ✓ 3-day-old DELIVERED row retained (created_at = MOCK_NOW - 3*86400000)
-  ✓ 31-day-old FAILED row deleted (created_at = MOCK_NOW - 31*86400000)
-  ✓ 15-day-old FAILED row retained (created_at = MOCK_NOW - 15*86400000)
-Full suite: 422/422 tests passing, 64 files
-
 TC-001 Agent Output Evidence
 ============================
 Tenant ID: 3f34637c0fb5a0d6
@@ -23,17 +12,8 @@ For any task that is complex enough to take more than ~2 minutes:
 - When it's done, report back with a concise summary of what was done
 
 
-TC-030 Agent Output Evidence
-============================
-Test: TC-030 Queue reaping → DELIVERED rows older than 7 days deleted
-Result: PASS
-Test file: tests/integration/tc-030.test.ts
-
-Retention policy verified:
-- 8-day-old DELIVERED row (created_at = MOCK_NOW - 8*86400*1000): DELETED ✓
-- 3-day-old DELIVERED row (created_at = MOCK_NOW - 3*86400*1000): RETAINED ✓  
-- 31-day-old FAILED row (created_at = MOCK_NOW - 31*86400*1000): DELETED ✓
-- 15-day-old FAILED row (created_at = MOCK_NOW - 15*86400*1000): RETAINED ✓
-
-Key: MOCK_NOW = 1_800_000_000 (mocked via vi.spyOn(Date, 'now'))
-All 64 test files pass, 422 tests pass.
+## TC-031 [PASS] Message forwarding → relay token mismatch → 401
+- Wrong X-Relay-Token → 401 {ok: false, error: 'Unauthorized'}
+- Missing X-Relay-Token → 401 {ok: false, error: 'Unauthorized'}
+- Correct relay token → 200 (message forwarded, MESSAGE_DELIVERED audit written)
+- All 8 tests passed (430/430 suite)

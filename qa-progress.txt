@@ -800,3 +800,23 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` at module top-level (before imports) intercepts `Date.now()` in both test code and the imported `reaper.js` — reaper's cutoff computation then uses MOCK_NOW.
   - Pattern: pick MOCK_NOW such that `MOCK_NOW - 31 * 86400 * 1000 > -2_147_483_648` (fits negative INT32). MOCK_NOW = 1_800_000_000 works (31 days in ms = 2_678_400_000; 1.8B - 2.68B = -878M which fits).
 ---
+
+### TC-030 [PASS] Queue reaping → DELIVERED rows older than 7 days deleted
+- **Evidence:** TC-030 test passes: all 4 retention assertions verified — 8-day-old DELIVERED deleted, 3-day-old DELIVERED retained, 31-day-old FAILED deleted, 15-day-old FAILED retained. 64/64 test files pass (422 tests).
+- **Learnings:**
+  - - **Prisma `Int` = 32-bit (max ~2.1B)**: Real `Date.now()` ms values (~1.77 trillion in 2026) overflow INT32. Integration tests that write timestamps directly via Prisma must use mocked time. - **Mock pattern for time-dependent reaper tests**: `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` at module top-level (before imports) intercepts `Date.now()` in both test code and the imported module. Pick `MOCK_NOW = 1_800_000_000` so that even 31-day offsets in ms (`-878M`) fit within INT32 range. - **Always include `principal` field** when creating Tenant rows directly — it's `@unique` and required by schema. Omitting it causes create failures. - **Prisma `Int` vs SQLite INTEGER**: SQLite's native INTEGER is 64-bit, but Prisma enforces 32-bit range at the application layer for `Int` columns, blocking ms timestamps.
+---
+
+### TC-030 [PASS] Queue reaping → DELIVERED rows older than 7 days deleted
+- **Evidence:** All 4 retention policy assertions passed in 1546ms (422/422 suite): - ✓ 8-day-old DELIVERED row deleted - ✓ 3-day-old DELIVERED row retained - ✓ 31-day-old FAILED row deleted - ✓ 15-day-old FAILED row retained
+- **Learnings:**
+  - - **SQLite INT overflow**: Prisma validates `Int` fields to 32-bit signed range (max 2,147,483,647). Real `Date.now()` (~1.77e12) throws "does not fit in an INT column". Use `vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000)` — this value allows computing 30-day offsets that still fit in INT32 (e.g. `-878_400_000` is valid). - **Mock placement matters**: `vi.spyOn(Date, 'now').mockReturnValue(...)` must be declared before the module import of the function under test (reaper) so the mock is active when the function executes. - **Negative INT32 timestamps are valid**: `1_800_000_000 - 31 * 86_400_000 = -878_400_000` is a valid INT32 (min = -2,147,483,648). Prisma and SQLite both accept it for `created_at` comparisons. - **`principal` field is required on tenant**: The `tenants` table has `principal String @unique` (computed as `T_XXX:U_XXX`) — must include it when creating minimal tenant rows for FK constraints. - **Single `it()` block is sufficient for reaper**: All 4 assertions test the outcome of one `reapMessageQueue()` call; no need to split into multiple tests.
+---
+
+### TC-031 [PASS] Message forwarding → relay token mismatch → 401
+- **Evidence:** All 8 tests passed in 1656ms (430/430 suite). Wrong token → 401 {ok:false, error:'Unauthorized'}, missing token → 401, correct token → 200 with MESSAGE_DELIVERED audit event.
+- **Learnings:**
+  - Relay token validation happens before allowlist check in the message endpoint — wrong/missing `x-relay-token` returns 401 before any other guard fires.
+  - To test successful message delivery (200), mock `globalThis.fetch` via `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(...))` — the control-plane forwards to the container via fetch, which fails without a real container. Restore with `fetchSpy.mockRestore()` after the request.
+  - The relay token from `POST /v1/tenants/provision` response (`body.relayToken`) matches the `relay_token` stored on the tenant row and must be sent as `x-relay-token` header.
+---
