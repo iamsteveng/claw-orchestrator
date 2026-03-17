@@ -32,6 +32,7 @@ const TEST_USER_ID = 'U_TC001';
 const SIGNING_SECRET = 'test-signing-secret';
 const BOT_TOKEN = 'xoxb-test-token';
 
+// Use the same DATA_DIR that controlPlaneConfig resolves to (set by vitest-setup.ts)
 const TEST_DATA_DIR = process.env.DATA_DIR ?? '/tmp/claw-test-tenants';
 
 // Ports distinct from other e2e tests
@@ -214,9 +215,9 @@ afterAll(async () => {
     await unlink(tempDbPath);
   } catch { /* best-effort */ }
 
-  const expectedTenantId = computeExpectedTenantId(TEST_TEAM_ID, TEST_USER_ID);
+  // Clean up only this test's tenant directory (not the shared base dir)
   try {
-    await rm(`${TEST_DATA_DIR}/${expectedTenantId}`, { recursive: true, force: true });
+    await rm(`${TEST_DATA_DIR}/${computeExpectedTenantId(TEST_TEAM_ID, TEST_USER_ID)}`, { recursive: true, force: true });
   } catch { /* best-effort */ }
 }, 30_000);
 
@@ -287,6 +288,7 @@ describe('TC-001: First Slack message → tenant provisioned → container start
       `============================\n` +
       `Tenant ID: ${expectedTenantId}\n` +
       `Team: ${TEST_TEAM_ID} / User: ${TEST_USER_ID}\n` +
+      `Data Dir: ${TEST_DATA_DIR}\n` +
       `AGENTS.md contents (first 500 chars):\n${content.slice(0, 500)}\n`,
       'utf8',
     );

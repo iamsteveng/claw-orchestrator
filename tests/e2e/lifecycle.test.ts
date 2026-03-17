@@ -136,7 +136,14 @@ afterAll(async () => {
   if (cpApp) await cpApp.close();
   if (prisma) await prisma.$disconnect();
   try { const { unlink } = await import('node:fs/promises'); await unlink(tempDbPath); } catch { /* best-effort */ }
-  try { await rm(TEST_DATA_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  // Only delete tenant subdirs created by this test file to avoid racing with parallel test workers
+  const lifecycleTenants = [
+    ['T_TC003', 'U_TC003'], ['T_TC004', 'U_TC004'], ['T_TC025', 'U_TC025'],
+  ];
+  for (const [team, user] of lifecycleTenants) {
+    const tid = createHash('sha256').update(`${team}:${user}`).digest('hex').slice(0, 16);
+    try { await rm(`${TEST_DATA_DIR}/${tid}`, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
 }, 30_000);
 
 // ─── TC-003: Stopped tenant → wakes on next message → queued messages replayed ──

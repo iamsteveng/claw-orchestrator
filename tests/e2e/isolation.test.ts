@@ -65,7 +65,12 @@ afterAll(async () => {
   if (cpApp) await cpApp.close();
   if (prisma) await prisma.$disconnect();
   try { const { unlink } = await import('node:fs/promises'); await unlink(tempDbPath); } catch { /* best-effort */ }
-  try { await rm(TEST_DATA_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  // Only delete tenant subdirs created by this test file to avoid racing with parallel test workers
+  const isoTenants = [['T_ISO', 'U_ISO_A'], ['T_ISO', 'U_ISO_B']];
+  for (const [team, user] of isoTenants) {
+    const tid = createHash('sha256').update(`${team}:${user}`).digest('hex').slice(0, 16);
+    try { await rm(`${TEST_DATA_DIR}/${tid}`, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
 }, 15_000);
 
 describe('TC-005: Different users → completely isolated tenants', () => {

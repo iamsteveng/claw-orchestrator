@@ -105,7 +105,17 @@ afterAll(async () => {
   if (app) await app.close();
   if (prisma) await prisma.$disconnect();
   try { const { unlink } = await import('node:fs/promises'); await unlink(tempDbPath); } catch { /* best-effort */ }
-  try { await rm(TEST_DATA_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  // Only delete tenant subdirs created by this test file to avoid racing with parallel test workers
+  const extTeams = [
+    ['T_EXT', 'U_IDEMP'], ['T_EXT', 'U_START_TRANS'], ['T_EXT', 'U_STOP_TRANS'],
+    ['T_EXT', 'U_DELETE_EXT'], ['T_EXT', 'U_AUDIT_EXT'], ['T_REVOKE_EXT', 'U_REVOKE_EXT'],
+    ['T_EXT', 'U_TOKEN_TEST'], ['T_EXT', 'U_QUOTA_TEST'], ['T_EXT', 'U_ROLLBACK_TEST'],
+    ['T_EXT', 'U_START_FAIL'],
+  ];
+  for (const [team, user] of extTeams) {
+    const tid = computeTenantId(team, user);
+    try { await rm(`${TEST_DATA_DIR}/${tid}`, { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
 }, 15_000);
 
 // ─── TC-029: Provision idempotency ────────────────────────────────────────────
