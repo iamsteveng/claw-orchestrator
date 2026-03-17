@@ -597,3 +597,28 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - Idempotency guard: `tenant.status === STOPPED` → returns `{status:'already_stopped'}` without calling docker.
   - dc.stop is called with `(containerName, 10)` — assert both positional args.
 ---
+
+### TC-022 [PASS] Stop endpoint → ACTIVE → STOPPED transition
+- **Evidence:** All 8 TC-022 tests passed in 1515ms: - ✓ Creates ACTIVE tenant in DB via direct insert - ✓ POST /stop returns 200 {status: "stopped"} - ✓ Tenant DB status is STOPPED after /stop call - ✓ last_stopped_at is set on the tenant row - ✓ TENANT_STOPPED audit event written with system actor + containerName metadata - ✓ dockerStop called once with correct container name and timeout=10 - ✓ Second POST /stop is idempotent → returns 200 {status: "already_stopped"} - ✓ dockerStop still called only once (idempotent second call does not invoke docker) The only test failure in the suite was TC-015 (pre-existing, unrelated to TC-022).
+- **Learnings:**
+  - - **Stop endpoint is fully synchronous**: Unlike `/start`, `/stop` awaits `dc.stop()` and DB update before returning — no background tasks, no setImmediate flushing needed. - **Idempotency guard**: `tenant.status === STOPPED` triggers early return with `{status:'already_stopped'}` — docker is NOT called on the second invocation. - **dc.stop called with `(containerName, 10)`**: The 10-second timeout is hardcoded; assert both positional arguments when verifying mock call. - **Minimal seeding required**: Stop endpoint doesn't access filesystem or look up container images — only need `prisma.tenant.create()` with ACTIVE status, no dirs or containerImage row. - **Test file was pre-existing**: TC-022 was already fully implemented in a prior agent run; Phase 1 was a no-op.
+---
+
+### TC-024 [PASS] Container image promote → new default used on next start
+- All 9 TC-024 assertions passed in 1623ms:
+  - ✓ POST /v1/admin/images/:id/promote returns {promoted: true, tag: 'claw-tenant:v2.0'}
+  - ✓ v2.0 is_default=1 after promotion
+  - ✓ v1.0 is_default=0 and deprecated_at set after promotion
+  - ✓ IMAGE_UPDATED audit event written for promotion (actor=admin, metadata.promotedTag=v2.0)
+  - ✓ Tenant created with STOPPED status and old image_tag v1.0
+  - ✓ POST /start returns 202 {status: "starting"}
+  - ✓ Tenant image_tag updated to v2.0 after start (synchronously, before response)
+  - ✓ IMAGE_UPDATED audit event written for tenant tag change (actor=system, oldTag/newTag in metadata)
+  - ✓ Tenant reaches ACTIVE status after health polling; image_tag still v2.0
+- **Learnings:**
+  - **promote endpoint is transactional**: `$transaction` sets all other images `is_default=0, deprecated_at=now` then sets target `is_default=1`. Verify both sides of the transaction.
+  - **image_tag update is synchronous on /start**: The start endpoint resolves `getDefaultImage(prisma)`, compares with tenant.image_tag, and updates synchronously before returning 202 — no setImmediate flushing needed to check image_tag.
+  - **Two IMAGE_UPDATED events**: One from promote (actor=admin, tenant_id=null, metadata={promotedTag}), one from /start when tag changes (actor=system, tenant_id=tenantId, metadata={oldTag, newTag}). Filter by tenant_id to distinguish them.
+  - **Seed tenant with old image_tag**: Create STOPPED tenant with `image_tag: 'claw-tenant:v1.0'` to trigger the IMAGE_UPDATED audit event on start.
+  - **mockNow = 24_000_000** for TC-024 to avoid collisions with other test files.
+---
