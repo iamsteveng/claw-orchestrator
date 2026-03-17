@@ -152,6 +152,7 @@ describe('TC-021: Start endpoint → STOPPED → STARTING → ACTIVE transition'
         id: tenantId,
         slack_team_id: 'T_TC021',
         slack_user_id: 'U_TC021',
+        principal: 'T_TC021:U_TC021',
         status: 'STOPPED',
         relay_token: randomUUID(),
         container_name: `claw-tenant-${tenantId}`,
