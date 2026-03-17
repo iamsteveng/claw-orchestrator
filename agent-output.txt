@@ -1,3 +1,19 @@
+TC-019 Agent Output Evidence
+============================
+Test: Slack signature verification → valid/invalid/expired
+Result: PASS — 5/5 tests passed in 135ms
+
+Test cases:
+✓ TC-019: valid HMAC signature → HTTP 200
+✓ TC-019: invalid signature → HTTP 403
+✓ TC-019: timestamp 6 minutes old → HTTP 403 (replay protection)
+✓ TC-019: missing X-Slack-Signature → HTTP 403
+✓ TC-019: url_verification type → returns {challenge} synchronously
+
+Full suite: 374 tests, 55 files, all passed.
+
+Signature enforcement prevents unauthorized event injection — confirmed.
+
 TC-001 Agent Output Evidence
 ============================
 Tenant ID: 3f34637c0fb5a0d6
@@ -11,17 +27,3 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
-
-TC-018 Agent Output Evidence
-============================
-Test file: tests/unit/tc-018.test.ts (already committed as 3ac8b5b)
-Import: computeTenantId from ../../apps/slack-relay/src/index.js
-
-Test results (5/5 passed):
-✓ TC-018: computes sha256(T12345:U67890).slice(0,16) correctly
-✓ TC-018: result is exactly 16 hex characters
-✓ TC-018: is deterministic for same inputs
-✓ TC-018: different users produce different IDs
-✓ TC-018: different teams produce different IDs
-
-Full suite: 369 tests, 54 files, all passed in 12.61s
