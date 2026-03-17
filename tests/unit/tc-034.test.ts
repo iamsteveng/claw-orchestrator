@@ -5,11 +5,11 @@ import { join } from 'path';
 const SCRIPT_PATH = join(__dirname, '../../scripts/tenant-shell.sh');
 
 describe('TC-034 tenant-shell script validates container is running', () => {
-  it('TC-034 scripts/tenant-shell.sh exists', () => {
-    expect(existsSync(SCRIPT_PATH), 'tenant-shell.sh should exist').toBe(true);
+  it('TC-034 script file exists', () => {
+    expect(existsSync(SCRIPT_PATH), 'scripts/tenant-shell.sh should exist').toBe(true);
   });
 
-  it('TC-034 script has #!/bin/bash shebang', () => {
+  it('TC-034 script has correct shebang #!/bin/bash', () => {
     const content = readFileSync(SCRIPT_PATH, 'utf-8');
     expect(content.startsWith('#!/bin/bash')).toBe(true);
   });
@@ -19,19 +19,16 @@ describe('TC-034 tenant-shell script validates container is running', () => {
     expect(content).toContain('docker exec -it --user agent');
   });
 
-  it('TC-034 script validates containerName argument (exits when empty)', () => {
+  it('TC-034 script validates containerName argument and exits if missing', () => {
     const content = readFileSync(SCRIPT_PATH, 'utf-8');
-    // Must check for empty TENANT_ID and exit
+    expect(content).toContain('TENANT_ID');
+    expect(content).toMatch(/if\s*\[\s*-z\s*[^]]*TENANT_ID/);
     expect(content).toContain('exit 1');
-    // Must reference TENANT_ID or the first positional argument
-    expect(content).toMatch(/TENANT_ID|"\$\{1[:-]/);
   });
 
-  it('TC-034 script validates container is running before exec', () => {
+  it('TC-034 script validates container is running via docker inspect before exec', () => {
     const content = readFileSync(SCRIPT_PATH, 'utf-8');
-    // Must inspect the container status
     expect(content).toContain('docker inspect');
-    // Must check for "running" status
-    expect(content).toContain('running');
+    expect(content).toContain('"running"');
   });
 });
