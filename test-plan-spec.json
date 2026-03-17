@@ -1,0 +1,784 @@
+{
+  "planId": "claw-orchestrator-e2e",
+  "source": "test-plan-spec.md",
+  "scenarios": [
+    {
+      "id": "TC-001",
+      "source": "US-040, US-007, US-008",
+      "level": "e2e",
+      "scenario": "First Slack message → tenant provisioned → container started → message delivered",
+      "steps": [
+        "Pre-seed allowlist entry for test user (team T_TC001, user U_TC001)",
+        "POST fake Slack event to relay /slack/events with valid HMAC signature",
+        "Verify relay returns HTTP 200 immediately (before provisioning completes)",
+        "Poll DB until tenant row exists with status=ACTIVE (max 30s)",
+        "Assert tenant directories created: home/, workspace/, config/, logs/, secrets/",
+        "Assert AGENTS.md seeded in workspace with '## Task Execution' section",
+        "Assert message_queue row transitions to DELIVERED",
+        "Assert Slack chat.postMessage called with agent response",
+        "Assert audit log contains TENANT_PROVISIONED, TENANT_STARTED, MESSAGE_DELIVERED in order"
+      ],
+      "expectedResult": "Full provisioning flow completes; message delivered; audit trail present",
+      "evidence": "DB state + filesystem + mock fetch call log",
+      "priority": "P0",
+      "passes": false,
+      "notes": "Covered by existing first-message.test.ts"
+    },
+    {
+      "id": "TC-002",
+      "source": "US-040, US-024",
+      "level": "e2e",
+      "scenario": "Repeated messages from same user → same tenant reused",
+      "steps": [
+        "Ensure TC-001 tenant is ACTIVE",
+        "Send second Slack event with same team+user, different event_id",
+        "Assert relay returns HTTP 200 immediately",
+        "Assert no new tenant row created (count = 1 for this principal)",
+        "Assert same tenant_id used for both messages",
+        "Assert second message_queue row added and delivered",
+        "Assert tenant last_activity_at updated"
+      ],
+      "expectedResult": "Same tenant reused; message count incremented; no duplicate provisioning",
+      "evidence": "DB tenant count, message_queue rows",
+      "priority": "P0",
+      "passes": false,
+      "notes": "Covered by existing first-message.test.ts second describe block"
+    },
+    {
+      "id": "TC-003",
+      "source": "US-025, US-011",
+      "level": "e2e",
+      "scenario": "Stopped tenant → wakes on next message → queued messages replayed",
+      "steps": [
+        "Provision a tenant and bring to ACTIVE",
+        "Stop the tenant via POST /v1/tenants/:id/stop",
+        "Assert tenant status = STOPPED",
+        "Send a Slack event to the relay for this tenant",
+        "Assert relay calls /v1/tenants/:id/start",
+        "Mock health endpoint returns healthy after start",
+        "Poll until tenant status = ACTIVE",
+        "Assert queued message_queue rows are delivered in order"
+      ],
+      "expectedResult": "Tenant wakes; queued messages replayed in FIFO order",
+      "evidence": "message_queue rows status=DELIVERED, ordered by created_at",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-004",
+      "source": "US-007, US-009",
+      "level": "e2e",
+      "scenario": "Concurrent messages to stopped tenant → single start (startup lock)",
+      "steps": [
+        "Provision a tenant and set status=STOPPED",
+        "Send two Slack events simultaneously (Promise.all)",
+        "Assert only ONE call to dockerStart/dockerRun (mock call count)",
+        "Assert both messages are eventually delivered",
+        "Assert startup_locks table has at most 1 row at any time",
+        "Assert no duplicate containers (docker run called exactly once)"
+      ],
+      "expectedResult": "Startup lock prevents duplicate container starts",
+      "evidence": "mockDockerClient.start/run call count = 1",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-005",
+      "source": "US-007, US-003",
+      "level": "integration",
+      "scenario": "Different users → completely isolated tenants",
+      "steps": [
+        "Provision tenant A (team T1, user U1) via POST /v1/tenants/provision",
+        "Provision tenant B (team T1, user U2) via POST /v1/tenants/provision",
+        "Assert different tenant IDs (sha256 of different principals)",
+        "Assert different data_dir paths",
+        "Assert different container_name values",
+        "Assert different relay_token values",
+        "Write a marker file to tenant A workspace",
+        "Assert marker file NOT present in tenant B workspace path"
+      ],
+      "expectedResult": "Complete filesystem and identity isolation between tenants",
+      "evidence": "Different tenantId, data_dir, relay_token; filesystem check",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-006",
+      "source": "US-015, US-023",
+      "level": "e2e",
+      "scenario": "Allowlist enforcement → unauthorized user rejected",
+      "steps": [
+        "Ensure no allowlist entry exists for team T_BLOCKED, user U_BLOCKED",
+        "POST Slack event from T_BLOCKED/U_BLOCKED to relay",
+        "Assert relay returns HTTP 200 (Slack ack)",
+        "Assert control plane returns 403 on /v1/tenants/provision",
+        "Assert NO tenant row created for this user",
+        "Assert Slack chat.postMessage called with invite-only rejection message",
+        "Assert ACCESS_DENIED audit log entry exists"
+      ],
+      "expectedResult": "Access denied; rejection DM sent; no tenant created",
+      "evidence": "403 from CP, no tenant row, audit log",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-007",
+      "source": "US-014, US-029",
+      "level": "integration",
+      "scenario": "Tenant deletion → data cleaned up",
+      "steps": [
+        "Provision tenant and create workspace files",
+        "Call DELETE /v1/tenants/:id",
+        "Assert response {deleted: true}",
+        "Assert tenant row has deleted_at set (soft delete)",
+        "Assert message_queue rows for tenant purged",
+        "Assert startup_locks row purged",
+        "Assert TENANT_DELETED audit log entry",
+        "Assert tenant data_dir moved to tenants-archive/",
+        "Assert second DELETE returns HTTP 409"
+      ],
+      "expectedResult": "All tenant resources cleaned up; audit trail preserved",
+      "evidence": "DB state, filesystem archive",
+      "priority": "P0",
+      "passes": false,
+      "notes": "Covered partially by existing integration test; extend with filesystem check"
+    },
+    {
+      "id": "TC-008",
+      "source": "US-017, US-010",
+      "level": "integration",
+      "scenario": "Health polling → UNHEALTHY detection",
+      "steps": [
+        "Provision tenant and set status=ACTIVE",
+        "Start health monitor polling",
+        "Mock health endpoint to return 503 for 3 consecutive polls",
+        "Assert tenant status transitions to UNHEALTHY",
+        "Assert TENANT_UNHEALTHY audit log entry written with reason",
+        "Assert UNHEALTHY state does not affect other tenants"
+      ],
+      "expectedResult": "Health polling detects failure; UNHEALTHY state set",
+      "evidence": "DB status=UNHEALTHY, audit log entry",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-009",
+      "source": "US-028",
+      "level": "integration",
+      "scenario": "Disk quota → warning at 90%, block at 100%",
+      "steps": [
+        "Mock 'du -sb' to return 10.8 GB (90% of 12 GB quota)",
+        "Run disk check scheduler tick",
+        "Assert DISK_QUOTA_WARNING audit event written",
+        "Assert Slack DM sent with cleanup suggestion",
+        "Mock 'du -sb' to return 12 GB (100% of quota)",
+        "Run disk check scheduler tick",
+        "Assert DISK_QUOTA_EXCEEDED audit event written",
+        "Assert tenant.disk_quota_exceeded = 1",
+        "Assert POST /v1/tenants/:id/message returns 507 while quota exceeded",
+        "Mock 'du -sb' to return < 11.4 GB (< 95%)",
+        "Run disk check; assert disk_quota_exceeded reset to 0"
+      ],
+      "expectedResult": "Warning at 90%, block at 100%, auto-clear below 95%",
+      "evidence": "Audit log, DB disk_quota_exceeded flag, 507 response",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-010",
+      "source": "US-027",
+      "level": "integration",
+      "scenario": "Idle stop → container stopped after 48h inactivity",
+      "steps": [
+        "Create tenant with status=ACTIVE and last_activity_at = now - 49 hours",
+        "Run scheduler idle stop job",
+        "Assert POST /v1/tenants/:id/stop was called",
+        "Assert tenant status = STOPPED",
+        "Assert TENANT_STOPPED audit event with actor=scheduler",
+        "Create another tenant with last_activity_at = now - 47 hours",
+        "Run scheduler idle stop job",
+        "Assert second tenant is NOT stopped"
+      ],
+      "expectedResult": "Idle tenants stopped after 48h; recent tenants unaffected",
+      "evidence": "DB status, audit log actor",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-011",
+      "source": "US-021, US-032",
+      "level": "integration",
+      "scenario": "auth-profiles.json bind-mount → included in docker run options",
+      "steps": [
+        "Call buildDockerRunOptions with tenantId, image, dataDir",
+        "Assert returned options include readOnlyBindMounts",
+        "Assert bind mount contains path ending in auth-profiles.json",
+        "Assert bind mount is marked read-only (:ro)",
+        "Assert container env includes HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME",
+        "Assert resource flags: --cpus=1.0, --memory=1536m, --pids-limit=256"
+      ],
+      "expectedResult": "docker run options include auth-profiles.json:ro and correct env vars",
+      "evidence": "Options object assertion",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-012",
+      "source": "US-008, US-035",
+      "level": "integration",
+      "scenario": "AGENTS.md pre-seeded correctly in tenant workspace with merge logic",
+      "steps": [
+        "Create a temp workspace directory (empty)",
+        "Call seedWorkspace(workspacePath, templatesDir)",
+        "Assert AGENTS.md created with '## Task Execution' section",
+        "Call seedWorkspace again (AGENTS.md already present with section)",
+        "Assert AGENTS.md untouched",
+        "Remove '## Task Execution' section from AGENTS.md",
+        "Call seedWorkspace again",
+        "Assert '## Task Execution' section appended to existing file"
+      ],
+      "expectedResult": "Three merge scenarios handled correctly",
+      "evidence": "File content assertions",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required (seedWorkspace unit tests may exist; extend for integration)"
+    },
+    {
+      "id": "TC-013",
+      "source": "US-009",
+      "level": "unit",
+      "scenario": "Startup lock → no duplicate containers on concurrent messages",
+      "steps": [
+        "Call acquireStartupLock(tenantId, requestId1) → assert {acquired: true}",
+        "Call acquireStartupLock(tenantId, requestId2) → assert {acquired: false}",
+        "Call releaseStartupLock(tenantId, requestId1)",
+        "Call acquireStartupLock(tenantId, requestId3) → assert {acquired: true}",
+        "Insert stale lock (expires_at = 1 ms ago)",
+        "Call acquireStartupLock → assert stale lock overridden, {acquired: true}"
+      ],
+      "expectedResult": "At most one lock holder; stale locks expire and can be taken over",
+      "evidence": "acquireStartupLock return values",
+      "priority": "P0",
+      "passes": false,
+      "notes": "startup-lock.test.ts may already cover this; verify and extend"
+    },
+    {
+      "id": "TC-014",
+      "source": "US-019",
+      "level": "integration",
+      "scenario": "Provisioning rollback → cleanup on failure",
+      "steps": [
+        "Mock docker.run to throw an error",
+        "Call POST /v1/tenants/provision for a new user",
+        "Assert tenant status = FAILED",
+        "Assert provision_attempts = 1",
+        "Assert data_dir directory does NOT exist (cleaned up)",
+        "Assert TENANT_PROVISION_FAILED audit log entry",
+        "Retry provision → assert attempts = 2",
+        "Retry twice more → assert status = FAILED permanently (attempts >= 3)"
+      ],
+      "expectedResult": "Rollback cleans up all resources; 3-attempt cap enforced",
+      "evidence": "DB state, filesystem, audit log",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-015",
+      "source": "US-018",
+      "level": "integration",
+      "scenario": "Audit log → events recorded for all system actions",
+      "steps": [
+        "Provision a tenant → assert TENANT_PROVISIONED event",
+        "Start the tenant → assert TENANT_STARTED event",
+        "Deliver a message → assert MESSAGE_DELIVERED event",
+        "Stop the tenant → assert TENANT_STOPPED event",
+        "Delete the tenant → assert TENANT_DELETED event",
+        "Attempt access by blocked user → assert ACCESS_DENIED event",
+        "Add allowlist entry → assert ACCESS_GRANTED event",
+        "Revoke allowlist entry → assert ACCESS_REVOKED event",
+        "GET /v1/admin/audit?tenant_id=X → assert all events returned in desc order",
+        "Assert audit log rows cannot be deleted (no DELETE endpoint for audit)"
+      ],
+      "expectedResult": "All 8 event types recorded; audit API returns them correctly",
+      "evidence": "Audit log rows",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-016",
+      "source": "US-006",
+      "level": "integration",
+      "scenario": "Control plane startup reconciliation → crashed state reset",
+      "steps": [
+        "Insert a tenant row with status=PROVISIONING into DB",
+        "Insert a tenant row with status=STARTING",
+        "Insert an expired startup_lock (expires_at in the past)",
+        "Insert a message_queue row with status=PROCESSING and updated_at = 3 minutes ago",
+        "Start/build the control plane app (calls reconciliation)",
+        "Assert PROVISIONING tenant → status=FAILED",
+        "Assert STARTING tenant → status=FAILED",
+        "Assert expired startup_lock deleted",
+        "Assert stale PROCESSING message → status=PENDING",
+        "Assert SYSTEM_STARTUP audit log entry written"
+      ],
+      "expectedResult": "Startup reconciliation restores consistent state",
+      "evidence": "DB state after buildApp()",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-017",
+      "source": "US-005",
+      "level": "unit",
+      "scenario": "Config validation → missing env var causes fast failure",
+      "steps": [
+        "Remove SLACK_SIGNING_SECRET from process.env",
+        "Import slack-relay config module",
+        "Assert ZodError thrown with message identifying missing field",
+        "Remove DATABASE_URL from process.env",
+        "Import control-plane config module",
+        "Assert ZodError thrown"
+      ],
+      "expectedResult": "Fast failure with descriptive error on startup",
+      "evidence": "ZodError thrown",
+      "priority": "P2",
+      "passes": false,
+      "notes": "Likely covered by shared-config tests; verify"
+    },
+    {
+      "id": "TC-018",
+      "source": "US-002, US-001",
+      "level": "unit",
+      "scenario": "Tenant ID computation → sha256(team:user).slice(0,16)",
+      "steps": [
+        "Compute tenantId for (T12345, U67890)",
+        "Assert result equals sha256('T12345:U67890').hex.slice(0,16)",
+        "Assert result is exactly 16 hex chars",
+        "Assert same inputs always produce same output (deterministic)",
+        "Assert different users produce different IDs"
+      ],
+      "expectedResult": "Deterministic, collision-resistant 16-char hex ID",
+      "evidence": "Hash assertion",
+      "priority": "P2",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-019",
+      "source": "US-023",
+      "level": "unit",
+      "scenario": "Slack signature verification → valid/invalid/expired",
+      "steps": [
+        "POST /slack/events with valid HMAC signature → assert HTTP 200",
+        "POST /slack/events with invalid signature → assert HTTP 403",
+        "POST /slack/events with timestamp 6 minutes old → assert HTTP 403 (replay protection)",
+        "POST /slack/events with missing X-Slack-Signature → assert HTTP 403",
+        "POST /slack/events with type=url_verification → assert {challenge: ...} returned synchronously"
+      ],
+      "expectedResult": "Signature enforcement prevents unauthorized event injection",
+      "evidence": "HTTP status codes",
+      "priority": "P0",
+      "passes": false,
+      "notes": "verify-signature.test.ts may cover some; extend for relay app integration"
+    },
+    {
+      "id": "TC-020",
+      "source": "US-026",
+      "level": "integration",
+      "scenario": "Interim message sent at 15s when agent takes too long",
+      "steps": [
+        "Mock tenant runtime to delay response by 20 seconds (use fake timers)",
+        "Send Slack event to relay",
+        "Assert chat.postMessage called with '⏳ Working on it...' after ~15s timer fires",
+        "Assert interim message sent only once",
+        "After mock response arrives, assert final response also posted to Slack"
+      ],
+      "expectedResult": "Interim 'working on it' message sent on 15s timer",
+      "evidence": "mock fetch call log for chat.postMessage",
+      "priority": "P1",
+      "passes": false,
+      "notes": "interim-message.test.ts may cover; extend for full flow"
+    },
+    {
+      "id": "TC-021",
+      "source": "US-039, US-011",
+      "level": "integration",
+      "scenario": "Start endpoint → STOPPED → STARTING → ACTIVE transition",
+      "steps": [
+        "Create tenant with status=STOPPED via DB",
+        "POST /v1/tenants/:id/start",
+        "Assert response status=202 with {status: 'starting'}",
+        "Assert tenant DB status=STARTING",
+        "Mock health endpoint returns 200 ok:true",
+        "Poll until tenant status=ACTIVE (max 10s)",
+        "Assert TENANT_STARTED audit event written",
+        "POST /v1/tenants/:id/start again → assert {status: 'active'} (idempotent)"
+      ],
+      "expectedResult": "Full STOPPED → STARTING → ACTIVE state machine",
+      "evidence": "DB status transitions, audit log",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required (extends existing integration test)"
+    },
+    {
+      "id": "TC-022",
+      "source": "US-013",
+      "level": "integration",
+      "scenario": "Stop endpoint → ACTIVE → STOPPED transition",
+      "steps": [
+        "Create tenant with status=ACTIVE",
+        "POST /v1/tenants/:id/stop",
+        "Assert response {status: 'stopped'}",
+        "Assert tenant DB status=STOPPED",
+        "Assert last_stopped_at set",
+        "Assert TENANT_STOPPED audit event written",
+        "POST /v1/tenants/:id/stop again → assert {status: 'already_stopped'}",
+        "Assert dockerStop called only once (not on second call)"
+      ],
+      "expectedResult": "Idempotent stop; correct DB transitions",
+      "evidence": "DB state, mock docker call count",
+      "priority": "P1",
+      "passes": false,
+      "notes": "Covered by existing integration test; extend for idempotency and docker call count"
+    },
+    {
+      "id": "TC-023",
+      "source": "US-030",
+      "level": "integration",
+      "scenario": "Capacity queue → ACTIVE_TENANTS_OVERFLOW queues tenant",
+      "steps": [
+        "Fill DB with 10 ACTIVE tenant rows directly",
+        "Provision new tenant (tenant A)",
+        "POST /v1/tenants/tenantA/start",
+        "Assert response {status: 'queued'} (202)",
+        "Assert tenant.queued_for_start_at set",
+        "Assert dockerStart NOT called",
+        "Remove 1 ACTIVE tenant (simulate stop)",
+        "Run scheduler capacity queue retry",
+        "Assert tenant A starts and becomes ACTIVE"
+      ],
+      "expectedResult": "Overflow queued correctly; starts when capacity opens",
+      "evidence": "DB state, mock docker call",
+      "priority": "P1",
+      "passes": false,
+      "notes": "Partially covered by integration test; extend with scheduler retry"
+    },
+    {
+      "id": "TC-024",
+      "source": "US-020",
+      "level": "integration",
+      "scenario": "Container image promote → new default used on next start",
+      "steps": [
+        "Seed default image (tag: v1.0)",
+        "Insert new image row (tag: v2.0, is_default=0)",
+        "POST /v1/admin/images/:id/promote for v2.0",
+        "Assert v2.0 is_default=1",
+        "Assert v1.0 is_default=0 and deprecated_at set",
+        "Start a tenant → assert image_tag = v2.0 on tenant row",
+        "Assert IMAGE_UPDATED audit event"
+      ],
+      "expectedResult": "Image promotion works; tenants use new default on restart",
+      "evidence": "DB state",
+      "priority": "P2",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-025",
+      "source": "US-024, US-025",
+      "level": "e2e",
+      "scenario": "Message queue deduplication → Slack retry is no-op",
+      "steps": [
+        "Send Slack event with event_id=Ev_DUP_001",
+        "Assert message_queue row created",
+        "Send identical Slack event again with same event_id (simulated Slack retry)",
+        "Assert message_queue row count = 1 (no duplicate)",
+        "Assert only one delivery attempt made to tenant runtime"
+      ],
+      "expectedResult": "Duplicate Slack events idempotently ignored",
+      "evidence": "message_queue row count",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-026",
+      "source": "US-039",
+      "level": "integration",
+      "scenario": "MAX_ACTIVE_TENANTS enforcement → second tenant queued",
+      "steps": [
+        "Fill DB with MAX_ACTIVE_TENANTS (10) ACTIVE rows",
+        "Provision a new tenant",
+        "POST /v1/tenants/:id/start",
+        "Assert response {status: 'queued'}",
+        "Assert queued_for_start_at set on tenant"
+      ],
+      "expectedResult": "Hard cap enforced; overflow is queued not rejected",
+      "evidence": "202 response, DB state",
+      "priority": "P0",
+      "passes": false,
+      "notes": "Covered by existing integration test (Test 6)"
+    },
+    {
+      "id": "TC-027",
+      "source": "US-015",
+      "level": "integration",
+      "scenario": "Allowlist revocation → existing tenant blocked",
+      "steps": [
+        "Provision and activate tenant for user U_REVOKE",
+        "DELETE /v1/admin/allowlist/:id to revoke access",
+        "Assert response {revoked: true}",
+        "POST /v1/tenants/:id/message for revoked tenant",
+        "Assert response 403 {ok: false, error: 'Access revoked'}",
+        "Assert ACCESS_REVOKED audit event"
+      ],
+      "expectedResult": "Revoked users cannot deliver messages to their tenant",
+      "evidence": "403 response, audit log",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-028",
+      "source": "US-017",
+      "level": "integration",
+      "scenario": "UNHEALTHY auto-recovery → tenant recovers and queued messages processed",
+      "steps": [
+        "Provision and activate tenant",
+        "Queue 2 messages while tenant is UNHEALTHY",
+        "Trigger UNHEALTHY detection (3 consecutive health poll failures)",
+        "Assert TENANT_UNHEALTHY audit event",
+        "Assert Slack DM sent about recovery attempt",
+        "Mock health endpoint to return healthy after 30s cooldown",
+        "Assert tenant returns to ACTIVE within 90s",
+        "Assert TENANT_RECOVERED audit event",
+        "Assert queued messages processed after recovery"
+      ],
+      "expectedResult": "Auto-recovery completes; queued messages not dropped",
+      "evidence": "DB state, audit log, message delivery",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-029",
+      "source": "US-007",
+      "level": "integration",
+      "scenario": "Provision endpoint idempotency → same tenant on duplicate call",
+      "steps": [
+        "POST /v1/tenants/provision for (T1, U1) → assert tenant created",
+        "POST /v1/tenants/provision for (T1, U1) again",
+        "Assert same tenantId returned",
+        "Assert only 1 tenant row in DB for this principal",
+        "Assert no new audit events written on idempotent call"
+      ],
+      "expectedResult": "Idempotent provisioning returns same tenant",
+      "evidence": "DB count = 1, same tenantId",
+      "priority": "P1",
+      "passes": false,
+      "notes": "Covered by existing integration test (Test 2)"
+    },
+    {
+      "id": "TC-030",
+      "source": "US-029",
+      "level": "integration",
+      "scenario": "Queue reaping → DELIVERED rows older than 7 days deleted",
+      "steps": [
+        "Insert DELIVERED message_queue row with created_at = 8 days ago",
+        "Insert DELIVERED message_queue row with created_at = 3 days ago",
+        "Insert FAILED message_queue row with created_at = 31 days ago",
+        "Insert FAILED message_queue row with created_at = 15 days ago",
+        "Run queue reaping job",
+        "Assert 8-day-old DELIVERED row deleted",
+        "Assert 3-day-old DELIVERED row NOT deleted",
+        "Assert 31-day-old FAILED row deleted",
+        "Assert 15-day-old FAILED row NOT deleted"
+      ],
+      "expectedResult": "Correct retention policy applied",
+      "evidence": "DB row counts",
+      "priority": "P2",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-031",
+      "source": "US-012",
+      "level": "integration",
+      "scenario": "Message forwarding → relay token mismatch → 401",
+      "steps": [
+        "Provision and activate tenant with known relay_token",
+        "POST /v1/tenants/:id/message with wrong X-Relay-Token header",
+        "Assert HTTP 401 response {ok: false, error: 'Unauthorized'}",
+        "POST /v1/tenants/:id/message with correct relay token",
+        "Assert HTTP 200 (message forwarded)"
+      ],
+      "expectedResult": "Relay token validates message delivery authorization",
+      "evidence": "401 vs 200 response codes",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-032",
+      "source": "US-012",
+      "level": "integration",
+      "scenario": "Message forwarding → disk quota exceeded → 507",
+      "steps": [
+        "Provision and activate tenant",
+        "Set tenant.disk_quota_exceeded = 1 directly in DB",
+        "POST /v1/tenants/:id/message with correct relay token",
+        "Assert HTTP 507 {ok: false, error: 'Disk quota exceeded'}",
+        "Set disk_quota_exceeded = 0",
+        "POST /v1/tenants/:id/message again",
+        "Assert HTTP 200 (message forwarded successfully)"
+      ],
+      "expectedResult": "Disk quota flag blocks message delivery",
+      "evidence": "507 vs 200 response codes",
+      "priority": "P0",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-033",
+      "source": "US-036",
+      "level": "unit",
+      "scenario": "systemd unit files exist for all three services",
+      "steps": [
+        "Assert deploy/systemd/claw-control-plane.service file exists",
+        "Assert deploy/systemd/claw-slack-relay.service file exists",
+        "Assert deploy/systemd/claw-scheduler.service file exists",
+        "Assert each file contains WantedBy=multi-user.target",
+        "Assert control-plane service has Requires=docker.service"
+      ],
+      "expectedResult": "All unit files present and correctly structured",
+      "evidence": "File existence and content",
+      "priority": "P2",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-034",
+      "source": "US-037",
+      "level": "unit",
+      "scenario": "tenant-shell script validates container is running",
+      "steps": [
+        "Assert scripts/tenant-shell.sh file exists",
+        "Assert file contains 'docker exec -it --user agent'",
+        "Assert file validates containerName argument",
+        "Assert shebang #!/bin/bash present"
+      ],
+      "expectedResult": "Operator tool exists and is properly structured",
+      "evidence": "File content assertions",
+      "priority": "P2",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-035",
+      "source": "US-031",
+      "level": "unit",
+      "scenario": "Tenant Dockerfile does not embed ANTHROPIC_API_KEY",
+      "steps": [
+        "Read docker/tenant-image/Dockerfile",
+        "Assert no line contains ANTHROPIC_API_KEY",
+        "Assert no ENV instruction sets any API key",
+        "Assert auth-profiles.json is NOT COPY'd into the image",
+        "Assert image build ARG only has IMAGE_TAG (no auth args)"
+      ],
+      "expectedResult": "No credentials embedded in image",
+      "evidence": "Dockerfile content scan",
+      "priority": "P2",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-036",
+      "source": "US-004",
+      "level": "unit",
+      "scenario": "Docker client wrapper → correct CLI flags constructed",
+      "steps": [
+        "Mock execa",
+        "Call dockerRun with sample options",
+        "Assert --cpus, --memory, --memory-swap, --pids-limit, --ulimit nofile present",
+        "Assert --name=claw-tenant-<id> present",
+        "Assert -d flag present (detached)",
+        "Assert :ro suffix on auth-profiles.json bind mount",
+        "Call dockerStop → assert --time=10 flag",
+        "Call dockerRm → assert -f flag"
+      ],
+      "expectedResult": "CLI arguments constructed correctly for all operations",
+      "evidence": "execa mock call args",
+      "priority": "P1",
+      "passes": false,
+      "notes": "docker-client index.test.ts may cover; verify and extend"
+    },
+    {
+      "id": "TC-037",
+      "source": "US-038",
+      "level": "unit",
+      "scenario": "Workspace template fixtures → test-utils package",
+      "steps": [
+        "Import makeTenant() from test-utils",
+        "Assert all required Tenant fields populated",
+        "Import makeMessageQueueRow()",
+        "Assert all required MessageQueueRow fields populated",
+        "Import mockPrismaClient()",
+        "Assert all DB methods are vi.fn() mocks",
+        "Import mockDockerClient()",
+        "Assert run, start, stop, rm are vi.fn() mocks"
+      ],
+      "expectedResult": "Test utilities produce valid typed fixtures",
+      "evidence": "Type checking + runtime assertions",
+      "priority": "P1",
+      "passes": false,
+      "notes": "test-utils package may already have these; verify"
+    },
+    {
+      "id": "TC-038",
+      "source": "US-033",
+      "level": "integration",
+      "scenario": "Health endpoint in tenant container returns correct JSON shape",
+      "steps": [
+        "Assert docker/tenant-image/health-server.js exists",
+        "Verify file exports GET /health handler",
+        "Verify healthy response shape: {ok: true, status: 'healthy', checks: {...}, uptime_ms}",
+        "Verify unhealthy response shape: {ok: false, status: 'starting', checks: {...}}",
+        "Assert Content-Type application/json set"
+      ],
+      "expectedResult": "Health server returns correct JSON shapes",
+      "evidence": "File content / unit test",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    },
+    {
+      "id": "TC-039",
+      "source": "US-034",
+      "level": "integration",
+      "scenario": "Message endpoint in tenant container validates relay token",
+      "steps": [
+        "Assert docker/tenant-image/message-server.js exists",
+        "Verify file validates X-Relay-Token against RELAY_TOKEN env var",
+        "Assert 401 returned on token mismatch",
+        "Assert response shape: {ok: true, response: '...', blocks: null} on success",
+        "Assert error response shape: {ok: false, error: '...'} on failure"
+      ],
+      "expectedResult": "Message server enforces relay token authentication",
+      "evidence": "File content assertions",
+      "priority": "P1",
+      "passes": false,
+      "notes": "New test required"
+    }
+  ]
+}
