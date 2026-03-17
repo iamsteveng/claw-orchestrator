@@ -322,3 +322,27 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - Real template dir at `templates/workspace/AGENTS.md` can be used directly via `import.meta.url` path resolution
   - The unit tests in `apps/control-plane/src/seed-workspace.test.ts` already cover the same logic; the integration test added here just uses the real templates dir to verify they are correctly structured
 ---
+
+### TC-012 [PASS] AGENTS.md pre-seeded correctly in tenant workspace
+- **Evidence:** tests/integration/tc-012.test.ts (3 tests) passed in ~14ms — all three merge scenarios verified: 1. AGENTS.md copied from real templates/workspace/ dir, containing `## Task Execution` 2. AGENTS.md with section already present left byte-for-byte identical 3. AGENTS.md without section gets section appended after existing content Overall suite: 325 tests passed (48 files)
+- **Learnings:**
+  - - `seedWorkspace` is a pure, side-effect-free function (no HTTP/DB/Docker) — integration tests run in milliseconds with real tmpdir isolation - The real `templates/workspace/AGENTS.md` can be referenced via `import.meta.url` path resolution — no need to duplicate template content in test fixtures - The existing unit tests in `apps/control-plane/src/seed-workspace.test.ts` already cover the same logic with mock template files; the TC-012 integration test adds value by using the real templates dir to confirm it's correctly structured - Each scenario needs its own `beforeEach`/`afterEach` tmpdir to avoid cross-test contamination
+---
+
+### TC-012 [PASS] AGENTS.md pre-seeded correctly in tenant workspace
+- **Evidence:** tests/integration/tc-012.test.ts (3 tests) passed in ~22ms. All three merge scenarios verified: 1. AGENTS.md created from real templates/workspace/ dir with `## Task Execution` section 2. AGENTS.md with section already present left byte-for-byte identical 3. AGENTS.md without section gets `## Task Execution` appended after existing content Overall suite: 325 tests passed (48 files)
+- **Learnings:**
+  - - `seedWorkspace` is a pure function (no HTTP/DB/Docker) — integration tests run in ~22ms with real tmpdir isolation - Real `templates/workspace/AGENTS.md` referenced via `import.meta.url` path resolution — no need to duplicate template content in test fixtures - Each scenario uses its own `beforeEach`/`afterEach` tmpdir to avoid cross-test contamination - The TC-012 integration test adds value over the existing unit tests by verifying the real templates dir contains the expected sections
+---
+
+### TC-013 [PASS] Startup lock → no duplicate containers on concurrent messages
+- All 5 TC-013 tests passed in 24ms (330/330 total tests, 49 test files).
+- Test placed in `tests/unit/tc-013.test.ts` (new unit test directory).
+- Steps verified: (1) first acquireStartupLock returns {acquired:true}, (2) concurrent second acquire rejected {acquired:false}, (3) after release third caller succeeds, (4) stale lock (expires_at 1ms ago) overridden → {acquired:true}, (5) full sequence integration assertion.
+- **Learnings:**
+  - **Unit tests for startup-lock use mocked Prisma** — no DB, no HTTP server needed. Create a `makePrisma()` helper that returns a vi.fn()-backed object for startupLock.create/findUnique/delete/deleteMany.
+  - **Stale lock override sequence**: Stale lock test requires `create` mock to reject first (unique violation), `findUnique` to return expired row (expires_at < Date.now()), `delete` to resolve, then `create` resolves again. Two mock calls to `create` in sequence via `mockRejectedValueOnce` + `mockResolvedValueOnce`.
+  - **Unit test placement**: `tests/unit/` directory did not exist — created it. The vitest config includes `tests/**/*.test.ts` so it was automatically picked up.
+  - **No `vi.stubEnv + vi.resetModules` needed for pure unit tests**: These patterns are only needed for e2e/integration tests requiring DATA_DIR isolation.
+  - **`mockRejectedValueOnce` + `mockResolvedValueOnce` chaining**: Use `vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce({})` on the same mock to simulate insert-fail-then-succeed for the stale-lock retry path.
+---
