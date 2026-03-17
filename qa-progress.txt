@@ -183,14 +183,13 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
 ---
 
 ### TC-007 [PASS] Tenant deletion → data cleaned up
-- All 1 test (11 sub-assertions) pass in 310ms: {deleted:true} response, deleted_at set, message_queue purged (2 rows), startup_lock purged (1 row), TENANT_DELETED audit log with actor=admin, data_dir moved to archive (verified via audit log metadata), second DELETE returns 409.
-- **What worked:** Pure control-plane integration test — no relay or Slack event simulation needed. Used existing `control-plane.test.ts` setup pattern (vi.mock + Date.now spy + real SQLite temp DB). Seeded 2 message_queue rows and 1 startup_lock directly via prisma before DELETE.
+- All assertions pass in 314ms (re-run 2026-03-17): {deleted:true} response, deleted_at set, message_queue purged (2 rows), startup_lock purged (1 row), TENANT_DELETED audit log with actor=admin, data_dir moved to archive (verified via audit log metadata), second DELETE returns 409. Full suite: 310/310 tests pass (43 test files).
+- **What worked:** Pure control-plane integration test — no relay or Slack event simulation needed. Used `vi.mock('@claw/docker-client')` hoisting + Date.now spy + real SQLite temp DB. Seeded 2 message_queue rows and 1 startup_lock directly via prisma before DELETE. Asserted archiveDir from audit log metadata JSON rather than reconstructing the path.
 - **Learnings:**
   - **archiveDir is in audit log metadata**: The DELETE endpoint stores `archiveDir` in the TENANT_DELETED audit log metadata JSON `{ containerName, archiveDir }`. Parse it to get the exact archive path for filesystem assertions — don't try to reconstruct the archive path from scratch.
-  - **Archive path in test env**: `data_dir = ${DATA_DIR}/${tenantId}`. The archive replaces `/data/tenants/` with `/data/tenants-archive/`. Since `DATA_DIR=/tmp/claw-test-tenants` has no `/data/tenants/` substring, `archiveBase === srcDir`. The access() check finds srcDir exists → appends timestamp: `archiveDir = ${srcDir}-${mockNow}`. So in tests, the archive lands at `${DATA_DIR}/${tenantId}-<timestamp>` (not a separate tenants-archive dir).
-  - **Soft delete only**: Tenant row is NOT removed from DB — `deleted_at` is set. Second DELETE finds `deleted_at !== null` → returns 409.
-  - **message_queue foreign key**: MessageQueue rows reference tenant by `tenant_id`. They're purged via `deleteMany({ where: { tenant_id } })` during deletion. Seeding them before DELETE verifies the purge.
-  - **startup_lock primary key is tenant_id**: StartupLock has `tenant_id` as both PK and FK. Only one lock row per tenant is possible. Create directly via `prisma.startupLock.create()` (not upsert needed) since tenant has no existing lock after provision.
-  - **Use `mockNow = 9_000_000`** for TC-007 (sequence: TC-001: 3M, TC-002: 4M, TC-003: 5M, TC-004: 6M, TC-005: 7M, TC-006: 8M, TC-007: 9M).
-  - **No vi.stubEnv + resetModules needed**: TC-007 is an integration test (not e2e) using the shared DATA_DIR. No parallel DATA_DIR collision risk since it uses an isolated temp DB and cleans up its archive dir in afterAll.
+  - **Archive path in test env quirk**: `DATA_DIR=/tmp/claw-test-tenants` has no `/data/tenants/` substring, so `srcDir.replace('/data/tenants/', '/data/tenants-archive/')` is a no-op → `archiveBase === srcDir`. access() finds srcDir exists → appends timestamp: `archiveDir = ${srcDir}-${mockNow}`. Archive lands at `${DATA_DIR}/${tenantId}-<timestamp>` not in a separate tenants-archive dir.
+  - **Soft delete only**: Tenant row preserved with `deleted_at` set. Second DELETE hits `deleted_at !== null` → 409.
+  - **startup_lock PK is tenant_id**: Only one lock per tenant; create directly via `prisma.startupLock.create()`.
+  - **Use `mockNow = 9_000_000`** for TC-007 (TC-001: 3M → TC-006: 8M sequence).
+  - **No vi.stubEnv + resetModules needed for integration tests**: Only needed for e2e tests that need DATA_DIR isolation from parallel workers.
 ---

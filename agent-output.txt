@@ -1,0 +1,75 @@
+TC-001 Agent Output Evidence
+============================
+Tenant ID: 3f34637c0fb5a0d6
+Team: T_TC001 / User: U_TC001
+Data Dir: /tmp/claw-tc001-isolated
+AGENTS.md contents (first 500 chars):
+## Task Execution
+
+For any task that is complex enough to take more than ~2 minutes:
+- Spawn a sub-agent or background process to handle it
+- Don't block the conversation
+- When it's done, report back with a concise summary o ✓ tests/e2e/control-plane-extended.test.ts (42 tests) 3255ms
+   ✓ TC-014: Provisioning rollback → cleanup on failure > docker run failure → status=FAILED, directories cleaned up, audit event 539ms
+ ✓ tests/e2e/tc-001.test.ts (7 tests) 3970ms
+   ✓ TC-001: First Slack message → tenant provisioned → container started → message delivered > TC-001: message_queue row transitions to DELIVERED 2012ms
+ ✓ tests/e2e/first-message.test.ts (8 tests) 4048ms
+   ✓ E2E: First Slack message — provisions tenant and delivers response > message_queue row was created with status=DELIVERED after processing 2019ms
+ ✓ apps/slack-relay/src/events.test.ts (17 tests) 4125ms
+   ✓ processSlackEvent — US-025: tenant start + status polling > does NOT call start again when tenant is already STARTING 2004ms
+   ✓ processSlackEvent — US-025: tenant start + status polling > calls start when tenant status is STOPPED (not STARTING or ACTIVE) 2001ms
+ ✓ tests/e2e/tc-003.test.ts (7 tests) 4303ms
+   ✓ TC-003: Stopped tenant → wakes on next message → queued messages replayed > TC-003: first queued message is DELIVERED after wake-up 2017ms
+ ✓ apps/slack-relay/src/interim-message.test.ts (6 tests) 31ms
+ ✓ tests/e2e/tc-004.test.ts (3 tests) 3801ms
+   ✓ TC-004: Concurrent messages to stopped tenant → single start (startup lock) > TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) 2229ms
+ ✓ tests/integration/control-plane.test.ts (6 tests) 1989ms
+ ✓ tests/integration/tc-005.test.ts (7 tests) 1645ms
+ ✓ packages/docker-client/src/index.test.ts (10 tests) 16ms
+ ✓ apps/control-plane/tests/unit/tenant-transitions.test.ts (20 tests) 11ms
+ ✓ apps/slack-relay/src/event-handler.test.ts (9 tests) 2043ms
+   ✓ waitForTenantActive > polls until ACTIVE (status changes on 2nd poll) 2002ms
+ ✓ tests/e2e/tc-006.test.ts (5 tests) 2619ms
+   ✓ TC-006: Allowlist enforcement → unauthorized user rejected > TC-006: no tenant row created for unauthorized user 1003ms
+ ✓ apps/control-plane/src/health-monitor.test.ts (3 tests) 35ms
+ ✓ apps/scheduler/src/capacity-retry.test.ts (6 tests) 18ms
+ ✓ apps/scheduler/src/disk-quota.test.ts (5 tests) 18ms
+ ✓ tests/e2e/tc-002.test.ts (6 tests) 3744ms
+   ✓ TC-002: Repeated messages from same user → same tenant reused > TC-002: no new tenant row created — exactly 1 tenant for this principal 503ms
+   ✓ TC-002: Repeated messages from same user → same tenant reused > TC-002: second message_queue row added and delivered 1611ms
+ ✓ apps/control-plane/src/health-poll.test.ts (4 tests) 22ms
+ ✓ apps/scheduler/src/idle-stop.test.ts (5 tests) 20ms
+ ✓ apps/scheduler/src/reaper.test.ts (5 tests) 18ms
+ ✓ tests/integration/tc-007.test.ts (1 test) 1678ms
+   ✓ TC-007: Tenant deletion → data cleaned up > TC-007: cleans up all tenant resources on DELETE and returns 409 on second attempt 314ms
+ ✓ apps/control-plane/src/recovery.test.ts (3 tests) 22ms
+ ✓ packages/shared-config/src/config.test.ts (10 tests) 14ms
+ ✓ apps/control-plane/src/auto-recovery.test.ts (4 tests) 22ms
+ ✓ apps/scheduler/tests/unit/disk-quota.test.ts (5 tests) 19ms
+ ✓ apps/control-plane/src/startup-lock.test.ts (4 tests) 13ms
+ ✓ apps/control-plane/src/rollback-provisioning.test.ts (5 tests) 16ms
+ ✓ tests/e2e/isolation.test.ts (7 tests) 1552ms
+ ✓ apps/control-plane/src/run-tenant-container.test.ts (4 tests) 15ms
+ ✓ apps/control-plane/src/seed-workspace.test.ts (4 tests) 44ms
+ ✓ apps/control-plane/src/rollback-provision.test.ts (4 tests) 13ms
+ ✓ apps/scheduler/tests/unit/idle-stop.test.ts (4 tests) 22ms
+ ✓ apps/slack-relay/tests/unit/signature.test.ts (7 tests) 9ms
+ ✓ apps/control-plane/src/container-image.test.ts (5 tests) 12ms
+ ✓ apps/control-plane/tests/unit/startup-lock.test.ts (4 tests) 23ms
+ ✓ apps/control-plane/src/docker-run-options.test.ts (5 tests) 8ms
+ ✓ apps/slack-relay/src/verify-signature.test.ts (5 tests) 6ms
+ ✓ packages/shared-config/src/index.test.ts (3 tests) 130ms
+ ✓ apps/control-plane/tests/unit/allowlist.test.ts (4 tests) 19ms
+ ✓ apps/control-plane/src/allowlist.test.ts (4 tests) 9ms
+ ✓ apps/control-plane/tests/unit/capacity.test.ts (5 tests) 19ms
+ ✓ tests/e2e/lifecycle.test.ts (8 tests) 11487ms
+   ✓ TC-003: Stopped tenant → wakes on message → queued messages replayed > sending a message to stopped tenant triggers wake-up and delivery 2232ms
+   ✓ TC-004: Concurrent messages to stopped tenant → single start > concurrent messages → both delivered, startup lock prevents race conditions 2224ms
+   ✓ TC-006: Allowlist enforcement → unauthorized user rejected > no allowlist entry → 403 from CP, rejection DM sent, no tenant created 2008ms
+   ✓ TC-025: Message queue deduplication → Slack retry is no-op > duplicate slack event_id results in single message_queue row 3223ms
+
+ Test Files  43 passed (43)
+      Tests  310 passed (310)
+   Start at  07:34:17
+   Duration  12.34s (transform 1.33s, setup 228ms, collect 5.62s, tests 52.35s, environment 10ms, prepare 4.23s)
+
