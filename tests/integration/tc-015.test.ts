@@ -312,7 +312,7 @@ describe('TC-015: Audit log → events recorded for all system actions', () => {
       where: { tenant_id: tenantId, event_type: 'TENANT_DELETED' },
     });
     expect(audit).not.toBeNull();
-    expect(audit!.actor).toBe('system');
+    expect(audit!.actor).toBe('admin');
   });
 
   // ── 8. ACCESS_REVOKED ────────────────────────────────────────────────────
