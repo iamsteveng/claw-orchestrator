@@ -12,8 +12,16 @@ export XDG_STATE_HOME=/home/agent/.local/state
 
 # ── Auth-profiles check ───────────────────────────────────────────────────────
 AUTH_PROFILES_PATH="/root/.openclaw/agents/main/agent/auth-profiles.json"
-if [ ! -f "${AUTH_PROFILES_PATH}" ]; then
-  echo "ERROR: auth-profiles.json is missing. Model calls will fail. Ensure the host bind-mount is configured." >&2
+if [ ! -f "${AUTH_PROFILES_PATH}" ] || [ ! -s "${AUTH_PROFILES_PATH}" ]; then
+  echo "ERROR: auth-profiles.json is missing or empty. Model calls will fail. Ensure the host bind-mount is configured." >&2
+  exit 1
+fi
+
+# ── Claude Code credentials check ────────────────────────────────────────────
+CREDENTIALS_PATH="/root/.claude/.credentials.json"
+if [ ! -f "${CREDENTIALS_PATH}" ] || [ ! -s "${CREDENTIALS_PATH}" ]; then
+  echo "ERROR: .credentials.json is missing or empty. Claude CLI authentication will fail. Ensure ~/.claude/.credentials.json exists on the host and is bind-mounted." >&2
+  exit 1
 fi
 
 # ── Required directories ──────────────────────────────────────────────────────

@@ -14,6 +14,7 @@
 - Run `pnpm prisma generate` from root; `DATABASE_URL=file:./dev.db pnpm prisma migrate dev --name <name>` for migrations
 - SQLite WAL mode enabled via `PRAGMA journal_mode=WAL;` at top of initial migration SQL file
 - *.db, *.db-shm, *.db-wal in .gitignore
+- buildDockerRunOptions readOnlyBindMounts: entries are hostPath:containerPath strings (no :ro); docker-client appends :ro at run time; both auth-profiles.json and .credentials.json are bind-mounted read-only
 
 ---
 
@@ -616,3 +617,17 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - `Date.now()` mock returning small incrementing integers (2_000_000+) works correctly with the real setTimeout: timer delays are real-time, but timestamp comparisons use the mocked values
   - Global fetch can be selectively intercepted: replace `globalThis.fetch` with a function that pattern-matches URLs and either handles them (mock) or passes through to the original fetch (real HTTP to CP server)
   - message_queue DELIVERED: the relay's processSlackEventWithConfig needs a PrismaClient passed in to manage queue rows; without it, the queue row is never created
+
+## 2026-03-17 - US-041
+- What was implemented: Bind-mount host Claude Code credentials into tenant containers
+- Files changed:
+  - apps/control-plane/src/docker-run-options.ts (added ~/.claude/.credentials.json to readOnlyBindMounts array)
+  - apps/control-plane/src/docker-run-options.test.ts (added assertion for .credentials.json bind mount)
+  - docker/tenant-image/entrypoint.sh (added non-empty check for .credentials.json with exit 1 on failure; also tightened auth-profiles.json check to include -s non-empty check)
+  - tests/unit/tc-041.test.ts (new test file: 7 tests verifying entrypoint validation logic and bind mount)
+- **Learnings for future iterations:**
+  - The credentials mount follows the same pattern as auth-profiles.json: `${hostHome}/.claude/.credentials.json:/root/.claude/.credentials.json` in readOnlyBindMounts
+  - Entrypoint validation uses both `-f` (file exists) and `-s` (non-empty) checks for robustness
+  - Shell script validation tests use spawnSync with bash -c and controlled temp paths to test exit codes without running the full entrypoint
+  - buildDockerRunArgs is not exported — `:ro` is appended internally in docker-client; tests assert on the raw readOnlyBindMounts string array
+---
