@@ -19,6 +19,7 @@
     "pino": "^10.3.1"
   },
   "devDependencies": {
+    "@claw/test-utils": "workspace:*",
     "@fastify/type-provider-typebox": "^6.1.0",
     "@types/node": "^22.0.0",
     "@types/pino": "^7.0.5",

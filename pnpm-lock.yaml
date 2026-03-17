@@ -46,6 +46,9 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
     devDependencies:
+      '@claw/test-utils':
+        specifier: workspace:*
+        version: link:../../packages/test-utils
       '@fastify/type-provider-typebox':
         specifier: ^6.1.0
         version: 6.1.0(typebox@1.1.6)
@@ -70,13 +73,31 @@ importers:
       '@claw/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@prisma/client':
+        specifier: ^5.22.0
+        version: 5.22.0(prisma@7.5.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))
+      execa:
+        specifier: ^9.0.0
+        version: 9.6.1
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
     devDependencies:
+      '@claw/test-utils':
+        specifier: workspace:*
+        version: link:../../packages/test-utils
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.15
+      '@types/pino':
+        specifier: ^7.0.5
+        version: 7.0.5
       typescript:
         specifier: ^5.5.0
         version: 5.9.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@22.19.15)
 
   apps/slack-relay:
     dependencies:
@@ -93,6 +114,9 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
     devDependencies:
+      '@claw/test-utils':
+        specifier: workspace:*
+        version: link:../../packages/test-utils
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.15
@@ -145,7 +169,17 @@ importers:
         version: 5.9.3
 
   packages/test-utils:
+    dependencies:
+      '@claw/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
     devDependencies:
+      '@claw/docker-client':
+        specifier: workspace:*
+        version: link:../docker-client
+      '@prisma/client':
+        specifier: '*'
+        version: 5.22.0(prisma@7.5.0(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3))
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.15

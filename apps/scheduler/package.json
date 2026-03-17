@@ -14,9 +14,11 @@
     "@claw/shared-types": "workspace:*",
     "@claw/shared-config": "workspace:*",
     "@prisma/client": "^5.22.0",
+    "execa": "^9.0.0",
     "pino": "^10.3.1"
   },
   "devDependencies": {
+    "@claw/test-utils": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/pino": "^7.0.5",
     "typescript": "^5.5.0",
