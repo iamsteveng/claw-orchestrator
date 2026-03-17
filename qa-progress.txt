@@ -473,3 +473,9 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **Node.js built-in crypto works directly**: No need for any test utilities — just `import { createHash } from 'node:crypto'` to compute the expected value inline.
   - **Algorithm**: `sha256(teamId + ':' + userId)` as hex string, then `.slice(0, 16)` → always 16 lowercase hex chars.
 ---
+
+### TC-018 [PASS] Tenant ID computation → sha256(team:user).slice(0,16)
+- **Evidence:** ✓ tests/unit/tc-018.test.ts (5 tests) 8ms — all assertions pass: - TC-018: computes sha256(T12345:U67890).slice(0,16) correctly - TC-018: result is exactly 16 hex characters - TC-018: is deterministic for same inputs - TC-018: different users produce different IDs - TC-018: different teams produce different IDs Full suite: 369/369 tests, 54 files, all passed.
+- **Learnings:**
+  - - `computeTenantId` is exported from `apps/slack-relay/src/index.ts` — use relative path `../../apps/slack-relay/src/index.js` for imports in `tests/unit/` - The function in `apps/control-plane/src/provision.ts` is private; the relay's export is the canonical public API for testing - Algorithm: `createHash('sha256').update(teamId + ':' + userId).digest('hex').slice(0, 16)` — always 16 lowercase hex chars - Node.js built-in `node:crypto` is sufficient; no external test utilities needed
+---

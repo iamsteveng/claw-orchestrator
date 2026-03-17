@@ -12,38 +12,16 @@ For any task that is complex enough to take more than ~2 minutes:
 - When it's done, report back with a concise summary of what was done
 
 
-TC-017 Agent Output Evidence
-=============================
-Test: Config validation → missing env var causes fast failure
-Result: PASS — 3/3 tests passed in 18ms
+TC-018 Agent Output Evidence
+============================
+Test file: tests/unit/tc-018.test.ts (already committed as 3ac8b5b)
+Import: computeTenantId from ../../apps/slack-relay/src/index.js
 
-Test output:
-  ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError
-  ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError
-  ✓ TC-017: ZodError message identifies the missing field name
+Test results (5/5 passed):
+✓ TC-018: computes sha256(T12345:U67890).slice(0,16) correctly
+✓ TC-018: result is exactly 16 hex characters
+✓ TC-018: is deterministic for same inputs
+✓ TC-018: different users produce different IDs
+✓ TC-018: different teams produce different IDs
 
-Fast failure verified: Zod schemas throw ZodError with issues array identifying
-the missing field (SLACK_SIGNING_SECRET, DATABASE_URL) when required env vars absent.
-
-Full suite: 53 test files, 364 tests, 1 pre-existing failure in TC-015 (unrelated).
-
-TC-017 Agent Output Evidence
-=============================
-Test: Config validation → missing env var causes fast failure
-Level: unit
-
-Test Results:
- ✓ tests/unit/tc-017.test.ts (3 tests) 22ms
-   ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError
-   ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError
-   ✓ TC-017: ZodError message identifies the missing field name
-
-Full suite: 53 test files, 364 tests, all passed.
-
-Approach:
-- Imported slackRelayConfigSchema + controlPlaneConfigSchema via @claw/shared-config
-- Deleted SLACK_SIGNING_SECRET / DATABASE_URL from process.env
-- Called schema.parse(process.env) and asserted err.name === 'ZodError' with correct field in issues
-- Restored env vars in afterEach
-
-Pass criteria met: Fast failure with descriptive ZodError identifying missing field on startup.
+Full suite: 369 tests, 54 files, all passed in 12.61s
