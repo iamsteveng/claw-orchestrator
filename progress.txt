@@ -481,6 +481,22 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
 
+## 2026-03-17 - US-037
+- What was implemented: Host-side directory layout setup script and tenant-shell interactive access helper
+- Files changed:
+  - deploy/scripts/setup-dirs.sh (new: creates claw system user if absent, creates all required dirs with claw ownership)
+  - scripts/tenant-shell.sh (new: validates container running before exec -it --user agent)
+  - deploy/scripts/backup.sh (new: SQLite WAL checkpoint, copy db, tar tenant data, optional S3 sync)
+  - deploy/systemd/claw-backup.timer (new: daily 03:00 UTC timer)
+  - deploy/systemd/claw-backup.service (new: oneshot service triggered by timer)
+- **Learnings for future iterations:**
+  - tenant-shell.sh lives in scripts/ (repo root), not deploy/scripts/ per AC
+  - install -d -o claw -g claw is idiomatic for creating dirs with ownership in one command
+  - backup.timer uses OnCalendar=*-*-* 03:00:00 UTC + Persistent=true for systemd timer
+  - S3 sync is optional; controlled by S3_BUCKET env var
+  - 130 total tests passing
+---
+
 ## 2026-03-17 - US-036
 - What was implemented: systemd unit files for all three services with correct dependency ordering
 - Files changed:
