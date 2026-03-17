@@ -30,7 +30,17 @@ vi.spyOn(Date, 'now').mockImplementation(() => mockNow++);
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-// Mock docker-client to prevent real Docker calls
+// Explicit mock docker client — passed directly to buildApp to avoid dynamic import issues
+const mockDockerClient = {
+  run: vi.fn().mockResolvedValue(undefined),
+  start: vi.fn().mockResolvedValue(undefined),
+  stop: vi.fn().mockResolvedValue(undefined),
+  rm: vi.fn().mockResolvedValue(undefined),
+  inspect: vi.fn().mockResolvedValue(null),
+  exec: vi.fn().mockResolvedValue({ stdout: '', stderr: '' }),
+};
+
+// Also mock the module for any code paths that do dynamic imports
 vi.mock('@claw/docker-client', () => ({
   DockerClient: {
     run: vi.fn().mockResolvedValue(undefined),
@@ -126,7 +136,7 @@ beforeAll(async () => {
     },
   });
 
-  app = await buildApp(prisma, { logger: false });
+  app = await buildApp(prisma, { logger: false, dockerClient: mockDockerClient });
   await app.ready();
 }, 60_000);
 
@@ -232,7 +242,10 @@ describe('TC-015: Audit log → events recorded for all system actions', () => {
     });
 
     // Start returns 202 (starting) or 200 (already active)
-    expect([200, 202]).toContain(res.statusCode);
+    expect(
+      res.statusCode,
+      `Start returned ${res.statusCode}: ${res.body}`,
+    ).toSatisfy((s: number) => s === 200 || s === 202);
 
     // pollUntilHealthy mock is async — flush microtask queue
     await new Promise<void>((resolve) => setImmediate(resolve));
