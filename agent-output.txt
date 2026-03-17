@@ -5,14 +5,14 @@ Level: unit
 Result: PASS
 
 Test output:
- ✓ tests/unit/tc-013.test.ts (5 tests) 24ms
+ ✓ tests/unit/tc-013.test.ts (5 tests) 23ms
    ✓ TC-013: step 1 — acquireStartupLock(requestId1) returns {acquired: true}
    ✓ TC-013: step 2 — concurrent acquireStartupLock(requestId2) returns {acquired: false}
    ✓ TC-013: step 3 — after releaseStartupLock(requestId1), acquireStartupLock(requestId3) returns {acquired: true}
    ✓ TC-013: step 4 — stale lock (expires_at 1ms ago) is overridden, {acquired: true}
    ✓ TC-013: full sequence — mutual exclusion and stale takeover
 
-All 330 tests passed (49 test files).
+Total: 316 tests passed, 14 skipped (49 test files, 2 unrelated e2e EADDRINUSE failures).
 At most one lock holder enforced via SQLite UNIQUE constraint; stale locks expire and can be taken over.
 
 ---
