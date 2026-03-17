@@ -481,6 +481,30 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
 
+## 2026-03-17 - US-038
+- What was implemented: test-utils package with fixtures/mocks and unit tests for core logic
+- Files changed:
+  - packages/test-utils/src/fixtures.ts (new: makeTenant, makeMessageQueueRow)
+  - packages/test-utils/src/mocks.ts (new: mockPrismaClient, mockDockerClient)
+  - packages/test-utils/src/index.ts (updated to re-export fixtures and mocks)
+  - packages/test-utils/package.json (added "type": "module", @claw/shared-types dep, @prisma/client devDep)
+  - apps/control-plane/src/capacity.ts (new: getActiveTenantCount, isAtCapacity utilities)
+  - apps/control-plane/tests/unit/tenant-transitions.test.ts (18 tests: valid/invalid state transitions)
+  - apps/control-plane/tests/unit/startup-lock.test.ts (4 tests: acquire, blocked, stale takeover, release)
+  - apps/control-plane/tests/unit/capacity.test.ts (5 tests: capacity cap enforcement)
+  - apps/control-plane/tests/unit/allowlist.test.ts (4 tests: team-level, user-level, denied, revoked)
+  - apps/slack-relay/tests/unit/signature.test.ts (7 tests: verify-signature + computeTenantId)
+  - apps/scheduler/tests/unit/idle-stop.test.ts (4 tests: idle eligibility, threshold, error handling)
+  - apps/scheduler/tests/unit/disk-quota.test.ts (5 tests: getDiskUsageBytes, exceeded, cleared, null)
+  - vitest.config.ts (extended include patterns to cover apps/*/tests/**/*.test.ts)
+  - apps/{control-plane,slack-relay,scheduler}/package.json (added @claw/test-utils devDep)
+- **Learnings for future iterations:**
+  - test-utils needs "type": "module" since it imports `vi` from vitest (ESM-only)
+  - vitest.config.ts include must list apps/*/tests/**/*.test.ts to pick up tests/unit/ directories
+  - CLEAR_THRESHOLD (0.95) only triggers when ratio < 0.9 (below WARN_THRESHOLD); 94% hits WARN branch not CLEAR
+  - 179 total tests passing
+---
+
 ## 2026-03-17 - US-037
 - What was implemented: Host-side directory layout setup script and tenant-shell interactive access helper
 - Files changed:
