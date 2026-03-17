@@ -80,6 +80,7 @@ describe('schedulerConfigSchema', () => {
   const required = {
     DATABASE_URL: 'file:/tmp/scheduler.db',
     CONTROL_PLANE_URL: 'http://localhost:3200',
+    SLACK_BOT_TOKEN: 'xoxb-test-token',
   };
 
   it('uses defaults when optional vars are absent', () => {

@@ -341,6 +341,11 @@ app.post<{
     return reply.status(403).send({ ok: false, error: 'Access revoked' });
   }
 
+  // Block message delivery when disk quota is exceeded
+  if (tenant.disk_quota_exceeded === 1) {
+    return reply.status(507).send({ ok: false, error: 'Disk quota exceeded' });
+  }
+
   // Tenant must be ACTIVE
   if (tenant.status !== TenantStatus.ACTIVE) {
     return reply.status(503).send({ ok: false, error: 'Tenant not active' });

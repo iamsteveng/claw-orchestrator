@@ -1,15 +1,24 @@
 import { PrismaClient } from '@prisma/client';
 import { schedulerConfig } from '@claw/shared-config/scheduler';
 import { stopIdleTenants } from './idle-stop.js';
+import { checkDiskQuotas, checkHostDisk } from './disk-quota.js';
 import pino from 'pino';
 
 const log = pino({ base: { service: 'scheduler' } });
 const prisma = new PrismaClient();
 
 const idleStopMs = schedulerConfig.IDLE_STOP_HOURS * 60 * 60 * 1000;
+const DISK_CHECK_TICKS = Math.max(1, Math.round(5 * 60 * 1000 / schedulerConfig.SCHEDULER_INTERVAL_MS));
+let tickCount = 0;
 
 async function runJobs(): Promise<void> {
   await stopIdleTenants(prisma, schedulerConfig.CONTROL_PLANE_URL, idleStopMs, log);
+
+  tickCount++;
+  if (tickCount % DISK_CHECK_TICKS === 0) {
+    await checkDiskQuotas(prisma, schedulerConfig.SLACK_BOT_TOKEN, log);
+    await checkHostDisk(prisma, schedulerConfig.DATA_MOUNT, log);
+  }
 }
 
 async function main(): Promise<void> {

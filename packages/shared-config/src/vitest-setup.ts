@@ -6,3 +6,4 @@ process.env.TENANT_IMAGE = process.env.TENANT_IMAGE || 'claw-tenant:test';
 process.env.SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || 'test-signing-secret';
 process.env.SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN || 'xoxb-test-token';
 process.env.CONTROL_PLANE_URL = process.env.CONTROL_PLANE_URL || 'http://localhost:3200';
+process.env.DATA_MOUNT = process.env.DATA_MOUNT || '/data';

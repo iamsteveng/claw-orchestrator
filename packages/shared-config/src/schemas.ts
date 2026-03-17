@@ -27,6 +27,8 @@ export const schedulerConfigSchema = z.object({
   IDLE_STOP_HOURS: z.coerce.number().int().positive().default(48),
   DATABASE_URL: z.string().min(1),
   CONTROL_PLANE_URL: z.string().url(),
+  SLACK_BOT_TOKEN: z.string().min(1),
+  DATA_MOUNT: z.string().min(1).default('/data'),
 });
 
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>;
