@@ -557,3 +557,43 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
 - **Learnings:**
   - - **pollUntilHealthy mock via vi.mock**: Mocking `../../apps/control-plane/src/health-poll.js` with an implementation that directly writes `status=ACTIVE` + `TENANT_STARTED` audit log is the cleanest way to test the state machine without real Docker/network. Two `setImmediate` flushes after POST /start are sufficient for the background `void pollUntilHealthy(...)` to complete. - **STOPPED → `docker.start` (not `docker.run`)**: For tenants with `previousStatus !== NEW`, the start endpoint calls `dc.start(containerName)` (restart existing container). Only `NEW` tenants use `dc.run()`. - **Idempotency response code**: Second POST /start on an ACTIVE tenant returns HTTP **200** (not 202) with `{status: 'active'}` — the endpoint special-cases ACTIVE before acquiring the startup lock. - **`principal` is required in tenant create**: `prisma.tenant.create()` requires the `principal` field (`slackTeamId:slackUserId` format) — omitting it causes a Prisma validation error. - **`mockNow` starting value**: Use a value distinct from other test files (e.g. 3_000_000 or 10_000_000) to avoid Int32 range issues when many DB operations increment the counter.
 ---
+
+### TC-021 [PASS] Start endpoint → STOPPED → STARTING → ACTIVE transition
+- **Evidence:** All 7 TC-021 tests passed in 1505ms (384/384 total tests, 57 files): - ✓ Creates STOPPED tenant in DB via direct insert - ✓ POST /start returns 202 {status: "starting"} - ✓ Tenant DB status is STARTING after /start call - ✓ Tenant reaches ACTIVE status after health polling (max 10s) - ✓ TENANT_STARTED audit event written with system actor + containerName metadata - ✓ docker.start called (not docker.run) for STOPPED tenant - ✓ Second POST /start is idempotent → returns 200 {status: "active"} Full STOPPED → STARTING → ACTIVE state machine confirmed.
+- **Learnings:**
+  - - **`principal` field required on tenant create**: `prisma.tenant.create()` requires a `principal` field (format: `T_XXX:U_XXX`) — omitting it causes a Prisma validation error. This field is a `@unique` String in the schema. - **STOPPED → docker.start (not docker.run)**: The start endpoint checks `previousStatus === TenantStatus.NEW` to decide whether to create a new container (`dc.run()`) or restart an existing one (`dc.start(containerName)`). For STOPPED tenants, it always calls `start`. - **pollUntilHealthy mock flushes via setImmediate**: The `void pollUntilHealthy(...)` background call completes after two `setImmediate` flushes — same pattern as TC-015. - **Idempotency returns 200 (not 202)**: The `/start` endpoint returns HTTP 200 with `{status: 'active'}` when the tenant is already ACTIVE — before acquiring the startup lock, making it a fast O(1) early exit.
+---
+
+### TC-022 [PASS] Stop endpoint → ACTIVE → STOPPED transition
+- **Evidence:** All 8 TC-022 tests passed in 1561ms (392/392 total tests, 58 files): - ✓ Creates ACTIVE tenant in DB via direct insert - ✓ POST /stop returns 200 {status: "stopped"} - ✓ Tenant DB status is STOPPED after /stop call - ✓ last_stopped_at is set on the tenant row - ✓ TENANT_STOPPED audit event written with system actor + containerName metadata - ✓ dockerStop called once with correct container name and timeout=10 - ✓ Second POST /stop is idempotent → returns 200 {status: "already_stopped"} - ✓ dockerStop still called only once (idempotent second call does not invoke docker) Complete ACTIVE → STOPPED state machine + idempotency confirmed.
+- **Learnings:**
+  - **Stop endpoint is fully synchronous**: Unlike `/start`, the `/stop` endpoint awaits `dc.stop()` and the DB update before returning — no background async tasks, no microtask/setImmediate flushing needed. Response arrives after all side effects.
+  - **Idempotency check is status=STOPPED**: The endpoint checks `tenant.status === TenantStatus.STOPPED` to return `{status: 'already_stopped'}`. It does NOT call docker on the second call.
+  - **No directories needed for stop test**: The stop endpoint doesn't access the filesystem (no `data_dir` lookup or access), so test tenants don't need tenant subdirs created on disk.
+  - **No containerImage row needed**: Unlike the start endpoint, stop doesn't look up the default image — no `prisma.containerImage.create()` seeding required.
+  - **dc.stop called with (containerName, 10)**: The endpoint hardcodes a 10-second Docker timeout. Assert both arguments when verifying the mock call.
+  - **mockNow = 11_000_000** for TC-022 (TC-021 used 10M; both start at 10M+ which is fine since they use isolated temp DBs).
+---
+
+### TC-022 [PASS] Stop endpoint → ACTIVE → STOPPED transition
+- **Evidence:** All 8 TC-022 tests passed in 1561ms (392/392 total tests, 58 test files): - ✓ Creates ACTIVE tenant in DB via direct insert - ✓ POST /stop returns 200 {status: "stopped"} - ✓ Tenant DB status is STOPPED after /stop call - ✓ last_stopped_at is set on the tenant row - ✓ TENANT_STOPPED audit event written with system actor + containerName metadata - ✓ dockerStop called once with correct container name and timeout=10 - ✓ Second POST /stop is idempotent → returns 200 {status: "already_stopped"} - ✓ dockerStop still called only once (idempotent second call does not invoke docker)
+- **Learnings:**
+  - - **Stop endpoint is fully synchronous**: Unlike `/start`, the `/stop` endpoint awaits `dc.stop()` and the DB update before returning — no background async tasks, no setImmediate flushing needed. - **Idempotency check is status=STOPPED**: Returns `{status: 'already_stopped'}` when tenant is already STOPPED; does NOT call docker on the second call. - **No directories or containerImage row needed**: Stop endpoint doesn't access the filesystem or look up the default image — minimal DB seeding required. - **dc.stop called with (containerName, 10)**: The endpoint hardcodes a 10-second Docker timeout. Assert both arguments. - **Pattern for pure stop tests**: Seed ACTIVE tenant directly via `prisma.tenant.create()`, call `app.inject()` twice, verify DB + audit + mock call counts. No relay, no health poll mock, no provisioning needed.
+---
+
+### TC-022 [PASS] Stop endpoint → ACTIVE → STOPPED transition (re-run 2026-03-17)
+- **Evidence:** All 8 TC-022 tests passed in 1515ms (391/392 total, 1 pre-existing TC-015 failure unrelated):
+  - ✓ Creates ACTIVE tenant in DB via direct insert
+  - ✓ POST /stop returns 200 {status: "stopped"}
+  - ✓ Tenant DB status is STOPPED after /stop call
+  - ✓ last_stopped_at is set on the tenant row
+  - ✓ TENANT_STOPPED audit event written with system actor + containerName metadata
+  - ✓ dockerStop called once with correct container name and timeout=10
+  - ✓ Second POST /stop is idempotent → returns 200 {status: "already_stopped"}
+  - ✓ dockerStop still called only once (idempotent second call does not invoke docker)
+- **Learnings:**
+  - Test file was already implemented in a prior run; no changes needed.
+  - Stop endpoint is synchronous — no setImmediate/microtask flushing required.
+  - Idempotency guard: `tenant.status === STOPPED` → returns `{status:'already_stopped'}` without calling docker.
+  - dc.stop is called with `(containerName, 10)` — assert both positional args.
+---
