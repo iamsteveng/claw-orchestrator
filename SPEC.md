@@ -868,6 +868,31 @@ Images are tagged by git commit SHA: `claw-tenant:sha-<7char>` (e.g. `claw-tenan
 
 Build for both `linux/arm64` and `linux/amd64` in CI. Production may run on AWS Graviton (`arm64`).
 
+### Ralph Skills (Baked into Image)
+
+The six Ralph-related agent skills are baked into the tenant Docker image at build time so every tenant container has them available as native OpenClaw skills without runtime network dependencies.
+
+**Skills included:**
+- `prd` — PRD generator
+- `ralph` — Converts PRDs to prd.json format
+- `ralph-codex-loop` — Ralph agentic development loop runner
+- `qa-plan-generator` — Generates deterministic QA test plans from PRDs
+- `qa-plan-json` — Converts QA test plan markdown to executable JSON
+- `qa-codex-loop` — Executes QA JSON plans with implement-then-run behavior
+
+**Source:** `docker/tenant-image/skills/` in this repo (synced from the ralph repo using `scripts/update-ralph-skills.sh`)
+
+**Build-time inclusion:** The Dockerfile copies skills into the OpenClaw skills directory:
+```
+COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
+```
+
+**Updating skills:** When ralph skills are updated, run:
+```
+bash scripts/update-ralph-skills.sh /path/to/ralph-repo
+```
+Then rebuild and repromote the tenant image (see image rollout §17).
+
 ---
 
 ## 17. Container Image Update / Rollout Strategy
@@ -1537,11 +1562,13 @@ repo/
     docker-client/
   docker/
     tenant-image/       ← Dockerfile; entrypoint expects auth-profiles.json bind-mounted at runtime
+      skills/           ← Ralph skills baked in at build time (synced via scripts/update-ralph-skills.sh)
     compose/
   templates/
     workspace/
       AGENTS.md         ← base tenant workspace template (includes Task Execution section)
   scripts/
+    update-ralph-skills.sh  ← syncs ralph skills from ralph repo into docker/tenant-image/skills/
   tests/
     unit/
     integration/
