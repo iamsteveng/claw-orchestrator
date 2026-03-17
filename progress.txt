@@ -427,3 +427,17 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - 507 Insufficient Storage is appropriate HTTP status for disk quota exceeded
   - schedulerConfigSchema needs SLACK_BOT_TOKEN for disk quota DMs; vitest-setup.ts already had it
 ---
+
+## 2026-03-17 - US-029
+- What was implemented: Message queue reaping, stale startup lock sweep, archive directory cleanup, and audit log archiving
+- Files changed:
+  - apps/scheduler/src/reaper.ts (new: reapMessageQueue, sweepStaleLocks, cleanArchiveDirectories, archiveAuditLog)
+  - apps/scheduler/src/reaper.test.ts (new: 5 unit tests for queue reaping, lock sweep, archive dir)
+  - apps/scheduler/src/index.ts (integrated sweepStaleLocks on every tick, reapMessageQueue + archiveAuditLog + cleanArchiveDirectories hourly)
+- **Learnings for future iterations:**
+  - sweepStaleLocks runs on every tick; reapMessageQueue and archive jobs run hourly via REAP_TICKS counter
+  - reapMessageQueue uses prisma.$transaction([deleteMany(DELIVERED), deleteMany(FAILED)]) for atomicity
+  - archiveAuditLog groups rows by YYYY-MM month and writes ndjson.gz files; uses createGzip + createWriteStream with append flag
+  - cleanArchiveDirectories uses fs.stat mtimeMs to detect 30-day-old directories; handles missing archiveDir gracefully
+  - 124 total tests passing
+---
