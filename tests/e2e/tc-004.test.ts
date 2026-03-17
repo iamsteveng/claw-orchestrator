@@ -92,6 +92,10 @@ let mockedFetch: ReturnType<typeof vi.fn>;
 
 const slackPostMessageCalls: Array<{ channel: string; text?: string }> = [];
 
+// Controls health-check response: when > 0, health checks are delayed
+// This ensures the startup lock is held long enough for concurrent requests to race
+let healthCheckDelayMs = 0;
+
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
@@ -143,6 +147,9 @@ beforeAll(async () => {
     const url = String(input instanceof URL ? input.toString() : input);
 
     if (url.includes(':3101/health')) {
+      if (healthCheckDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, healthCheckDelayMs));
+      }
       return new Response(JSON.stringify({ ok: true, status: 'healthy' }), { status: 200 });
     }
 
@@ -263,6 +270,11 @@ describe('TC-004: Concurrent messages to stopped tenant → single start (startu
     mockDockerClient.start.mockClear();
     mockDockerClient.run.mockClear();
 
+    // Delay health checks by 300ms so the startup lock is held long enough
+    // for both concurrent /start requests to race. Without this delay the
+    // lock is acquired and released before the second request arrives.
+    healthCheckDelayMs = 300;
+
     // Track max startup_lock row count observed during concurrent processing
     let maxStartupLockCount = 0;
     let monitorRunning = true;
@@ -343,8 +355,9 @@ describe('TC-004: Concurrent messages to stopped tenant → single start (startu
       return row !== null;
     }, 200, 30_000);
 
-    // Stop lock monitor
+    // Stop lock monitor and reset health check delay
     monitorRunning = false;
+    healthCheckDelayMs = 0;
 
     // Assert both messages delivered
     expect(msg1Delivered).toBe(true);
