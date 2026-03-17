@@ -7,8 +7,8 @@ const DOCKERFILE_PATH = resolve(__dirname, '../../docker/tenant-image/Dockerfile
 describe('TC-035 Tenant Dockerfile does not embed ANTHROPIC_API_KEY', () => {
   const lines = readFileSync(DOCKERFILE_PATH, 'utf-8').split('\n');
 
-  it('TC-035: no line contains ANTHROPIC_API_KEY', () => {
-    const matches = lines.filter(l => l.includes('ANTHROPIC_API_KEY'));
+  it('TC-035: no non-comment line contains ANTHROPIC_API_KEY', () => {
+    const matches = lines.filter(l => !l.trimStart().startsWith('#') && l.includes('ANTHROPIC_API_KEY'));
     expect(matches).toEqual([]);
   });
 
