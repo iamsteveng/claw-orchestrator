@@ -631,3 +631,15 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - Shell script validation tests use spawnSync with bash -c and controlled temp paths to test exit codes without running the full entrypoint
   - buildDockerRunArgs is not exported — `:ro` is appended internally in docker-client; tests assert on the raw readOnlyBindMounts string array
 ---
+
+## 2026-03-17 - US-042
+- What was implemented: Ralph skills baked into tenant Docker image at build time
+- Files changed:
+  - docker/tenant-image/Dockerfile (added NPM_CONFIG_PREFIX env var, PATH update, COPY skills/ step)
+  - tests/unit/tc-042.test.ts (6 static analysis tests verifying skills, Dockerfile COPY step, and update script)
+- **Learnings for future iterations:**
+  - npm global install as root goes to /usr/local/lib/node_modules by default; setting ENV NPM_CONFIG_PREFIX=/root/.npm-global redirects installs to that path
+  - ENV NPM_CONFIG_PREFIX and ENV PATH updates in Dockerfile apply to all users including non-root agent user
+  - The skills directory was already pre-populated with all 6 skills (prd, ralph, ralph-codex-loop, qa-plan-generator, qa-plan-json, qa-codex-loop) and scripts/update-ralph-skills.sh was already executable
+  - Dockerfile static analysis (readFileSync + string checks) is fast and reliable for verifying build instructions
+---
