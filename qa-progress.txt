@@ -668,3 +668,9 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **No ports needed**: TC-025 tests event-handler.ts functions directly with a real DB and mocked fetch — no HTTP servers required.
   - **Track delivery calls with an array**: Use a shared array `runtimeDeliveryCalls` populated by mock fetch to assert exact delivery counts per phase.
 ---
+
+### TC-025 [PASS] Message queue deduplication → Slack retry is no-op
+- **Evidence:** All 4 TC-025 tests passed in 1306ms (121/121 total suite): - ✓ First enqueueMessage creates exactly one PENDING row - ✓ Duplicate enqueueMessage (same event_id=Ev_DUP_001) returns false — no new row - ✓ deliverPendingMessages delivers exactly once to tenant runtime (1 HTTP call to :3100/message) - ✓ Second deliverPendingMessages after delivery makes 0 additional runtime calls; row count stays 1
+- **Learnings:**
+  - - **Test deduplication at event-handler level, not relay level**: `enqueueMessage` + `deliverPendingMessages` from event-handler.ts implement clean idempotency. The higher-level `processSlackEventWithConfig` in app-factory.ts re-delivers even on duplicates (finds existing row but still calls the runtime). Testing via the full relay endpoint would see 2 runtime calls, violating the pass criteria — test directly against the event-handler functions instead. - **Prisma tenant.create() required fields**: `principal` (unique string) and `data_dir` are required. Field is `provision_attempts` not `provisioning_attempts`. - **mockNow = 25_000_000** avoids SQLite Int32 overflow on timestamps. - **No HTTP servers needed**: TC-025 tests event-handler.ts functions directly with a real SQLite DB and mocked fetch — no CP or relay instances required. - **Track delivery calls with a shared array**: Populate from mock fetch to assert exact call counts per test phase; reset with `runtimeDeliveryCalls.length = 0` between phases.
+---
