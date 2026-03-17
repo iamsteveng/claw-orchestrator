@@ -304,3 +304,21 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
 - **Learnings:**
   - - **buildDockerRunArgs is not exported**: `@claw/docker-client` doesn't export an arg-builder function. The `:ro` suffix is appended internally inside `dockerRun()` via `args.push('-v', mount + ':ro')`. Simulate in tests: `const dockerArg = mount + ':ro'` and assert `endsWith(':ro')`. - **readOnlyBindMounts format**: Entries are `hostPath:containerPath` (no `:ro`). Docker-client adds `:ro` at run time, not in the options object. - **Pure unit test pattern for buildDockerRunOptions**: No Prisma, Fastify, or mocks needed — import and call directly. Runs in ~6ms.
 ---
+
+### TC-011 [PASS] auth-profiles.json bind-mount → included in docker run options
+- **Evidence:** All 3 TC-011 tests passed in 6ms (322/322 total tests). readOnlyBindMounts includes `{homedir}/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json`; simulated docker arg ends with `:ro`; env contains HOME=/home/agent, XDG_CONFIG_HOME=/home/agent/.config, XDG_CACHE_HOME=/home/agent/.cache, XDG_STATE_HOME=/home/agent/.local/state; cpus="1.0", memory="1536m", pidsLimit=256.
+- **Learnings:**
+  - - **buildDockerRunArgs is not exported**: `@claw/docker-client` does not export an arg-builder. The `:ro` suffix is appended internally inside `dockerRun()` via `args.push('-v', mount + ':ro')`. Simulate in tests: `const dockerArg = mount + ':ro'` and assert `endsWith(':ro')`. - **readOnlyBindMounts format**: Entries are `hostPath:containerPath` strings with no `:ro`. Docker-client adds `:ro` at run time. Tests should assert on the raw mount string and the simulated docker arg separately. - **Pure unit test pattern**: `buildDockerRunOptions` is a pure function — no Prisma, Fastify app, or docker mocking needed. Just import and call. Runs in ~6ms.
+---
+
+### TC-012 [PASS] AGENTS.md pre-seeded correctly in tenant workspace
+- All three merge scenarios handled correctly by `seedWorkspace` in `apps/control-plane/src/seed-workspace.ts`
+- Scenario 1 (file missing): AGENTS.md copied from templates with `## Task Execution` section present
+- Scenario 2 (section already present): AGENTS.md left byte-for-byte identical
+- Scenario 3 (file exists, section missing): `## Task Execution` appended after existing content
+- Test used real `templates/workspace/` dir (no mock templates needed — real templates already have AGENTS.md)
+- **Learnings:**
+  - `seedWorkspace` is a pure unit-testable function — no HTTP, no DB, no Docker required
+  - Real template dir at `templates/workspace/AGENTS.md` can be used directly via `import.meta.url` path resolution
+  - The unit tests in `apps/control-plane/src/seed-workspace.test.ts` already cover the same logic; the integration test added here just uses the real templates dir to verify they are correctly structured
+---
