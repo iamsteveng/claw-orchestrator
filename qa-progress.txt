@@ -451,3 +451,25 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **Test schemas directly, not config singletons**: The config modules (`slack-relay.ts`, `control-plane.ts`) are module-level singletons. To test fast-failure, call the exported Zod schema's `.parse()` directly with a manipulated env object. This is the pattern used in `packages/shared-config/src/config.test.ts`.
   - **Restore env vars in afterEach**: Mutating `process.env` requires cleanup in `afterEach` to avoid polluting parallel test workers.
 ---
+
+### TC-017 [PASS] Config validation → missing env var causes fast failure
+- **Evidence:** ✓ tests/unit/tc-017.test.ts (3 tests) 18ms ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError ✓ TC-017: ZodError message identifies the missing field name Full suite: 363/364 tests passed (1 pre-existing TC-015 failure unrelated to TC-017). Fast failure confirmed: Zod throws ZodError with `issues[].path[0]` identifying the missing field name.
+- **Learnings:**
+  - 1. **`zod` not a workspace-root dependency**: `import { ZodError } from 'zod'` fails in `tests/unit/` because zod is only in `packages/shared-config/package.json`. Workaround: check `err.name === 'ZodError'` and cast to `{ issues: Array<{ path: unknown[] }> }` instead of importing the class. 2. **`vi.resetModules()` + dynamic import breaks zod resolution**: After `vi.resetModules()`, Vite's resolver throws `Failed to load url zod`. Never use this pattern when testing Zod-based config modules. 3. **Test schemas directly, not config singletons**: Config modules are module-level singletons parsed once at load time. To test fast-failure, call the exported Zod schema's `.parse(process.env)` directly after deleting the missing key — same pattern as `packages/shared-config/src/config.test.ts`. 4. **Linter may auto-rewrite relative imports to package aliases**: A linter changed `../../packages/shared-config/src/schemas.js` → `@claw/shared-config`, which broke resolution. Use explicit relative paths for cross-package imports from `tests/unit/`.
+---
+
+### TC-017 [PASS] Config validation → missing env var causes fast failure
+- **Evidence:** All 3 TC-017 tests passed in 22ms: - ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError (field in issues) - ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError (field in issues) - ✓ TC-017: ZodError message identifies the missing field name Full suite: 53 files, 364 tests, all passed.
+- **Learnings:**
+  - 1. **`zod` is not a workspace-root dependency**: `import { ZodError } from 'zod'` fails in `tests/unit/` because zod lives in `packages/shared-config/node_modules`. Use `err.name === 'ZodError'` + `err.issues` shape check instead. 2. **`vi.resetModules()` + dynamic import breaks zod resolution**: After `vi.resetModules()`, Vite fails with `Failed to load url zod`. Never use this pattern for Zod-based config modules in this codebase. The vitest-setup.ts comment says this pattern works, but it doesn't in practice. 3. **Test schemas directly, not config singletons**: The config modules are module-level singletons. To test fast-failure, call the exported Zod schema's `.parse(process.env)` directly after deleting the required env var. Same pattern as `packages/shared-config/src/config.test.ts`. 4. **Import via `@claw/shared-config` package name** (pointing to dist files), not via relative source path `../../packages/shared-config/src/schemas.js`, to avoid Vite URL resolution errors for transitive deps like zod. 5. **Always restore env vars in `afterEach`**: Mutating `process.env` requires cleanup to avoid polluting parallel test workers.
+---
+
+### TC-018 [PASS] Tenant ID computation → sha256(team:user).slice(0,16)
+- All 5 TC-018 tests passed in 8ms (369/369 total tests across 54 files)
+- `computeTenantId` is exported from `apps/slack-relay/src/index.ts` and can be imported directly in `tests/unit/` via relative path
+- **Learnings:**
+  - **`computeTenantId` is exported from slack-relay**: The function lives in `apps/slack-relay/src/index.ts` and is already exported. Import it with `import { computeTenantId } from '../../apps/slack-relay/src/index.js'`.
+  - **No need to test via the provision function**: `computeTenantId` is private in `apps/control-plane/src/provision.ts` but public in `apps/slack-relay/src/index.ts`. Use the relay's export for unit tests.
+  - **Node.js built-in crypto works directly**: No need for any test utilities — just `import { createHash } from 'node:crypto'` to compute the expected value inline.
+  - **Algorithm**: `sha256(teamId + ':' + userId)` as hex string, then `.slice(0, 16)` → always 16 lowercase hex chars.
+---
