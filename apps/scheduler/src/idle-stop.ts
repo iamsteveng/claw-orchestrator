@@ -37,6 +37,7 @@ export async function stopIdleTenants(
       const res = await fetchFn(`${controlPlaneUrl}/v1/tenants/${tenant.id}/stop`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ actor: 'scheduler' }),
       });
 
       if (res.ok) {
