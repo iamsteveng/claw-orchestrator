@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { schedulerConfig } from '@claw/shared-config/scheduler';
 import { stopIdleTenants } from './idle-stop.js';
 import { checkDiskQuotas, checkHostDisk } from './disk-quota.js';
+import { reapMessageQueue, sweepStaleLocks, cleanArchiveDirectories, archiveAuditLog } from './reaper.js';
 import pino from 'pino';
 
 const log = pino({ base: { service: 'scheduler' } });
@@ -9,15 +10,26 @@ const prisma = new PrismaClient();
 
 const idleStopMs = schedulerConfig.IDLE_STOP_HOURS * 60 * 60 * 1000;
 const DISK_CHECK_TICKS = Math.max(1, Math.round(5 * 60 * 1000 / schedulerConfig.SCHEDULER_INTERVAL_MS));
+// Hourly reaping: every 60 ticks at 60s interval (or every tick for simplicity in tests)
+const REAP_TICKS = Math.max(1, Math.round(60 * 60 * 1000 / schedulerConfig.SCHEDULER_INTERVAL_MS));
 let tickCount = 0;
 
 async function runJobs(): Promise<void> {
+  // Stale lock sweep runs on every tick
+  await sweepStaleLocks(prisma, log);
+
   await stopIdleTenants(prisma, schedulerConfig.CONTROL_PLANE_URL, idleStopMs, log);
 
   tickCount++;
   if (tickCount % DISK_CHECK_TICKS === 0) {
     await checkDiskQuotas(prisma, schedulerConfig.SLACK_BOT_TOKEN, log);
     await checkHostDisk(prisma, schedulerConfig.DATA_MOUNT, log);
+  }
+
+  if (tickCount % REAP_TICKS === 0) {
+    await reapMessageQueue(prisma, log);
+    await cleanArchiveDirectories(schedulerConfig.DATA_MOUNT, log);
+    await archiveAuditLog(prisma, schedulerConfig.DATA_MOUNT, log);
   }
 }
 
