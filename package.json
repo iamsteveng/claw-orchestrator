@@ -6,6 +6,7 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
+    "test:integration": "vitest run tests/integration",
     "dev": "pnpm -r --parallel dev",
     "prisma": "prisma"
   },

@@ -569,7 +569,8 @@ describe('processSlackEvent — US-026: interim message and 4-min timeout', () =
     // Capture all setTimeout calls to find the 15s interim timer
     const timerCallbacks = new Map<number, () => void>();
     const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(
-      (fn: (...args: unknown[]) => unknown, delay?: number) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (fn: (...args: any[]) => any, delay?: number) => {
         const id = Math.random();
         timerCallbacks.set(delay ?? 0, fn as () => void);
         return id as unknown as ReturnType<typeof setTimeout>;
