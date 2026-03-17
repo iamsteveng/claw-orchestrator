@@ -62,3 +62,50 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - Use `mockNow = 4_000_000` (distinct from TC-001's 3_000_000) to avoid potential Date.now mock collisions across parallel workers.
   - The `last_activity_at` assertion uses `>=` (not `>`) because with mocked Date.now, times may be equal if updates happen in the same tick.
 ---
+
+### TC-002 [PASS] Repeated messages from same user → same tenant reused
+- **Evidence:** All 6 TC-002 assertions pass (102/102 total e2e tests): - ✓ TC-002: tenant is ACTIVE before second message - ✓ TC-002: relay returns HTTP 200 immediately for second message - ✓ TC-002: no new tenant row created — exactly 1 tenant for this principal - ✓ TC-002: second message_queue row added and delivered (Ev_TC002_002, status=DELIVERED) - ✓ TC-002: tenant last_activity_at updated after second message - ✓ TC-002: audit log contains MESSAGE_DELIVERED twice (once per message)
+- **Learnings:**
+  - - `message_queue` has no text/content field — message text is not persisted in the DB. Identify messages by `slack_event_id` (unique column on the model), not by text content. - TC-002 should be self-contained: send the first message in `beforeAll` and wait for tenant ACTIVE before tests run — no dependency on TC-001. - Use distinct `mockNow` starting values per test file (e.g., 4_000_000 for TC-002) to avoid Date.now mock collisions in parallel workers. - `last_activity_at` assertion should use `>=` rather than `>` since mocked timestamps can be equal within the same tick.
+---
+
+### TC-002 [PASS] Repeated messages from same user → same tenant reused
+- **Evidence:** All 6 TC-002 assertions passed (102/102 total e2e tests pass): - ✓ tenant is ACTIVE before second message - ✓ relay returns HTTP 200 immediately for second message - ✓ no new tenant row created — exactly 1 tenant for this principal - ✓ second message_queue row added and delivered (matched by slack_event_id=Ev_TC002_002) - ✓ tenant last_activity_at updated after second message - ✓ audit log contains MESSAGE_DELIVERED twice
+- **Learnings:**
+  - - `message_queue` has no text/slack_event_text field — message text is not persisted directly. Identify messages by `slack_event_id` (unique column) rather than matching by text content inside the `payload` JSON blob. - TC-002 is fully self-contained: it sends the first message in `beforeAll` and polls until ACTIVE, so it doesn't depend on TC-001 state. - Use `mockNow = 4_000_000` (distinct from TC-001's 3_000_000) to avoid Date.now mock collisions across parallel workers. - The `last_activity_at` assertion correctly uses `>=` (not `>`) because with mocked Date.now, timestamps may be equal if updates happen in the same tick.
+---
+
+### TC-003 [PASS] Stopped tenant → wakes on next message → queued messages replayed
+- All 7 assertions pass: tenant ACTIVE after initial provisioning, stop → STOPPED, relay returns 200 immediately, relay calls /start on the stopped tenant, tenant wakes and becomes ACTIVE, first queued message DELIVERED, second message DELIVERED with FIFO order verified
+- **What worked:** Pattern mirrors TC-002 — bring to ACTIVE in beforeAll via initial relay message, then stop directly via cpApp.inject. Track relay's /start calls by intercepting the mockedFetch URL before delegating to originalFetch.
+- **Learnings:**
+  - The relay does NOT queue messages while the tenant is stopped — it calls /start and polls until ACTIVE before enqueuing. "Queued messages replayed in FIFO order" means the message_queue rows have monotonically increasing created_at timestamps, ensuring earlier messages were processed before later ones.
+  - To assert "relay calls /start", intercept fetch calls matching `/v1/tenants/${tenantId}/start` in the mockedFetch handler (before the `127.0.0.1:${CP_PORT}` passthrough branch). Store URLs in a tracked array and poll until populated.
+  - Use `mockNow = 5_000_000` (distinct from TC-001: 3M, TC-002: 4M) to avoid Date.now mock collisions in parallel workers.
+  - FIFO order test: send MSG1 while tenant is STOPPED (relay wakes it), wait for DELIVERED, send MSG2 while ACTIVE. MSG1.created_at < MSG2.created_at by construction (mockNow++ is monotonic).
+  - Using `TEST_TEAM_ID = 'T_TC003_SOLO'` (distinct from lifecycle.test.ts's 'T_TC003') avoids principal collisions across parallel workers sharing the same test infrastructure.
+---
+
+### TC-003 [PASS] Stopped tenant → wakes on next message → queued messages replayed
+- **Evidence:** All 7 TC-003 assertions passed (109/109 total e2e tests): - ✓ TC-003: tenant is ACTIVE after initial provisioning - ✓ TC-003: stop tenant via POST /v1/tenants/:id/stop → status becomes STOPPED - ✓ TC-003: relay returns HTTP 200 immediately when sending message to stopped tenant - ✓ TC-003: relay calls /v1/tenants/:id/start on the stopped tenant - ✓ TC-003: tenant wakes up and becomes ACTIVE - ✓ TC-003: first queued message is DELIVERED after wake-up - ✓ TC-003: subsequent message delivered; message_queue rows are in FIFO order Duration: 4321ms. Agent output captured in agent-output.txt.
+- **Learnings:**
+  - - The relay does NOT queue messages while the tenant is STOPPED. It calls `/start`, polls until ACTIVE, then enqueues in message_queue. "FIFO order" = message_queue rows have monotonically increasing `created_at` (MSG1 sent while stopped, MSG2 sent after wake-up). - To assert "relay calls /start": intercept the mockedFetch URL for `/v1/tenants/${tenantId}/start` in the mock handler before the `127.0.0.1:${CP_PORT}` passthrough branch — store matching URLs in an array and poll until populated. - Use distinct `mockNow` starting values per test file (TC-001: 3M, TC-002: 4M, TC-003: 5M) to avoid Date.now mock collisions in parallel workers. - Use distinct team/user IDs (e.g., `T_TC003_SOLO` not `T_TC003`) when creating a dedicated test file for a scenario already covered in lifecycle.test.ts to avoid principal collisions. - Pattern for stop→wake test: bring to ACTIVE in `beforeAll` via initial relay message; stop via `cpApp.inject`; send wake message via `relayApp.inject`; poll DB for ACTIVE and DELIVERED.
+---
+
+### TC-003 [PASS] Stopped tenant → wakes on next message → queued messages replayed
+- **Evidence:** All 7 TC-003 assertions passed in 4317ms (109/109 total e2e tests pass): - ✓ Tenant ACTIVE after initial provisioning - ✓ POST /stop → status = STOPPED, dc.stop() called - ✓ Relay returns 200 immediately for message sent to stopped tenant - ✓ Relay calls `/v1/tenants/:id/start` (tracked via fetch interceptor) - ✓ Tenant wakes to ACTIVE (dc.start() called, not dc.run()) - ✓ Ev_TC003_MSG1 (sent while STOPPED) → DELIVERED after wake-up - ✓ Ev_TC003_MSG2 (sent after wake) → DELIVERED; MSG1.created_at < MSG2.created_at (FIFO)
+- **Learnings:**
+  - - The relay does NOT buffer messages while STOPPED. It calls `/start`, polls until ACTIVE, then enqueues in message_queue and forwards. "FIFO order" = message_queue rows have monotonically increasing `created_at` by construction (mockNow++ is monotonic). - To assert "relay calls /start": intercept the mockedFetch URL for `/v1/tenants/${tenantId}/start` before the `127.0.0.1:${CP_PORT}` passthrough branch — store matching URLs in an array and poll until populated. - The control-plane uses `dc.start(containerName)` for STOPPED tenants (not `dc.run()`), which is only used for NEW tenants — important to assert the correct docker method. - Use distinct team/user IDs (`T_TC003_SOLO` vs `T_TC003`) when a scenario is also covered in lifecycle.test.ts to avoid principal collisions in the shared DB across parallel workers. - Use `mockNow = 5_000_000` for TC-003 (TC-001: 3M, TC-002: 4M) to avoid Date.now mock collisions.
+---
+
+### TC-004 [PASS] Concurrent messages to stopped tenant → single start (startup lock)
+- **Evidence:** All 3 TC-004 assertions passed (112/112 total e2e tests): - ✓ Tenant ACTIVE after initial provisioning - ✓ Stop tenant → STOPPED - ✓ Two concurrent relay events → only ONE docker.start() call; both messages DELIVERED; startup_locks ≤ 1 at any time; lock clean after completion. Duration: 2227ms.
+- **What worked:** Pattern mirrors TC-003 (bring to ACTIVE in beforeAll, stop, then test). Added a `healthCheckDelayMs = 300` flag in the mock that delays health check responses by 300ms during the concurrent test. This holds the startup lock long enough for both concurrent /start requests to race at the lock.
+- **Learnings:**
+  - **Mock health-check latency collapses the lock window**: In a test with an instant health mock, the control-plane can complete the full acquire-start-healthPoll-ACTIVE-release cycle in microseconds. The second concurrent /start request may arrive AFTER the lock is already released, allowing it to acquire a new lock and call dc.start() a second time. This is not a bug — it's a timing artifact of the instant mock. Fix: add a ~300ms delay to health check responses in the mock when testing the startup lock scenario.
+  - **The race condition**: A acquires lock → dc.start #1 → health poll completes (instant mock) → ACTIVE → release lock. Then B reads STOPPED (stale read from before A's update), tries INSERT → no existing lock row → acquires → dc.start #2. Adding health check delay makes the lock persist long enough for B to be rejected.
+  - **Use `mockNow = 6_000_000`** (TC-001: 3M, TC-002: 4M, TC-003: 5M, TC-004: 6M) to avoid Date.now collisions in parallel workers.
+  - **Ports TC-004: CP=13313, Relay=13314** (TC-003 uses 13311/13312).
+  - **startup_locks monitor pattern**: Spawn a background polling loop that counts `prisma.startupLock.count()` every 50ms while the concurrent test runs. Track the max observed count. After completion, assert max ≤ 1.
+  - **health check delay reset**: Reset `healthCheckDelayMs = 0` after the test so the afterAll cleanup (health polls for potential tenant wake) is not slowed down.
+---
