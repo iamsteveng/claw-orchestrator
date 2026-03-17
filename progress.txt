@@ -481,6 +481,19 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
 
+## 2026-03-17 - US-035
+- What was implemented: Workspace template files with required AGENTS.md Task Execution section
+- Files changed:
+  - .env.example (added TEMPLATES_DIR documentation with development and production defaults + merge behavior comment)
+  - templates/workspace/AGENTS.md (already existed with correct content from US-008)
+  - apps/control-plane/src/seed-workspace.ts (already had merge behavior JSDoc from US-008)
+- **Learnings for future iterations:**
+  - templates/workspace/AGENTS.md already existed with correct content from US-008 implementation
+  - .env.example is the right place to document TEMPLATES_DIR with dev/prod defaults
+  - TEMPLATES_DIR Zod default is '/opt/claw-orchestrator/templates/workspace' (full workspace path)
+  - 130 total tests passing
+---
+
 ## 2026-03-17 - US-034
 - What was implemented: Tenant container message endpoint server on port 3100
 - Files changed:
