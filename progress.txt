@@ -481,6 +481,22 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
 
+## 2026-03-17 - US-036
+- What was implemented: systemd unit files for all three services with correct dependency ordering
+- Files changed:
+  - deploy/systemd/claw-control-plane.service (new)
+  - deploy/systemd/claw-slack-relay.service (new: After=claw-control-plane.service)
+  - deploy/systemd/claw-scheduler.service (new: After=claw-control-plane.service, independent of relay)
+  - deploy/scripts/install-services.sh (new: cp unit files, daemon-reload, enable all three)
+  - deploy/scripts/update.sh (new: git pull, pnpm install, pnpm build, prisma migrate deploy, systemctl restart)
+- **Learnings for future iterations:**
+  - claw-slack-relay has After=claw-control-plane.service (wait for control plane before relay starts)
+  - claw-scheduler also After=claw-control-plane.service (needs control-plane API), independent of relay
+  - All unit files: User=claw, EnvironmentFile=/opt/claw-orchestrator/.env, Restart=always, RestartSec=5
+  - scripts must be chmod +x AND have #!/bin/bash shebang
+  - 130 total tests passing
+---
+
 ## 2026-03-17 - US-035
 - What was implemented: Workspace template files with required AGENTS.md Task Execution section
 - Files changed:
