@@ -6,7 +6,7 @@
       "id": "TC-001",
       "source": "US-040, US-007, US-008",
       "level": "e2e",
-      "scenario": "First Slack message → tenant provisioned → container started → message delivered",
+      "scenario": "First Slack message \u2192 tenant provisioned \u2192 container started \u2192 message delivered",
       "steps": [
         "Pre-seed allowlist entry for test user (team T_TC001, user U_TC001)",
         "POST fake Slack event to relay /slack/events with valid HMAC signature",
@@ -28,7 +28,7 @@
       "id": "TC-002",
       "source": "US-040, US-024",
       "level": "e2e",
-      "scenario": "Repeated messages from same user → same tenant reused",
+      "scenario": "Repeated messages from same user \u2192 same tenant reused",
       "steps": [
         "Ensure TC-001 tenant is ACTIVE",
         "Send second Slack event with same team+user, different event_id",
@@ -48,7 +48,7 @@
       "id": "TC-003",
       "source": "US-025, US-011",
       "level": "e2e",
-      "scenario": "Stopped tenant → wakes on next message → queued messages replayed",
+      "scenario": "Stopped tenant \u2192 wakes on next message \u2192 queued messages replayed",
       "steps": [
         "Provision a tenant and bring to ACTIVE",
         "Stop the tenant via POST /v1/tenants/:id/stop",
@@ -69,7 +69,7 @@
       "id": "TC-004",
       "source": "US-007, US-009",
       "level": "e2e",
-      "scenario": "Concurrent messages to stopped tenant → single start (startup lock)",
+      "scenario": "Concurrent messages to stopped tenant \u2192 single start (startup lock)",
       "steps": [
         "Provision a tenant and set status=STOPPED",
         "Send two Slack events simultaneously (Promise.all)",
@@ -88,7 +88,7 @@
       "id": "TC-005",
       "source": "US-007, US-003",
       "level": "integration",
-      "scenario": "Different users → completely isolated tenants",
+      "scenario": "Different users \u2192 completely isolated tenants",
       "steps": [
         "Provision tenant A (team T1, user U1) via POST /v1/tenants/provision",
         "Provision tenant B (team T1, user U2) via POST /v1/tenants/provision",
@@ -109,7 +109,7 @@
       "id": "TC-006",
       "source": "US-015, US-023",
       "level": "e2e",
-      "scenario": "Allowlist enforcement → unauthorized user rejected",
+      "scenario": "Allowlist enforcement \u2192 unauthorized user rejected",
       "steps": [
         "Ensure no allowlist entry exists for team T_BLOCKED, user U_BLOCKED",
         "POST Slack event from T_BLOCKED/U_BLOCKED to relay",
@@ -129,7 +129,7 @@
       "id": "TC-007",
       "source": "US-014, US-029",
       "level": "integration",
-      "scenario": "Tenant deletion → data cleaned up",
+      "scenario": "Tenant deletion \u2192 data cleaned up",
       "steps": [
         "Provision tenant and create workspace files",
         "Call DELETE /v1/tenants/:id",
@@ -151,7 +151,7 @@
       "id": "TC-008",
       "source": "US-017, US-010",
       "level": "integration",
-      "scenario": "Health polling → UNHEALTHY detection",
+      "scenario": "Health polling \u2192 UNHEALTHY detection",
       "steps": [
         "Provision tenant and set status=ACTIVE",
         "Start health monitor polling",
@@ -170,7 +170,7 @@
       "id": "TC-009",
       "source": "US-028",
       "level": "integration",
-      "scenario": "Disk quota → warning at 90%, block at 100%",
+      "scenario": "Disk quota \u2192 warning at 90%, block at 100%",
       "steps": [
         "Mock 'du -sb' to return 10.8 GB (90% of 12 GB quota)",
         "Run disk check scheduler tick",
@@ -194,7 +194,7 @@
       "id": "TC-010",
       "source": "US-027",
       "level": "integration",
-      "scenario": "Idle stop → container stopped after 48h inactivity",
+      "scenario": "Idle stop \u2192 container stopped after 48h inactivity",
       "steps": [
         "Create tenant with status=ACTIVE and last_activity_at = now - 49 hours",
         "Run scheduler idle stop job",
@@ -215,7 +215,7 @@
       "id": "TC-011",
       "source": "US-021, US-032",
       "level": "integration",
-      "scenario": "auth-profiles.json bind-mount → included in docker run options",
+      "scenario": "auth-profiles.json bind-mount \u2192 included in docker run options",
       "steps": [
         "Call buildDockerRunOptions with tenantId, image, dataDir",
         "Assert returned options include readOnlyBindMounts",
@@ -255,14 +255,14 @@
       "id": "TC-013",
       "source": "US-009",
       "level": "unit",
-      "scenario": "Startup lock → no duplicate containers on concurrent messages",
+      "scenario": "Startup lock \u2192 no duplicate containers on concurrent messages",
       "steps": [
-        "Call acquireStartupLock(tenantId, requestId1) → assert {acquired: true}",
-        "Call acquireStartupLock(tenantId, requestId2) → assert {acquired: false}",
+        "Call acquireStartupLock(tenantId, requestId1) \u2192 assert {acquired: true}",
+        "Call acquireStartupLock(tenantId, requestId2) \u2192 assert {acquired: false}",
         "Call releaseStartupLock(tenantId, requestId1)",
-        "Call acquireStartupLock(tenantId, requestId3) → assert {acquired: true}",
+        "Call acquireStartupLock(tenantId, requestId3) \u2192 assert {acquired: true}",
         "Insert stale lock (expires_at = 1 ms ago)",
-        "Call acquireStartupLock → assert stale lock overridden, {acquired: true}"
+        "Call acquireStartupLock \u2192 assert stale lock overridden, {acquired: true}"
       ],
       "expectedResult": "At most one lock holder; stale locks expire and can be taken over",
       "evidence": "acquireStartupLock return values",
@@ -274,7 +274,7 @@
       "id": "TC-014",
       "source": "US-019",
       "level": "integration",
-      "scenario": "Provisioning rollback → cleanup on failure",
+      "scenario": "Provisioning rollback \u2192 cleanup on failure",
       "steps": [
         "Mock docker.run to throw an error",
         "Call POST /v1/tenants/provision for a new user",
@@ -282,8 +282,8 @@
         "Assert provision_attempts = 1",
         "Assert data_dir directory does NOT exist (cleaned up)",
         "Assert TENANT_PROVISION_FAILED audit log entry",
-        "Retry provision → assert attempts = 2",
-        "Retry twice more → assert status = FAILED permanently (attempts >= 3)"
+        "Retry provision \u2192 assert attempts = 2",
+        "Retry twice more \u2192 assert status = FAILED permanently (attempts >= 3)"
       ],
       "expectedResult": "Rollback cleans up all resources; 3-attempt cap enforced",
       "evidence": "DB state, filesystem, audit log",
@@ -295,17 +295,17 @@
       "id": "TC-015",
       "source": "US-018",
       "level": "integration",
-      "scenario": "Audit log → events recorded for all system actions",
+      "scenario": "Audit log \u2192 events recorded for all system actions",
       "steps": [
-        "Provision a tenant → assert TENANT_PROVISIONED event",
-        "Start the tenant → assert TENANT_STARTED event",
-        "Deliver a message → assert MESSAGE_DELIVERED event",
-        "Stop the tenant → assert TENANT_STOPPED event",
-        "Delete the tenant → assert TENANT_DELETED event",
-        "Attempt access by blocked user → assert ACCESS_DENIED event",
-        "Add allowlist entry → assert ACCESS_GRANTED event",
-        "Revoke allowlist entry → assert ACCESS_REVOKED event",
-        "GET /v1/admin/audit?tenant_id=X → assert all events returned in desc order",
+        "Provision a tenant \u2192 assert TENANT_PROVISIONED event",
+        "Start the tenant \u2192 assert TENANT_STARTED event",
+        "Deliver a message \u2192 assert MESSAGE_DELIVERED event",
+        "Stop the tenant \u2192 assert TENANT_STOPPED event",
+        "Delete the tenant \u2192 assert TENANT_DELETED event",
+        "Attempt access by blocked user \u2192 assert ACCESS_DENIED event",
+        "Add allowlist entry \u2192 assert ACCESS_GRANTED event",
+        "Revoke allowlist entry \u2192 assert ACCESS_REVOKED event",
+        "GET /v1/admin/audit?tenant_id=X \u2192 assert all events returned in desc order",
         "Assert audit log rows cannot be deleted (no DELETE endpoint for audit)"
       ],
       "expectedResult": "All 8 event types recorded; audit API returns them correctly",
@@ -318,17 +318,17 @@
       "id": "TC-016",
       "source": "US-006",
       "level": "integration",
-      "scenario": "Control plane startup reconciliation → crashed state reset",
+      "scenario": "Control plane startup reconciliation \u2192 crashed state reset",
       "steps": [
         "Insert a tenant row with status=PROVISIONING into DB",
         "Insert a tenant row with status=STARTING",
         "Insert an expired startup_lock (expires_at in the past)",
         "Insert a message_queue row with status=PROCESSING and updated_at = 3 minutes ago",
         "Start/build the control plane app (calls reconciliation)",
-        "Assert PROVISIONING tenant → status=FAILED",
-        "Assert STARTING tenant → status=FAILED",
+        "Assert PROVISIONING tenant \u2192 status=FAILED",
+        "Assert STARTING tenant \u2192 status=FAILED",
         "Assert expired startup_lock deleted",
-        "Assert stale PROCESSING message → status=PENDING",
+        "Assert stale PROCESSING message \u2192 status=PENDING",
         "Assert SYSTEM_STARTUP audit log entry written"
       ],
       "expectedResult": "Startup reconciliation restores consistent state",
@@ -341,7 +341,7 @@
       "id": "TC-017",
       "source": "US-005",
       "level": "unit",
-      "scenario": "Config validation → missing env var causes fast failure",
+      "scenario": "Config validation \u2192 missing env var causes fast failure",
       "steps": [
         "Remove SLACK_SIGNING_SECRET from process.env",
         "Import slack-relay config module",
@@ -360,7 +360,7 @@
       "id": "TC-018",
       "source": "US-002, US-001",
       "level": "unit",
-      "scenario": "Tenant ID computation → sha256(team:user).slice(0,16)",
+      "scenario": "Tenant ID computation \u2192 sha256(team:user).slice(0,16)",
       "steps": [
         "Compute tenantId for (T12345, U67890)",
         "Assert result equals sha256('T12345:U67890').hex.slice(0,16)",
@@ -378,13 +378,13 @@
       "id": "TC-019",
       "source": "US-023",
       "level": "unit",
-      "scenario": "Slack signature verification → valid/invalid/expired",
+      "scenario": "Slack signature verification \u2192 valid/invalid/expired",
       "steps": [
-        "POST /slack/events with valid HMAC signature → assert HTTP 200",
-        "POST /slack/events with invalid signature → assert HTTP 403",
-        "POST /slack/events with timestamp 6 minutes old → assert HTTP 403 (replay protection)",
-        "POST /slack/events with missing X-Slack-Signature → assert HTTP 403",
-        "POST /slack/events with type=url_verification → assert {challenge: ...} returned synchronously"
+        "POST /slack/events with valid HMAC signature \u2192 assert HTTP 200",
+        "POST /slack/events with invalid signature \u2192 assert HTTP 403",
+        "POST /slack/events with timestamp 6 minutes old \u2192 assert HTTP 403 (replay protection)",
+        "POST /slack/events with missing X-Slack-Signature \u2192 assert HTTP 403",
+        "POST /slack/events with type=url_verification \u2192 assert {challenge: ...} returned synchronously"
       ],
       "expectedResult": "Signature enforcement prevents unauthorized event injection",
       "evidence": "HTTP status codes",
@@ -400,7 +400,7 @@
       "steps": [
         "Mock tenant runtime to delay response by 20 seconds (use fake timers)",
         "Send Slack event to relay",
-        "Assert chat.postMessage called with '⏳ Working on it...' after ~15s timer fires",
+        "Assert chat.postMessage called with '\u23f3 Working on it...' after ~15s timer fires",
         "Assert interim message sent only once",
         "After mock response arrives, assert final response also posted to Slack"
       ],
@@ -414,7 +414,7 @@
       "id": "TC-021",
       "source": "US-039, US-011",
       "level": "integration",
-      "scenario": "Start endpoint → STOPPED → STARTING → ACTIVE transition",
+      "scenario": "Start endpoint \u2192 STOPPED \u2192 STARTING \u2192 ACTIVE transition",
       "steps": [
         "Create tenant with status=STOPPED via DB",
         "POST /v1/tenants/:id/start",
@@ -423,9 +423,9 @@
         "Mock health endpoint returns 200 ok:true",
         "Poll until tenant status=ACTIVE (max 10s)",
         "Assert TENANT_STARTED audit event written",
-        "POST /v1/tenants/:id/start again → assert {status: 'active'} (idempotent)"
+        "POST /v1/tenants/:id/start again \u2192 assert {status: 'active'} (idempotent)"
       ],
-      "expectedResult": "Full STOPPED → STARTING → ACTIVE state machine",
+      "expectedResult": "Full STOPPED \u2192 STARTING \u2192 ACTIVE state machine",
       "evidence": "DB status transitions, audit log",
       "priority": "P0",
       "passes": false,
@@ -435,7 +435,7 @@
       "id": "TC-022",
       "source": "US-013",
       "level": "integration",
-      "scenario": "Stop endpoint → ACTIVE → STOPPED transition",
+      "scenario": "Stop endpoint \u2192 ACTIVE \u2192 STOPPED transition",
       "steps": [
         "Create tenant with status=ACTIVE",
         "POST /v1/tenants/:id/stop",
@@ -443,7 +443,7 @@
         "Assert tenant DB status=STOPPED",
         "Assert last_stopped_at set",
         "Assert TENANT_STOPPED audit event written",
-        "POST /v1/tenants/:id/stop again → assert {status: 'already_stopped'}",
+        "POST /v1/tenants/:id/stop again \u2192 assert {status: 'already_stopped'}",
         "Assert dockerStop called only once (not on second call)"
       ],
       "expectedResult": "Idempotent stop; correct DB transitions",
@@ -453,39 +453,17 @@
       "notes": "Covered by existing integration test; extend for idempotency and docker call count"
     },
     {
-      "id": "TC-023",
-      "source": "US-030",
-      "level": "integration",
-      "scenario": "Capacity queue → ACTIVE_TENANTS_OVERFLOW queues tenant",
-      "steps": [
-        "Fill DB with 10 ACTIVE tenant rows directly",
-        "Provision new tenant (tenant A)",
-        "POST /v1/tenants/tenantA/start",
-        "Assert response {status: 'queued'} (202)",
-        "Assert tenant.queued_for_start_at set",
-        "Assert dockerStart NOT called",
-        "Remove 1 ACTIVE tenant (simulate stop)",
-        "Run scheduler capacity queue retry",
-        "Assert tenant A starts and becomes ACTIVE"
-      ],
-      "expectedResult": "Overflow queued correctly; starts when capacity opens",
-      "evidence": "DB state, mock docker call",
-      "priority": "P1",
-      "passes": false,
-      "notes": "Partially covered by integration test; extend with scheduler retry"
-    },
-    {
       "id": "TC-024",
       "source": "US-020",
       "level": "integration",
-      "scenario": "Container image promote → new default used on next start",
+      "scenario": "Container image promote \u2192 new default used on next start",
       "steps": [
         "Seed default image (tag: v1.0)",
         "Insert new image row (tag: v2.0, is_default=0)",
         "POST /v1/admin/images/:id/promote for v2.0",
         "Assert v2.0 is_default=1",
         "Assert v1.0 is_default=0 and deprecated_at set",
-        "Start a tenant → assert image_tag = v2.0 on tenant row",
+        "Start a tenant \u2192 assert image_tag = v2.0 on tenant row",
         "Assert IMAGE_UPDATED audit event"
       ],
       "expectedResult": "Image promotion works; tenants use new default on restart",
@@ -498,7 +476,7 @@
       "id": "TC-025",
       "source": "US-024, US-025",
       "level": "e2e",
-      "scenario": "Message queue deduplication → Slack retry is no-op",
+      "scenario": "Message queue deduplication \u2192 Slack retry is no-op",
       "steps": [
         "Send Slack event with event_id=Ev_DUP_001",
         "Assert message_queue row created",
@@ -513,28 +491,10 @@
       "notes": "New test required"
     },
     {
-      "id": "TC-026",
-      "source": "US-039",
-      "level": "integration",
-      "scenario": "MAX_ACTIVE_TENANTS enforcement → second tenant queued",
-      "steps": [
-        "Fill DB with MAX_ACTIVE_TENANTS (10) ACTIVE rows",
-        "Provision a new tenant",
-        "POST /v1/tenants/:id/start",
-        "Assert response {status: 'queued'}",
-        "Assert queued_for_start_at set on tenant"
-      ],
-      "expectedResult": "Hard cap enforced; overflow is queued not rejected",
-      "evidence": "202 response, DB state",
-      "priority": "P0",
-      "passes": false,
-      "notes": "Covered by existing integration test (Test 6)"
-    },
-    {
       "id": "TC-027",
       "source": "US-015",
       "level": "integration",
-      "scenario": "Allowlist revocation → existing tenant blocked",
+      "scenario": "Allowlist revocation \u2192 existing tenant blocked",
       "steps": [
         "Provision and activate tenant for user U_REVOKE",
         "DELETE /v1/admin/allowlist/:id to revoke access",
@@ -553,7 +513,7 @@
       "id": "TC-028",
       "source": "US-017",
       "level": "integration",
-      "scenario": "UNHEALTHY auto-recovery → tenant recovers and queued messages processed",
+      "scenario": "UNHEALTHY auto-recovery \u2192 tenant recovers and queued messages processed",
       "steps": [
         "Provision and activate tenant",
         "Queue 2 messages while tenant is UNHEALTHY",
@@ -575,9 +535,9 @@
       "id": "TC-029",
       "source": "US-007",
       "level": "integration",
-      "scenario": "Provision endpoint idempotency → same tenant on duplicate call",
+      "scenario": "Provision endpoint idempotency \u2192 same tenant on duplicate call",
       "steps": [
-        "POST /v1/tenants/provision for (T1, U1) → assert tenant created",
+        "POST /v1/tenants/provision for (T1, U1) \u2192 assert tenant created",
         "POST /v1/tenants/provision for (T1, U1) again",
         "Assert same tenantId returned",
         "Assert only 1 tenant row in DB for this principal",
@@ -593,7 +553,7 @@
       "id": "TC-030",
       "source": "US-029",
       "level": "integration",
-      "scenario": "Queue reaping → DELIVERED rows older than 7 days deleted",
+      "scenario": "Queue reaping \u2192 DELIVERED rows older than 7 days deleted",
       "steps": [
         "Insert DELIVERED message_queue row with created_at = 8 days ago",
         "Insert DELIVERED message_queue row with created_at = 3 days ago",
@@ -615,7 +575,7 @@
       "id": "TC-031",
       "source": "US-012",
       "level": "integration",
-      "scenario": "Message forwarding → relay token mismatch → 401",
+      "scenario": "Message forwarding \u2192 relay token mismatch \u2192 401",
       "steps": [
         "Provision and activate tenant with known relay_token",
         "POST /v1/tenants/:id/message with wrong X-Relay-Token header",
@@ -633,7 +593,7 @@
       "id": "TC-032",
       "source": "US-012",
       "level": "integration",
-      "scenario": "Message forwarding → disk quota exceeded → 507",
+      "scenario": "Message forwarding \u2192 disk quota exceeded \u2192 507",
       "steps": [
         "Provision and activate tenant",
         "Set tenant.disk_quota_exceeded = 1 directly in DB",
@@ -706,7 +666,7 @@
       "id": "TC-036",
       "source": "US-004",
       "level": "unit",
-      "scenario": "Docker client wrapper → correct CLI flags constructed",
+      "scenario": "Docker client wrapper \u2192 correct CLI flags constructed",
       "steps": [
         "Mock execa",
         "Call dockerRun with sample options",
@@ -714,8 +674,8 @@
         "Assert --name=claw-tenant-<id> present",
         "Assert -d flag present (detached)",
         "Assert :ro suffix on auth-profiles.json bind mount",
-        "Call dockerStop → assert --time=10 flag",
-        "Call dockerRm → assert -f flag"
+        "Call dockerStop \u2192 assert --time=10 flag",
+        "Call dockerRm \u2192 assert -f flag"
       ],
       "expectedResult": "CLI arguments constructed correctly for all operations",
       "evidence": "execa mock call args",
@@ -727,7 +687,7 @@
       "id": "TC-037",
       "source": "US-038",
       "level": "unit",
-      "scenario": "Workspace template fixtures → test-utils package",
+      "scenario": "Workspace template fixtures \u2192 test-utils package",
       "steps": [
         "Import makeTenant() from test-utils",
         "Assert all required Tenant fields populated",

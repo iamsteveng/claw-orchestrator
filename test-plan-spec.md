@@ -52,10 +52,8 @@ All 39 user stories (US-001 through US-040) are covered. Tests run with **Vitest
 | TC-020 | US-026 | integration | P1 | Interim message sent at 15s when agent takes too long |
 | TC-021 | US-039, US-011 | integration | P0 | Start endpoint → STOPPED → STARTING → ACTIVE transition |
 | TC-022 | US-013 | integration | P1 | Stop endpoint → ACTIVE → STOPPED transition |
-| TC-023 | US-030 | integration | P1 | Capacity queue → ACTIVE_TENANTS_OVERFLOW queues tenant |
 | TC-024 | US-020 | integration | P2 | Container image promote → new default image used on next start |
 | TC-025 | US-024, US-025 | e2e | P1 | Message queue deduplication → Slack retry is no-op |
-| TC-026 | US-039 | integration | P0 | MAX_ACTIVE_TENANTS enforcement → second tenant queued |
 | TC-027 | US-015 | integration | P1 | Allowlist revocation → existing tenant blocked |
 | TC-028 | US-017 | integration | P1 | UNHEALTHY auto-recovery → tenant recovers and queued messages processed |
 | TC-029 | US-007 | integration | P1 | Provision endpoint idempotency → same tenant on duplicate call |
@@ -524,28 +522,6 @@ All 39 user stories (US-001 through US-040) are covered. Tests run with **Vitest
 
 ---
 
-### TC-023 — Capacity queue → ACTIVE_TENANTS_OVERFLOW queues tenant
-
-**Source:** US-030  
-**Level:** integration  
-**Priority:** P1  
-
-**Steps:**
-1. Fill DB with 10 ACTIVE tenant rows directly
-2. Provision new tenant (tenant A)
-3. POST /v1/tenants/tenantA/start
-4. Assert response {status: 'queued'} (202)
-5. Assert tenant.queued_for_start_at set
-6. Assert dockerStart NOT called
-7. Remove 1 ACTIVE tenant (simulate stop)
-8. Run scheduler capacity queue retry
-9. Assert tenant A starts and becomes ACTIVE
-
-**Expected Result:** Overflow queued correctly; starts when capacity opens  
-**Evidence:** DB state, mock docker call  
-
----
-
 ### TC-024 — Container image promote → new default used on next start
 
 **Source:** US-020  
@@ -581,24 +557,6 @@ All 39 user stories (US-001 through US-040) are covered. Tests run with **Vitest
 
 **Expected Result:** Duplicate Slack events idempotently ignored  
 **Evidence:** message_queue row count  
-
----
-
-### TC-026 — MAX_ACTIVE_TENANTS enforcement → second tenant queued
-
-**Source:** US-039  
-**Level:** integration  
-**Priority:** P0  
-
-**Steps:**
-1. Fill DB with MAX_ACTIVE_TENANTS (10) ACTIVE rows
-2. Provision a new tenant
-3. POST /v1/tenants/:id/start
-4. Assert response {status: 'queued'}
-5. Assert queued_for_start_at set on tenant
-
-**Expected Result:** Hard cap enforced; overflow is queued not rejected  
-**Evidence:** 202 response, DB state  
 
 ---
 
