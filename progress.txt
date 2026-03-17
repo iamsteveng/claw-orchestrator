@@ -467,3 +467,16 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - No credentials (ANTHROPIC_API_KEY etc.) embedded — injected at runtime via bind-mounted auth-profiles.json
   - Multi-arch buildx command: `docker buildx build --platform linux/arm64,linux/amd64 --build-arg IMAGE_TAG=sha-<7char> -t claw-tenant:sha-<7char> docker/tenant-image/`
 ---
+
+## 2026-03-17 - US-032
+- What was implemented: Tenant Docker image entrypoint script with auth-profiles.json verification and container startup
+- Files changed:
+  - docker/tenant-image/entrypoint.sh (new: bash entrypoint with auth check, dir creation, .ssh perms, env vars, background servers, exec openclaw)
+  - docker/tenant-image/Dockerfile (added COPY + chmod for entrypoint.sh, EXPOSE 3100 3101, ENTRYPOINT directive)
+- **Learnings for future iterations:**
+  - Entrypoint runs as agent user (non-root); set -euo pipefail for safety
+  - auth-profiles.json check at /root/.openclaw/agents/main/agent/auth-profiles.json - logs ERROR but continues (does not exit)
+  - Health server (port 3101) and message server (port 3100) are started conditionally (checked with [ -f /usr/local/lib/claw-*.js ]) for forward-compatibility with US-033/US-034
+  - ENTRYPOINT uses exec form ["..."] so signals are passed directly to openclaw process
+  - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
+---
