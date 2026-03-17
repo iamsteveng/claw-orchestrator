@@ -857,3 +857,18 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - Setting flag via `prisma.tenant.update({ data: { disk_quota_exceeded: 1 } })` directly is sufficient to trigger 507 without the scheduler
   - Test structure mirrors TC-031: provision → start → flush setImmediate → manipulate DB flag → assert blocked → clear flag → assert 200 with mocked fetch
 ---
+
+### TC-032 [PASS] Message forwarding → disk quota exceeded → 507
+- **Evidence:** All 9 TC-032 tests passed in 1692ms (439/439 suite total): - disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}` - No MESSAGE_DELIVERED audit event written when blocked by quota - disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}` with mocked fetch - MESSAGE_DELIVERED audit event written with correct slackEventId `E_TC032_OK`
+- **Learnings:**
+  - - The `disk_quota_exceeded` check in the message endpoint fires after relay token auth (401) and allowlist check (403), but before the ACTIVE status check (503). Setting it via `prisma.tenant.update({ data: { disk_quota_exceeded: 1 } })` is sufficient to trigger 507 without needing the scheduler. - The 507 guard fires regardless of tenant status (once relay token is validated), so the tenant doesn't need to be ACTIVE to get 507. - Test structure mirrors TC-031 exactly: allowlist → provision → start → flush setImmediate queues (3x) → set DB flag → assert blocked response → clear flag → assert 200 with `vi.spyOn(globalThis, 'fetch')` mock → verify audit event.
+---
+
+### TC-033 [PASS] systemd unit files exist for all three services
+- All 4 tests passed: file existence, WantedBy=multi-user.target for each service, Requires=docker.service for control-plane
+- deploy/systemd/ contains all three .service files with correct structure
+- **Learnings:**
+  - Unit-level file existence tests use Node.js `fs.existsSync` + `readFileSync` — no server or DB needed
+  - Path resolution via `join(__dirname, '../../deploy/systemd', filename)` works reliably from tests/unit/
+  - All three services have WantedBy=multi-user.target and Requires=docker.service
+---

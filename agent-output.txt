@@ -12,15 +12,15 @@ For any task that is complex enough to take more than ~2 minutes:
 - When it's done, report back with a concise summary of what was done
 
 
-## TC-032: Message forwarding → disk quota exceeded → 507
+TC-033 Agent Output Evidence
+============================
+Test: systemd unit files exist for all three services
+Result: PASS (4/4 tests)
 
-**Status:** PASS
-**Run Date:** 2026-03-17
+Files verified:
+- deploy/systemd/claw-control-plane.service — exists, WantedBy=multi-user.target, Requires=docker.service
+- deploy/systemd/claw-slack-relay.service   — exists, WantedBy=multi-user.target
+- deploy/systemd/claw-scheduler.service     — exists, WantedBy=multi-user.target
 
-**Test Results:** 9/9 tests passed in 1692ms (439/439 suite)
-
-**Evidence:**
-- disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}`
-- No MESSAGE_DELIVERED audit event written when blocked by quota
-- disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}`
-- MESSAGE_DELIVERED audit event written with correct slackEventId `E_TC032_OK`
+Test output: ✓ tests/unit/tc-033.test.ts (4 tests) 5ms
+Suite total: 443 passed (443), 67 files
