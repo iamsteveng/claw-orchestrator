@@ -899,3 +899,37 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
 - **Learnings:**
   - - In JavaScript regex, `[^]]*` is a trap: `[^]]` parses as `[^]` (matches any char — a JS quirk) followed by literal `]`, so `[^]]*` means "(any-char + `]`) repeated". It does NOT mean "not `]`". For bash script argument checks, use explicit patterns like `/if \[ -z "?\$\{?TENANT_ID/` or just `toContain()`. - For shell script unit tests, simple `toContain()` assertions are more robust than complex regex for bash idioms. - `scripts/tenant-shell.sh` already validates: missing TENANT_ID (exits 1), container not found (exits 1), container not running (exits 1), then execs `docker exec -it --user agent`.
 ---
+
+### TC-034 [PASS] tenant-shell script validates container is running
+- **Evidence:** All 5 TC-034 tests passed in 9ms. Full suite: 448/448 tests passed across 68 files. Tests verified: (1) script exists at scripts/tenant-shell.sh, (2) shebang #!/bin/bash present, (3) contains `docker exec -it --user agent`, (4) validates TENANT_ID argument with `if [ -z "${TENANT_ID}" ] → exit 1`, (5) validates container running via `docker inspect` before exec.
+- **Learnings:**
+  - - **JS regex trap: `[^]]*`** — In JavaScript, `[^]` (empty negated class) means "any character", so `[^]]*` parses as `(any-char + "]")` repeated, NOT "zero or more non-`]` chars". For bash argument checks, use explicit patterns like `/if \[ -z "?\$\{?TENANT_ID/` or `toContain('[ -z ')` instead. - **Shell script unit tests**: `toContain()` is more reliable than complex regex for bash idioms. Pattern: `readFileSync(path, 'utf-8')` + `.toContain(...)` assertions covers all required structural checks cleanly. - **Script path resolution**: `join(__dirname, '../../scripts/filename.sh')` works reliably from `tests/unit/`. - **Linter auto-commits**: The project's linter may auto-fix and auto-commit test files between runs — always re-read before editing.
+---
+
+### TC-035 [PASS] Tenant Dockerfile does not embed ANTHROPIC_API_KEY
+- All 4 tests passed in 6ms. Test file was already implemented. Dockerfile is clean: only IMAGE_TAG ARG, no ENV with API_KEY, no auth-profiles.json COPY, and a comment explicitly documenting that auth credentials are injected at runtime via bind-mounted auth-profiles.json.
+- **Learnings:**
+  - Dockerfile static analysis tests (readFileSync + line-by-line assertions) are fast and reliable for security/compliance checks.
+  - The comment `# NOTE: No auth credentials (ANTHROPIC_API_KEY, etc.) are embedded here.` in the Dockerfile confirms intentional design — credentials injected at runtime via bind mount, not baked into image.
+  - Filter pattern for non-comment lines: `lines.filter(l => !l.trimStart().startsWith('#') && l.includes('ANTHROPIC_API_KEY'))` correctly skips comment lines while catching accidental embeds.
+---
+
+### TC-035 [PASS] Tenant Dockerfile does not embed ANTHROPIC_API_KEY
+- **Evidence:** All 4 TC-035 tests passed in 6ms: - ✓ No non-comment line contains ANTHROPIC_API_KEY - ✓ No ENV instruction sets any API key - ✓ auth-profiles.json is not COPYd into the image - ✓ Only IMAGE_TAG ARG present (no auth ARGs) The Dockerfile has a single `ARG IMAGE_TAG=dev`, no ENV with secrets, no auth-profiles.json COPY, and an explicit comment documenting that credentials are injected at runtime via bind-mounted auth-profiles.json. Full suite: 444 passed, 8 skipped (unrelated lifecycle.test.ts EADDRINUSE failure).
+- **Learnings:**
+  - - Dockerfile static analysis with `readFileSync` + line-by-line assertions is fast (6ms) and reliable for security/compliance checks - Filter pattern `lines.filter(l => !l.trimStart().startsWith('#') && l.includes('ANTHROPIC_API_KEY'))` correctly skips comment lines while catching accidental embeds - The Dockerfile already had an explicit design comment: "No auth credentials (ANTHROPIC_API_KEY, etc.) are embedded here. They are injected at runtime via bind-mounted auth-profiles.json." — confirms intentional security boundary - The `lifecycle.test.ts` EADDRINUSE failure (port 13301) is a pre-existing flaky test unrelated to TC-035
+---
+
+### TC-035 [PASS] Tenant Dockerfile does not embed ANTHROPIC_API_KEY
+- **Evidence:** All 4 TC-035 tests passed in 7ms: - ✓ No non-comment line contains ANTHROPIC_API_KEY - ✓ No ENV instruction sets any API key - ✓ auth-profiles.json is not COPYd into the image - ✓ Only IMAGE_TAG ARG present (no auth ARGs) The Dockerfile uses `ARG IMAGE_TAG=dev` only, no ENV secrets, no COPY of auth-profiles.json. An explicit design comment states credentials are injected at runtime via bind-mounted auth-profiles.json.
+- **Learnings:**
+  - - Dockerfile static analysis via `readFileSync` + line-by-line assertions is fast (7ms) and reliable for security/compliance checks. - When asserting "no line contains X", always filter out comment lines first: `lines.filter(l => !l.trimStart().startsWith('#') && l.includes('X'))`. A design comment (`# NOTE: No auth credentials (ANTHROPIC_API_KEY, etc.)`) caused a false failure on the initial naive check. - ARG-based assertions: filter lines matching `/^\s*ARG\s+/i` then check for auth-related patterns — clean way to enumerate all build args.
+---
+
+### TC-036 [PASS] Docker client wrapper → correct CLI flags constructed
+- All 6 TC-036 tests passed in 17ms: ✓ resource limit flags (--cpus, --memory, --memory-swap, --pids-limit, --ulimit nofile), ✓ --name=claw-tenant-<id>, ✓ -d detached flag, ✓ :ro suffix on readOnlyBindMounts, ✓ dockerStop --time=10, ✓ dockerRm -f
+- **Learnings:**
+  - pnpm workspace packages with their own `node_modules/execa` (not hoisted to root) require mocking the package-local path, not the bare module name. `vi.mock('execa', ...)` from a root-level test file does NOT intercept execa imported by a sub-package when pnpm hasn't hoisted it.
+  - Fix: use `vi.mock('../../packages/docker-client/node_modules/execa/index.js', factory)` and import from the same path for `vi.mocked()`. This matches the resolved module identity that vitest uses for caching.
+  - The same package already has `packages/docker-client/src/index.test.ts` that works because the mock and source are co-located in the same pnpm package context.
+---

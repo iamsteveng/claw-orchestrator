@@ -11,16 +11,3 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
-
-TC-034 Agent Output Evidence
-============================
-Test: tenant-shell script validates container is running
-File: scripts/tenant-shell.sh
-Result: PASS — 5/5 tests passed
-
-Assertions verified:
-- Script exists at scripts/tenant-shell.sh
-- Shebang #!/bin/bash present on line 1
-- Contains: docker exec -it --user agent
-- Validates TENANT_ID argument: if [ -z "${TENANT_ID}" ] → exit 1
-- Validates container running: docker inspect → checks STATUS == "running"
