@@ -35,8 +35,9 @@ const BOT_TOKEN = 'xoxb-test-token';
 const TEST_DATA_DIR = process.env.DATA_DIR ?? '/tmp/claw-test-tenants';
 
 // Ports distinct from other e2e tests
-const CP_PORT = 13301;
-const RELAY_PORT = 13300;
+// first-message: 13298/13299, lifecycle: 13301/13302, isolation: 13303, cp-extended: 13305
+const CP_PORT = 13307;
+const RELAY_PORT = 13308;
 
 // ─── Mock Docker client ────────────────────────────────────────────────────────
 
