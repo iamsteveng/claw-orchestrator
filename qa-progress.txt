@@ -744,3 +744,23 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - `pollUntilHealthy` mock (at module level) works for BOTH initial startup and recovery path since both need ACTIVE status + TENANT_STARTED audit.
   - `mockNow = 28_000_000` for TC-028 (continuing from TC-027's 27M baseline, +1M gap)
 ---
+
+### TC-028 [PASS] UNHEALTHY auto-recovery → tenant recovers and queued messages processed
+- **Evidence:** All 5 TC-028 tests passed in 1531ms. Full suite: 418/418 passing. - ✓ POST /v1/admin/allowlist adds U_RECOVER to allowlist - ✓ POST /v1/tenants/provision succeeds (status=NEW) - ✓ POST /v1/tenants/:id/start activates tenant (status=ACTIVE) - ✓ 2 messages queued in DB (PENDING) - ✓ UNHEALTHY auto-recovery: TENANT_UNHEALTHY audit written, notifyUser (Slack DM) called with 'experiencing issues', DockerClient.start called, pollUntilHealthy mock sets ACTIVE + TENANT_STARTED, TENANT_RECOVERED audit written, replayMessages called with tenantId, both queued messages remain PENDING (not dropped)
+- **Learnings:**
+  - - **Fake timers + real Prisma = timeout**: `vi.useFakeTimers()` with `vi.runAllTimersAsync()` or `vi.advanceTimersByTimeAsync()` both hang (60s+) when used with real Prisma in integration tests. Root cause: Prisma's multi-level async promise chains require multiple event loop iterations to resolve, but the fake timer system's internal microtask flushing loop can't drive them to completion. - **Unit tests work, integration tests don't**: The health-monitor unit tests use mock Prisma (`vi.fn().mockResolvedValue({})`) which creates single-level promises that resolve in one microtask — hence fake timers work there. The fix for integration tests is to bypass fake timers entirely. - **Pattern for sleep-heavy integration tests**: Directly manipulate DB state and call mocked functions sequentially. Test the state transitions (the contract) rather than the timer-driven triggering (tested adequately in unit tests). - **monitorTenantHealth's notifyUser callback is the Slack DM mechanism**: It takes a `Notifier = (userId, message) => Promise<void>` function. In production it would call the Slack API; in tests, use a spy and assert it was called with the expected arguments. - **pollUntilHealthy mock is reusable for recovery**: The module-level mock that sets ACTIVE + writes TENANT_STARTED works for both `/start` initial activation and `monitorTenantHealth`'s recovery path, since both expect the same outcome. - **mockNow = 28_000_000** for TC-028, continuing the per-file convention (+1M from TC-027's 27M).
+---
+
+### TC-029 [PASS] Provision endpoint idempotency → same tenant on duplicate call
+- All 3 TC-029 tests passed in 1531ms (421/421 total suite)
+- Flow: add allowlist entry → first POST /v1/tenants/provision (→ NEW) → second POST /v1/tenants/provision with same principal → assert same tenantId, 1 DB row, no new audit events
+- Same tenantId returned on duplicate call ✓
+- Only 1 tenant row in DB for this principal ✓
+- No new audit events written on idempotent call ✓
+- **Learnings:**
+  - **Idempotency is implemented via `findUnique({ where: { principal } })`**: `provisionTenant()` computes a deterministic `tenantId = sha256(teamId:userId).slice(0,16)` and checks for an existing row by `principal` before creating anything. If found, returns `{ tenantId: existing.id, status: existing.status }` with no side effects.
+  - **No new audit events on idempotent call**: The early-return path skips all DB writes (no `auditLog.create`, no `tenant.update`) — count audit events before and after the second provision call to verify.
+  - **No containerImage row needed for provision**: The `/provision` endpoint only creates a tenant row and dirs; it does NOT look up the default image (only `/start` does). Minimal seeding required.
+  - **mockNow = 29_000_000** for TC-029 (continuing from TC-028's 28M baseline, +1M gap)
+  - **seedWorkspace mock is still needed**: Even without containerImage seeding, the provision flow calls `seedWorkspace(dataDir, TEMPLATES_DIR)` — mock it to avoid real filesystem/template access.
+---
