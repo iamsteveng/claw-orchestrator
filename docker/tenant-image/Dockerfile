@@ -37,6 +37,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Configure npm global prefix so skills can be co-located with the openclaw install
+ENV NPM_CONFIG_PREFIX=/root/.npm-global
+ENV PATH=/root/.npm-global/bin:$PATH
+
 # Install global npm CLIs
 RUN npm install -g --no-fund --no-audit \
     openclaw \
@@ -44,6 +48,9 @@ RUN npm install -g --no-fund --no-audit \
     @openai/codex \
     vercel \
     convex
+
+# Bake Ralph skills into the OpenClaw skills directory
+COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
 
 # Create non-root 'agent' user
 RUN useradd --create-home --home-dir /home/agent --shell /bin/bash agent
