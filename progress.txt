@@ -598,3 +598,21 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - Dockerfile COPY goes before USER agent so root can copy to /usr/local/lib/
   - 130 total tests passing
 ---
+
+---
+
+## 2026-03-17 - US-040
+- What was implemented: End-to-end integration test for the first message flow
+- Files changed:
+  - apps/control-plane/src/app-factory.ts (added DockerClientLike interface + dockerClient injection option to buildApp)
+  - apps/slack-relay/src/app-factory.ts (new: buildSlackRelayApp factory with config + fetchFn + prisma injection)
+  - tests/e2e/first-message.test.ts (new: 8 e2e tests covering full provisioning and message delivery flow)
+  - package.json (added test:e2e script)
+- **Learnings for future iterations:**
+  - vitest's `vi.mock('@claw/docker-client', ...)` does NOT reliably intercept dynamic `await import('@claw/docker-client')` calls inside request handlers at runtime — the ESM module cache is separate from vitest's mock registry for dynamic imports
+  - Solution: use dependency injection (pass `dockerClient` option to `buildApp`) to inject mock clients; this is cleaner architecture anyway
+  - The `buildSlackRelayApp` factory pattern (mirrors control-plane's `buildApp`) allows e2e tests to override CONTROL_PLANE_URL without module-level singleton issues
+  - For e2e tests that require async background work to complete (health poll, relay status poll), both run on 2s real-time intervals — use `pollUntil` with 30s timeout and per-test vitest timeout override (e.g., `it('...', async () => {...}, 35_000)`)
+  - `Date.now()` mock returning small incrementing integers (2_000_000+) works correctly with the real setTimeout: timer delays are real-time, but timestamp comparisons use the mocked values
+  - Global fetch can be selectively intercepted: replace `globalThis.fetch` with a function that pattern-matches URLs and either handles them (mock) or passes through to the original fetch (real HTTP to CP server)
+  - message_queue DELIVERED: the relay's processSlackEventWithConfig needs a PrismaClient passed in to manage queue rows; without it, the queue row is never created
