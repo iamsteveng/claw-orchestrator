@@ -496,3 +496,30 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **Stale timestamp test**: Use `Math.floor(Date.now() / 1000) - 6 * 60` to produce a 6-minute-old timestamp. Even a correct HMAC over that timestamp will be rejected (replay protection window is 5 minutes).
   - **Invalid sig length matters**: The `verifySlackSignatureLocal` function uses `timingSafeEqual` which requires equal buffer lengths. Supply a full-length fake hex signature (64 hex chars = `v0=` + 64 chars) to hit the `timingSafeEqual` false path rather than the early-exit length-mismatch path.
 ---
+
+### TC-019 [PASS] Slack signature verification → valid/invalid/expired
+- **Evidence (re-run 2026-03-17):** All 5 TC-019 tests passed (374/374 total, 55 files): valid HMAC → 200, invalid sig → 403, stale timestamp → 403, missing header → 403, url_verification → {challenge}.
+- **Learnings:**
+  - `buildSlackRelayApp` + `app.inject()` is the cleanest unit-test pattern for the relay — no ports, no network.
+  - Pass `vi.fn()` as fetchFn to prevent fire-and-forget network calls from leaking out of tests.
+  - Replay protection window is 5 minutes; a 6-minute-old timestamp is always rejected.
+---
+
+### TC-019 [PASS] Slack signature verification → valid/invalid/expired
+- **Evidence:** All 5 TC-019 tests passed in 146ms (374/374 total tests, 55 files): - ✓ TC-019: valid HMAC signature → HTTP 200 - ✓ TC-019: invalid signature → HTTP 403 - ✓ TC-019: timestamp 6 minutes old → HTTP 403 (replay protection) - ✓ TC-019: missing X-Slack-Signature → HTTP 403 - ✓ TC-019: url_verification type → returns {challenge} synchronously Signature enforcement prevents unauthorized event injection — confirmed.
+- **Learnings:**
+  - - `buildSlackRelayApp` from `app-factory.ts` + Fastify's `app.inject()` is the cleanest pattern for unit-testing the relay: zero ports, zero network, fast execution. - Pass `vi.fn()` as the `fetchFn` argument to prevent fire-and-forget `processSlackEventWithConfig` calls from making real network requests. - `SlackRelayConfig` requires all 4 fields: `SLACK_RELAY_PORT`, `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN`, `CONTROL_PLANE_URL` (must be a valid URL string). - Replay protection window is 5 minutes (`MAX_TIMESTAMP_AGE_SECONDS = 300`); `Math.floor(Date.now()/1000) - 6*60` always triggers the 403. - The `timingSafeEqual` path requires equal-length buffers — provide a full 64-hex-char fake signature (`v0=invalid...deadbeef`) to reach the comparison rather than the early-exit length-mismatch path.
+---
+
+### TC-020 [PASS] Interim message sent at 15s when agent takes too long
+- **Evidence:** All 3 TC-020 tests passed in 24ms (377/377 total tests, 56 files):
+  - ✓ TC-020: sends "⏳ Working on it..." after 15s when tenant delays 20s
+  - ✓ TC-020: interim message sent only once (not repeated)
+  - ✓ TC-020: final agent response posted to Slack after 20s delay
+- **Learnings:**
+  - **Fake timers + setTimeout mock for delayed responses**: To simulate a 20s delayed tenant response, return a `new Promise<Response>((resolve) => setTimeout(() => resolve(...), delayMs))` inside the fetch mock. With `vi.useFakeTimers()`, this setTimeout is controlled by `vi.advanceTimersByTimeAsync()`, making the test deterministic and fast.
+  - **AbortSignal is NOT intercepted by vi.useFakeTimers()** (per comment in source): The source code already uses `Promise.race([fetchPromise, timeoutPromise])` with a `setTimeout`-based timeout instead of AbortSignal. This means fake timers can control both the fetch delay and the timeout.
+  - **Multiple `await Promise.resolve()` flushes needed**: After advancing timers, microtask chains from `await fetch → await .json() → await postSlackDm → await conversations.open → await chat.postMessage` need several rounds of `Promise.resolve()` flushing before assertions.
+  - **Unit test already exists**: `apps/slack-relay/src/interim-message.test.ts` covers this exact behavior. TC-020 as an integration test in `tests/integration/` uses the same `processSlackEvent` import pattern but lives in the correct location per the test plan.
+  - **`processSlackEvent` is the right entry point**: It's exported from `index.ts` and takes a mock `fetchFn`, making it easy to test without spinning up any HTTP servers.
+---

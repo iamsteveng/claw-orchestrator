@@ -1,19 +1,3 @@
-TC-019 Agent Output Evidence
-============================
-Test: Slack signature verification → valid/invalid/expired
-Result: PASS — 5/5 tests passed in 135ms
-
-Test cases:
-✓ TC-019: valid HMAC signature → HTTP 200
-✓ TC-019: invalid signature → HTTP 403
-✓ TC-019: timestamp 6 minutes old → HTTP 403 (replay protection)
-✓ TC-019: missing X-Slack-Signature → HTTP 403
-✓ TC-019: url_verification type → returns {challenge} synchronously
-
-Full suite: 374 tests, 55 files, all passed.
-
-Signature enforcement prevents unauthorized event injection — confirmed.
-
 TC-001 Agent Output Evidence
 ============================
 Tenant ID: 3f34637c0fb5a0d6
@@ -27,3 +11,19 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
+
+TC-020 Agent Output Evidence
+============================
+Test: Interim message sent at 15s when agent takes too long
+Result: PASS (3/3 tests)
+
+Test output:
+✓ TC-020: sends "⏳ Working on it..." after 15s when tenant delays 20s
+✓ TC-020: interim message sent only once (not repeated)
+✓ TC-020: final agent response posted to Slack after 20s delay
+
+Evidence:
+- Interim '⏳ Working on it...' captured in dmTexts array after advancing fake timers to 15001ms
+- interimCount filter confirms exactly 1 occurrence in dmTexts
+- 'Here is your answer after 20 seconds' present in dmTexts after advancing to 20001ms and awaiting processPromise
+- All 377 tests passed (56 files), test ran in 24ms using fake timers
