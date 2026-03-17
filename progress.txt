@@ -454,3 +454,16 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - MAX_ACTIVE_TENANTS and ACTIVE_TENANTS_OVERFLOW_POLICY added to schedulerConfigSchema (same defaults as controlPlaneConfigSchema)
   - 130 total tests passing
 ---
+
+## 2026-03-17 - US-031
+- What was implemented: Tenant Docker image Dockerfile with Node.js 22 LTS Debian base, system CLIs, npm global tools, and non-root agent user
+- Files changed:
+  - docker/tenant-image/Dockerfile (new: multi-arch Dockerfile with ARG IMAGE_TAG, non-root agent user)
+- **Learnings for future iterations:**
+  - GitHub CLI (gh) must be installed from the official apt repository (not in Debian default repos); requires adding keyring + apt source
+  - `node:22-bookworm-slim` is the Debian-based Node.js 22 LTS image (suitable for apt)
+  - `$(dpkg --print-architecture)` in the gh apt source line ensures correct arch for multi-arch builds
+  - IMAGE_TAG is a build ARG and must be passed via --build-arg at build time; used as OCI image label
+  - No credentials (ANTHROPIC_API_KEY etc.) embedded — injected at runtime via bind-mounted auth-profiles.json
+  - Multi-arch buildx command: `docker buildx build --platform linux/arm64,linux/amd64 --build-arg IMAGE_TAG=sha-<7char> -t claw-tenant:sha-<7char> docker/tenant-image/`
+---
