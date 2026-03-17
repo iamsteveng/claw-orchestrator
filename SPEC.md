@@ -882,16 +882,26 @@ The six Ralph-related agent skills are baked into the tenant Docker image at bui
 
 **Source:** `docker/tenant-image/skills/` in this repo (synced from the ralph repo using `scripts/update-ralph-skills.sh`)
 
-**Build-time inclusion:** The Dockerfile copies skills into the OpenClaw skills directory:
+**Ralph shell scripts:** The skills alone are not sufficient — `ralph-codex-loop` and `qa-codex-loop` skills require the actual shell scripts to run. These are also baked into the image:
+
+- `ralph.sh` → `/opt/ralph/ralph.sh`
+- `qa-codex-loop.sh` → `/opt/ralph/qa-codex-loop.sh`
+- `ENV RALPH_PATH=/opt/ralph/ralph.sh` is set so the `ralph-codex-loop` skill works without manual configuration.
+
+**Build-time inclusion:** The Dockerfile copies skills and scripts into the image:
 ```
 COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
+COPY ralph.sh /opt/ralph/ralph.sh
+COPY qa-codex-loop.sh /opt/ralph/qa-codex-loop.sh
+RUN chmod +x /opt/ralph/ralph.sh /opt/ralph/qa-codex-loop.sh
+ENV RALPH_PATH=/opt/ralph/ralph.sh
 ```
 
-**Updating skills:** When ralph skills are updated, run:
+**Updating skills and scripts:** When ralph is updated, run:
 ```
 bash scripts/update-ralph-skills.sh /path/to/ralph-repo
 ```
-Then rebuild and repromote the tenant image (see image rollout §17).
+This syncs all 6 skill directories AND both shell scripts. Then rebuild and repromote the tenant image (see image rollout §17).
 
 ---
 

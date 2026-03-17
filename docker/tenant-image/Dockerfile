@@ -52,6 +52,14 @@ RUN npm install -g --no-fund --no-audit \
 # Bake Ralph skills into the OpenClaw skills directory
 COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
 
+# Ralph scripts — installed to /opt/ralph so skills can reference them via RALPH_PATH
+COPY ralph.sh /opt/ralph/ralph.sh
+COPY qa-codex-loop.sh /opt/ralph/qa-codex-loop.sh
+RUN chmod +x /opt/ralph/ralph.sh /opt/ralph/qa-codex-loop.sh
+
+# Set RALPH_PATH so ralph-codex-loop skill works out of the box
+ENV RALPH_PATH=/opt/ralph/ralph.sh
+
 # Create non-root 'agent' user
 RUN useradd --create-home --home-dir /home/agent --shell /bin/bash agent
 
