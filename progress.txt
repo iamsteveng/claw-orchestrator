@@ -480,3 +480,18 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - ENTRYPOINT uses exec form ["..."] so signals are passed directly to openclaw process
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
+
+## 2026-03-17 - US-033
+- What was implemented: Tenant container health endpoint server on port 3101
+- Files changed:
+  - docker/tenant-image/health-server.js (new: Node.js HTTP server, GET /health, 3 checks)
+  - docker/tenant-image/Dockerfile (added COPY for health-server.js to /usr/local/lib/claw-health-server.js)
+- **Learnings for future iterations:**
+  - health-server.js uses only Node.js built-ins (http, fs, child_process) — no npm deps needed
+  - pgrep -x openclaw detects the openclaw process; exits 0 if found, 1 if not
+  - fs.accessSync(path, fs.constants.W_OK) checks directory writability; throws if not writable
+  - Returns 200 + {ok:true, status:'healthy', checks, uptime_ms} or 503 + {ok:false, status:'starting', checks}
+  - entrypoint.sh already had conditional start logic for /usr/local/lib/claw-health-server.js
+  - Dockerfile COPY goes before USER agent so root can copy to /usr/local/lib/
+  - 130 total tests passing
+---
