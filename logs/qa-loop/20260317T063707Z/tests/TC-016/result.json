@@ -1,0 +1,14 @@
+{
+  "id": "TC-016",
+  "title": "Control plane startup reconciliation → crashed state reset",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 7 TC-016 tests passed in 1459ms (361/361 total tests across 52 files): - ✓ reconcile() runs without error - ✓ PROVISIONING tenant → status=FAILED after reconciliation - ✓ STARTING tenant → status=FAILED after reconciliation - ✓ expired startup_lock → deleted after reconciliation - ✓ stale PROCESSING message → status=PENDING after reconciliation - ✓ SYSTEM_STARTUP audit log entry written (actor='system', tenant_id=null) - ✓ ACTIVE tenant status unchanged (only PROVISIONING/STARTING are reset)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-016/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-016/stderr.log",
+  "executedAt": "2026-03-17T08:20:12Z"
+}

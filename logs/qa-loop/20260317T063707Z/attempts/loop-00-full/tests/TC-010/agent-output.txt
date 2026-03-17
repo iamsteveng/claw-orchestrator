@@ -1,0 +1,15 @@
+<status>PASS</status>
+<evidence>
+✓ tests/integration/tc-010.test.ts (2 tests) 1747ms
+- TC-010: idle tenant (49h) → stop called, status=STOPPED, TENANT_STOPPED audit with actor=scheduler
+- TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE
+
+319/319 total tests passed across 46 test files.
+</evidence>
+<reason>N/A</reason>
+<learnings>
+- **`idle-stop.ts` was missing `actor: 'scheduler'`** in the stop request body — the control plane defaults to `'system'`. Added `body: JSON.stringify({ actor: 'scheduler' })` to fix it.
+- **`makeAppFetch` pattern**: For scheduler integration tests where the function uses `fetch` internally, create a thin wrapper that routes `/v1/tenants/:id/stop` calls through `app.inject()` — avoids starting a real HTTP server while still exercising the full control plane path.
+- **mockNow baseline for idle-stop tests**: Use 200_000_000 as the baseline (not continuing the sequence). 49h = 176_400_000ms requires baseline > 176_400_000. Idle tenant's `last_activity_at = 200_000_000 - 176_400_000 = 23_600_000`, safely within SQLite INT32 range.
+- **Seed tenants directly in DB** with explicit `last_activity_at` values rather than provisioning through the API — faster and gives precise control over idle timing.
+</learnings>

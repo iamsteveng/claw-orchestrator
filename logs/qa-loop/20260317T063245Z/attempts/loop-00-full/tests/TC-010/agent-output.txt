@@ -1,0 +1,13 @@
+<status>PASS</status>
+<evidence>Both TC-010 tests passed in 1744ms (319/319 total tests across 46 test files):
+- ✓ TC-010: idle tenant (49h) → POST /stop called, status=STOPPED, TENANT_STOPPED audit with actor=scheduler
+- ✓ TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE
+
+The test file was already committed (`6af89c6 test: implement TC-010`) along with a fix to `idle-stop.ts` adding `body: JSON.stringify({ actor: 'scheduler' })` to the fetch call so the CP records actor=scheduler in the audit log.</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- **mockNow = 200_000_000 for 48h tests**: The prior sequence (TC-001: 3M → TC-009: 11M) is too small for 48h offset math (48h = 172.8M ms). Use 200_000_000 as the TC-010 baseline — within SQLite Int32 range and allows 49h/47h offsets to remain positive.
+- **Direct tenant seeding**: For scheduler integration tests, seed ACTIVE tenants directly via `prisma.tenant.create()` with explicit `last_activity_at`. Simpler than the full provision flow.
+- **makeAppFetch delegate pattern**: A custom fetchFn that intercepts `/v1/tenants/:id/stop` URLs and routes through `app.inject()` avoids needing a real HTTP server on a port.
+- **actor requires explicit body**: The CP stop endpoint defaults to `actor='system'`. The scheduler must send `body: JSON.stringify({ actor: 'scheduler' })` in the fetch call to produce the correct audit log actor.
+</learnings>

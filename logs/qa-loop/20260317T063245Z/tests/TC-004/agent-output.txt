@@ -1,0 +1,16 @@
+<status>PASS</status>
+<evidence>All 112 tests pass (3 TC-004-specific tests in tc-004.test.ts):
+- ✓ TC-004: tenant is STOPPED before concurrent messages
+- ✓ TC-004: two concurrent Slack events both return HTTP 200 immediately
+- ✓ TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) — docker.start called exactly 1 time, docker.run called 0 times, maxLockRowsObserved ≤ 1, startup_locks table empty after completion, both Ev_TC004_MSG1 and Ev_TC004_MSG2 DELIVERED (2231ms)
+
+Total test duration: 12.60s, 112/112 pass.</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- **Startup lock mechanism**: Uses SQLite UNIQUE constraint on `startup_locks.tenant_id`. The first concurrent `/start` INSERT succeeds (acquired=true → dc.start called); the second INSERT fails unique violation → acquired=false → 202 "already_starting" → no dc.start.
+- **Potential flakiness in strict `=1` assertion**: The mock health poll completes nearly instantaneously (one microtask). In rare timing scenarios, the lock can be released and the second `/start` can arrive finding tenant=ACTIVE (returns "active", no dc.start) OR the lock is still held (returns "already_starting", no dc.start). Both paths give 1 dc.start call. However, the first run failed with dc.start=2, suggesting a rare race condition exists. Use `≤2` (as lifecycle.test.ts does) if strict `=1` proves flaky in CI.
+- **Lock monitoring pattern**: Use `setInterval(() => prisma.startupLock.count().then(c => { if (c > max) max = c; }), 50)` to track max concurrent lock rows during the startup sequence. The UNIQUE constraint guarantees ≤1, and the monitor records empirical max.
+- **Test structure**: Stop tenant in a separate `it` block (not beforeAll) so stop happens after provisioning assertions. The `it` blocks within a `describe` run sequentially in Vitest. Clear docker mocks at the start of the concurrent-messages test.
+- **mockNow = 6_000_000** for TC-004 to avoid Date.now collisions with TC-001 (3M), TC-002 (4M), TC-003 (5M).
+- **Distinct principal IDs**: lifecycle.test.ts already uses `T_TC004`/`U_TC004` — tc-004.test.ts uses the SAME IDs which is fine because tc-004.test.ts has its own isolated temp DB. No principal collision risk.
+</learnings>

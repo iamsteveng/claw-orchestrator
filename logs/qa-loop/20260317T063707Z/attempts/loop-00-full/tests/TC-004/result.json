@@ -1,0 +1,14 @@
+{
+  "id": "TC-004",
+  "title": "Concurrent messages to stopped tenant → single start (startup lock)",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 3 TC-004 assertions passed (112/112 total e2e tests): - ✓ TC-004: tenant is ACTIVE after initial provisioning - ✓ TC-004: stop tenant via POST /v1/tenants/:id/stop → status becomes STOPPED - ✓ TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) [2227ms] - docker.start called exactly 1 time - docker.run called 0 times (new calls after initial provision) - startup_locks max row count ≤ 1 during concurrent processing - startup_locks table empty after completion (lock released) - Both Ev_TC004_MSG1 and Ev_TC004_MSG2 DELIVERED",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-004/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-004/stderr.log",
+  "executedAt": "2026-03-17T07:20:12Z"
+}

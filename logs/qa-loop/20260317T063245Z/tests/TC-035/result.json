@@ -1,0 +1,14 @@
+{
+  "id": "TC-035",
+  "title": "Tenant Dockerfile does not embed ANTHROPIC_API_KEY",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 4 TC-035 tests passed in 7ms: - ✓ No non-comment line contains ANTHROPIC_API_KEY - ✓ No ENV instruction sets any API key - ✓ auth-profiles.json is not COPYd into the image - ✓ Only IMAGE_TAG ARG present (no auth ARGs) The Dockerfile uses `ARG IMAGE_TAG=dev` only, no ENV secrets, no COPY of auth-profiles.json. An explicit design comment states credentials are injected at runtime via bind-mounted auth-profiles.json.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-035/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-035/stderr.log",
+  "executedAt": "2026-03-17T09:38:35Z"
+}

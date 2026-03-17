@@ -1,0 +1,15 @@
+<status>PASS</status>
+<evidence>All 8 TC-027 tests passed in 1640ms (413/413 total suite):
+- DELETE /v1/admin/allowlist/:id returns {revoked: true} ✓
+- allowlist.revoked_at set in DB ✓
+- ACCESS_REVOKED audit event written (actor=admin, tenant_id=null, metadata with slack_team_id/slack_user_id) ✓
+- POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} for revoked tenant ✓
+- No MESSAGE_DELIVERED event written for blocked message ✓</evidence>
+<reason>N/A</reason>
+<learnings>
+- `isAllowed()` checks `revoked_at IS NULL` on every message delivery — revoking an allowlist entry immediately blocks the already-active tenant with no extra state changes needed
+- Revocation is a soft delete: sets `revoked_at=now`, does NOT delete the tenant or container
+- `ACCESS_REVOKED` audit event has `tenant_id=null` — it's recorded at the allowlist level, not the tenant level; team/user IDs go in metadata
+- Standard pattern from TC-015 (allowlist → provision → start → revoke → message) works cleanly with no special edge cases
+- `mockNow = 27_000_000` keeps timestamps unique and within SQLite Int32 range
+</learnings>

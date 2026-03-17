@@ -1,0 +1,14 @@
+{
+  "id": "TC-030",
+  "title": "Queue reaping → DELIVERED rows older than 7 days deleted",
+  "level": "integration",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "TC-030 test passes: all 4 retention assertions verified — 8-day-old DELIVERED deleted, 3-day-old DELIVERED retained, 31-day-old FAILED deleted, 15-day-old FAILED retained. 64/64 test files pass (422 tests).",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-030/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-030/stderr.log",
+  "executedAt": "2026-03-17T09:27:31Z"
+}

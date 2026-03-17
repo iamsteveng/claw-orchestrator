@@ -1,0 +1,14 @@
+{
+  "id": "TC-031",
+  "title": "Message forwarding → relay token mismatch → 401",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "TC-031 passed all 8 tests in 1652ms: - Wrong X-Relay-Token → 401 {ok: false, error: 'Unauthorized'} - Missing X-Relay-Token → 401 {ok: false, error: 'Unauthorized'} - No MESSAGE_DELIVERED audit event for rejected messages - Correct relay token (with mocked fetch) → 200 {ok: true} - MESSAGE_DELIVERED audit event written with correct slackEventId Overall suite: 429/430 tests passing (TC-027 failure is pre-existing, unrelated)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-031/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-031/stderr.log",
+  "executedAt": "2026-03-17T09:30:04Z"
+}

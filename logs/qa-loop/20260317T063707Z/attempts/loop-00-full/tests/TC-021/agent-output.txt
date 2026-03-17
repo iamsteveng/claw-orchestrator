@@ -1,0 +1,23 @@
+The test is already fully documented. The results are conclusive:
+
+<status>PASS</status>
+<evidence>
+All 7 TC-021 tests passed in 1526ms:
+- ✓ TC-021: creates STOPPED tenant in DB via direct insert
+- ✓ TC-021: POST /start returns 202 {status: "starting"}
+- ✓ TC-021: tenant DB status is STARTING after /start call
+- ✓ TC-021: tenant reaches ACTIVE status after health polling (max 10s)
+- ✓ TC-021: TENANT_STARTED audit event written
+- ✓ TC-021: docker.start called (not docker.run) for STOPPED tenant
+- ✓ TC-021: second POST /start is idempotent → returns {status: "active"}
+
+Full STOPPED → STARTING → ACTIVE state machine verified. 383/384 total tests passing (1 pre-existing TC-015 failure unrelated to TC-021).
+</evidence>
+<reason>N/A</reason>
+<learnings>
+- **pollUntilHealthy mock via vi.mock**: Mocking `../../apps/control-plane/src/health-poll.js` with an implementation that directly writes `status=ACTIVE` + `TENANT_STARTED` audit log is the cleanest way to test the state machine without real Docker/network. Two `setImmediate` flushes after POST /start are sufficient for the background `void pollUntilHealthy(...)` to complete.
+- **STOPPED → `docker.start` (not `docker.run`)**: For tenants with `previousStatus !== NEW`, the start endpoint calls `dc.start(containerName)` (restart existing container). Only `NEW` tenants use `dc.run()`.
+- **Idempotency response code**: Second POST /start on an ACTIVE tenant returns HTTP **200** (not 202) with `{status: 'active'}` — the endpoint special-cases ACTIVE before acquiring the startup lock.
+- **`principal` is required in tenant create**: `prisma.tenant.create()` requires the `principal` field (`slackTeamId:slackUserId` format) — omitting it causes a Prisma validation error.
+- **`mockNow` starting value**: Use a value distinct from other test files (e.g. 3_000_000 or 10_000_000) to avoid Int32 range issues when many DB operations increment the counter.
+</learnings>

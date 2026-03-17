@@ -1,0 +1,13 @@
+<status>PASS</status>
+<evidence>All 4 TC-033 tests passed in 5ms:
+- `claw-control-plane.service` exists + contains `WantedBy=multi-user.target`
+- `claw-slack-relay.service` exists + contains `WantedBy=multi-user.target`
+- `claw-scheduler.service` exists + contains `WantedBy=multi-user.target`
+- `claw-control-plane.service` contains `Requires=docker.service`
+Suite total: 443/443 tests passed across 67 files.</evidence>
+<reason>N/A</reason>
+<learnings>
+- File existence checks with `fs.existsSync` + `readFileSync` work cleanly for unit-level infrastructure tests — no server or DB setup needed.
+- Path resolution `join(__dirname, '../../deploy/systemd', filename)` is reliable from `tests/unit/`.
+- All three services already had correct systemd structure (WantedBy=multi-user.target, Requires=docker.service), so this was purely a verification test with no production code changes required.
+</learnings>

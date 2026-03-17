@@ -1,0 +1,14 @@
+{
+  "id": "TC-017",
+  "title": "Config validation → missing env var causes fast failure",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 3 TC-017 tests passed in 22ms: - ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError (field in issues) - ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError (field in issues) - ✓ TC-017: ZodError message identifies the missing field name Full suite: 53 files, 364 tests, all passed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-017/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-017/stderr.log",
+  "executedAt": "2026-03-17T08:24:58Z"
+}

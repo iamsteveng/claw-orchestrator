@@ -1,0 +1,14 @@
+{
+  "id": "TC-028",
+  "title": "UNHEALTHY auto-recovery → tenant recovers and queued messages processed",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 5 TC-028 tests passed in 1531ms. Full suite: 418/418 passing. - ✓ POST /v1/admin/allowlist adds U_RECOVER to allowlist - ✓ POST /v1/tenants/provision succeeds (status=NEW) - ✓ POST /v1/tenants/:id/start activates tenant (status=ACTIVE) - ✓ 2 messages queued in DB (PENDING) - ✓ UNHEALTHY auto-recovery: TENANT_UNHEALTHY audit written, notifyUser (Slack DM) called with 'experiencing issues', DockerClient.start called, pollUntilHealthy mock sets ACTIVE + TENANT_STARTED, TENANT_RECOVERED audit written, replayMessages called with tenantId, both queued messages remain PENDING (not dropped)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-028/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-028/stderr.log",
+  "executedAt": "2026-03-17T09:19:32Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "TC-020",
+  "title": "Interim message sent at 15s when agent takes too long",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 3 TC-020 tests passed in 21ms (377/377 total tests, 56 files): - ✓ TC-020: sends \"⏳ Working on it...\" after 15s when tenant delays 20s — `dmTexts.includes('⏳ Working on it...')` confirmed after `advanceTimersByTimeAsync(15_001)` - ✓ TC-020: interim message sent only once (not repeated) — `interimCount === 1` after advancing to 19999ms - ✓ TC-020: final agent response posted to Slack after 20s delay — `'Here is your answer after 20 seconds'` in `dmTexts` after advancing past 20s and awaiting `processPromise`",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-020/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-020/stderr.log",
+  "executedAt": "2026-03-17T08:34:15Z"
+}

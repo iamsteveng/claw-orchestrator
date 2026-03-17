@@ -1,0 +1,14 @@
+{
+  "id": "TC-024",
+  "title": "Container image promote → new default used on next start",
+  "level": "integration",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 9 TC-024 tests passed in 1593ms (401/401 total suite): - POST /v1/admin/images/:id/promote returns {promoted: true, tag: 'claw-tenant:v2.0'} - v2.0 is_default=1 after promotion - v1.0 is_default=0 and deprecated_at set after promotion - IMAGE_UPDATED audit event written (actor=admin, tenant_id=null, metadata.promotedTag=v2.0) - STOPPED tenant with image_tag v1.0 → POST /start → image_tag updated to v2.0 synchronously - IMAGE_UPDATED audit event for tenant (actor=system, oldTag=v1.0, newTag=v2.0) - Tenant reaches ACTIVE status after health polling",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-024/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-024/stderr.log",
+  "executedAt": "2026-03-17T08:45:16Z"
+}

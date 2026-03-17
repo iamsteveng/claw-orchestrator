@@ -1,0 +1,15 @@
+<status>PASS</status>
+<evidence>
+All 3 TC-020 tests passed in 21ms (377/377 total tests, 56 files):
+- ✓ TC-020: sends "⏳ Working on it..." after 15s when tenant delays 20s — `dmTexts.includes('⏳ Working on it...')` confirmed after `advanceTimersByTimeAsync(15_001)`
+- ✓ TC-020: interim message sent only once (not repeated) — `interimCount === 1` after advancing to 19999ms
+- ✓ TC-020: final agent response posted to Slack after 20s delay — `'Here is your answer after 20 seconds'` in `dmTexts` after advancing past 20s and awaiting `processPromise`
+</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- **TC-020 was already implemented**: The test file `tests/integration/tc-020.test.ts` existed from a prior agent run. Always check for existing test files before implementing.
+- **Fake timers + setTimeout-based delayed fetch mock**: Returning `new Promise<Response>((resolve) => setTimeout(() => resolve(...), delayMs))` inside the fetch mock gives `vi.advanceTimersByTimeAsync()` full control over when the tenant responds — making a 20-second delay run in milliseconds.
+- **AbortSignal not needed**: The relay source uses `Promise.race([fetchPromise, timeoutPromise])` with a `setTimeout`-based timeout (not AbortSignal), so fake timers control both the fetch delay and the delivery timeout without any AbortController wiring.
+- **Multiple `await Promise.resolve()` flushes needed**: After `advanceTimersByTimeAsync`, the async chain `fetch → .json() → conversations.open → chat.postMessage` requires 4-6 `Promise.resolve()` rounds before `dmTexts` assertions are stable.
+- **`processSlackEvent` is the ideal entry point**: Exported from `index.ts`, accepts a mock `fetchFn`, tests full relay logic without HTTP server overhead.
+</learnings>

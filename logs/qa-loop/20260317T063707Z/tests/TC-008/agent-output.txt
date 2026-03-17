@@ -1,0 +1,19 @@
+The `qa-progress.txt` was already updated by a hook. All 3 TC-008 tests pass, 313/313 total tests pass.
+
+<status>PASS</status>
+<evidence>All 3 TC-008 assertions passed in 1395ms (313/313 total tests across 44 test files):
+- ✓ TC-008: health polling detects 3 consecutive failures → tenant transitions to UNHEALTHY (status confirmed in DB)
+- ✓ TC-008: TENANT_UNHEALTHY audit log entry written with reason=consecutive_failures and containerName in metadata
+- ✓ TC-008: UNHEALTHY state does not affect other tenants (tenant B remains ACTIVE, no TENANT_UNHEALTHY audit log for B)</evidence>
+<reason>N/A — all tests passed on first run</reason>
+<learnings>
+- **Call `pollUntilHealthy()` directly** for health polling integration tests — no HTTP server or relay needed. Import the function, provide a real PrismaClient, mocked fetch, and fake timers.
+- **`vi.useFakeTimers() + vi.runAllTimersAsync()`** fast-forwards all setTimeout/setInterval calls, collapsing 3×2s poll intervals into milliseconds.
+- **`vi.stubGlobal('fetch', ...)` mocks the global fetch** used by `checkHealth()`. Mock returning `{ ok: false, status: 503 }` simulates a down container health endpoint.
+- **Mock `recovery.js` relative path** (`../../apps/control-plane/src/recovery.js`) to prevent `attemptAutoRecovery` from executing docker/network calls after UNHEALTHY is detected.
+- **Seed ACTIVE tenants directly via prisma.tenant.create()** — avoids the full provision HTTP flow for tests that only care about health polling behavior.
+- **`pollUntilHealthy` returns `'timeout'`** when max consecutive failures are reached; UNHEALTHY is written to DB before this return.
+- **TENANT_UNHEALTHY audit log metadata** contains `{ reason: 'consecutive_failures', containerName }` — assert both fields.
+- **mockNow = 10_000_000** for TC-008 (sequence: TC-001: 3M → TC-007: 9M).
+- Use `vi.unstubAllGlobals()` after the fetch mock to prevent leakage into subsequent tests.
+</learnings>

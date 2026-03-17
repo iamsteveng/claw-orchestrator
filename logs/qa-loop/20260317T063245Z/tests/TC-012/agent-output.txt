@@ -1,0 +1,15 @@
+The `qa-progress.txt` already has TC-012 entries from a prior run. The test ran and passed again.
+
+<status>PASS</status>
+<evidence>tests/integration/tc-012.test.ts (3 tests) passed in ~22ms. All three merge scenarios verified:
+1. AGENTS.md created from real templates/workspace/ dir with `## Task Execution` section
+2. AGENTS.md with section already present left byte-for-byte identical  
+3. AGENTS.md without section gets `## Task Execution` appended after existing content
+Overall suite: 325 tests passed (48 files)</evidence>
+<reason>N/A — all tests passed</reason>
+<learnings>
+- `seedWorkspace` is a pure function (no HTTP/DB/Docker) — integration tests run in ~22ms with real tmpdir isolation
+- Real `templates/workspace/AGENTS.md` referenced via `import.meta.url` path resolution — no need to duplicate template content in test fixtures
+- Each scenario uses its own `beforeEach`/`afterEach` tmpdir to avoid cross-test contamination
+- The TC-012 integration test adds value over the existing unit tests by verifying the real templates dir contains the expected sections
+</learnings>

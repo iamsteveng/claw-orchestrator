@@ -1,0 +1,24 @@
+{
+  "runId": "20260317T063245Z",
+  "tool": "claude-code",
+  "status": "PASS",
+  "stopReason": "all_tests_passed",
+  "planPath": "test-plan-spec.json",
+  "startedAt": "2026-03-17T06:32:45Z",
+  "finishedAt": "2026-03-17T09:50:34Z",
+  "totals": {
+    "total": 37,
+    "passed": 37,
+    "failed": 0
+  },
+  "remediation": {
+    "maxLoops": 3,
+    "loopsPerformed": 0,
+    "maxDurationSeconds": 0,
+    "elapsedSeconds": 11869,
+    "maxPatchCount": 0,
+    "patchAttempts": 0,
+    "unresolved": [],
+    "lastRootCauses": []
+  }
+}

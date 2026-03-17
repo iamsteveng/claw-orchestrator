@@ -1,0 +1,18 @@
+All 117 tests pass, including all 5 TC-006 tests. The test was already implemented and passes.
+
+<status>PASS</status>
+<evidence>All 5 TC-006 assertions passed in 2509ms (117/117 total tests pass across 10 test files):
+- ✓ TC-006: relay returns HTTP 200 immediately (Slack ack)
+- ✓ TC-006: control plane returns 403 for unauthorized user
+- ✓ TC-006: no tenant row created for unauthorized user (polled 1s, count=0)
+- ✓ TC-006: Slack chat.postMessage called with invite-only rejection message
+- ✓ TC-006: ACCESS_DENIED audit log entry exists with null tenant_id</evidence>
+<reason>N/A — all tests passed</reason>
+<learnings>
+- **403 denial is fire-and-forget**: The relay returns 200 to Slack immediately, then asynchronously calls provision. When CP returns 403, the relay fires `postSlackDm`. Relay 200 can be asserted synchronously; DM and audit log need `pollUntil` to wait for async completion.
+- **ACCESS_DENIED audit log has tenant_id=null**: The CP writes the ACCESS_DENIED log with `tenant_id: null` and metadata `{ slackTeamId, slackUserId }` before returning 403. Asserting null tenant_id + metadata fields confirms correct spec-defined behavior.
+- **Rejection DM text**: Contains `invite-only` — matching on substring is more resilient than exact string matching.
+- **No provisioning = no dirs**: afterAll only needs to clean the private data dir (no tenant subdirs exist since no tenant was ever created).
+- **mockNow = 8_000_000** for TC-006 (sequence: TC-001: 3M, TC-002: 4M, TC-003: 5M, TC-004: 6M, TC-005: 7M, TC-006: 8M). Port assignment: CP=13317, Relay=13318.
+- **vi.stubEnv + vi.resetModules + dynamic import** continues to be the reliable pattern for DATA_DIR isolation.
+</learnings>

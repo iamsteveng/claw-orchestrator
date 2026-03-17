@@ -1,0 +1,16 @@
+<status>PASS</status>
+<evidence>All 5 TC-013 tests passed in 23ms:
+- ✓ TC-013: step 1 — acquireStartupLock(requestId1) returns {acquired: true}
+- ✓ TC-013: step 2 — concurrent acquireStartupLock(requestId2) returns {acquired: false}
+- ✓ TC-013: step 3 — after releaseStartupLock(requestId1), acquireStartupLock(requestId3) returns {acquired: true}
+- ✓ TC-013: step 4 — stale lock (expires_at 1ms ago) is overridden, {acquired: true}
+- ✓ TC-013: full sequence — mutual exclusion and stale takeover
+
+316 tests passed, 14 skipped across 49 test files. The 2 suite failures (lifecycle.test.ts, tc-002.test.ts) are unrelated EADDRINUSE port conflicts in e2e tests.</evidence>
+<reason>N/A — all TC-013 tests passed</reason>
+<learnings>
+- **Unit tests for startup-lock use mocked Prisma** — no DB or HTTP server needed. A `makePrisma()` helper returning vi.fn()-backed stubs for startupLock.create/findUnique/delete/deleteMany is sufficient.
+- **Stale lock override mock sequence**: `create` mock must reject first (unique violation via `mockRejectedValueOnce`), `findUnique` returns expired row (expires_at < Date.now()), `delete` resolves, then `create` resolves again. Chain on same mock via `.mockRejectedValueOnce(err).mockResolvedValueOnce({})`.
+- **`tests/unit/` directory**: vitest config includes `tests/**/*.test.ts` so any new subdirectory is automatically picked up without config changes.
+- **Test file was pre-committed**: TC-013 test was already in the repo from a prior agent run. Always check before re-implementing.
+</learnings>

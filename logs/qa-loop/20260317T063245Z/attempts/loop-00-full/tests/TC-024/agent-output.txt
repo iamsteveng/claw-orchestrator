@@ -1,0 +1,17 @@
+<status>PASS</status>
+<evidence>All 9 TC-024 tests passed in 1593ms (401/401 total suite):
+- POST /v1/admin/images/:id/promote returns {promoted: true, tag: 'claw-tenant:v2.0'}
+- v2.0 is_default=1 after promotion
+- v1.0 is_default=0 and deprecated_at set after promotion
+- IMAGE_UPDATED audit event written (actor=admin, tenant_id=null, metadata.promotedTag=v2.0)
+- STOPPED tenant with image_tag v1.0 → POST /start → image_tag updated to v2.0 synchronously
+- IMAGE_UPDATED audit event for tenant (actor=system, oldTag=v1.0, newTag=v2.0)
+- Tenant reaches ACTIVE status after health polling</evidence>
+<reason>N/A</reason>
+<learnings>
+- **Two IMAGE_UPDATED events in this flow**: promote writes one with `tenant_id=null, actor=admin, metadata.promotedTag`; /start writes another with `tenant_id=<id>, actor=system, metadata.{oldTag, newTag}`.
+- **image_tag update is synchronous in /start**: The endpoint checks `imageTag !== tenant.image_tag` and updates the DB *before* returning 202 — no setImmediate flushing needed to verify the change.
+- **promote endpoint uses prisma.$transaction**: Atomically demotes old defaults (is_default=0, deprecated_at=now) and promotes the target (is_default=1).
+- **STOPPED tenants use docker.start, not docker.run**: Only containerImage + tenant rows needed; no filesystem dirs required for the promote endpoint itself.
+- **Test file was pre-existing**: TC-024 was already fully implemented in a prior agent run; Phase 1 was a no-op.
+</learnings>

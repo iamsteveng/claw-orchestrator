@@ -1,0 +1,14 @@
+{
+  "id": "TC-002",
+  "title": "Repeated messages from same user → same tenant reused",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 6 TC-002 assertions pass (102/102 total e2e tests): - ✓ TC-002: tenant is ACTIVE before second message - ✓ TC-002: relay returns HTTP 200 immediately for second message - ✓ TC-002: no new tenant row created — exactly 1 tenant for this principal - ✓ TC-002: second message_queue row added and delivered (Ev_TC002_002, status=DELIVERED) - ✓ TC-002: tenant last_activity_at updated after second message - ✓ TC-002: audit log contains MESSAGE_DELIVERED twice (once per message)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-002/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-002/stderr.log",
+  "executedAt": "2026-03-17T07:04:24Z"
+}

@@ -1,0 +1,14 @@
+<status>PASS</status>
+<evidence>All 4 TC-009 tests passed (317/317 total tests across 45 test files) in 1742ms:
+- ✓ DISK_QUOTA_WARNING audit event written + Slack DM with `rm -rf` cleanup suggestion at 90%
+- ✓ DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded=1 at 100%  
+- ✓ POST /v1/tenants/:id/message returns 507 while disk_quota_exceeded=1
+- ✓ disk_quota_exceeded reset to 0 when usage drops below 95% (no new audit events)</evidence>
+<reason>N/A — PASS</reason>
+<learnings>
+- **Math.floor float precision trap**: `Math.floor(QUOTA_BYTES * 0.9)` produces 0.8999... when divided back — strictly below the 0.9 threshold, so warning never fires. Fix: use `Math.ceil(QUOTA_BYTES * 0.9)` for thresholds at exact percentages.
+- **checkDiskQuotas is fully injectable**: pass `vi.fn().mockResolvedValue(bytes)` as getDiskFn (4th arg) and a fetch mock as fetchFn (5th arg) — no real `du` or Slack API needed.
+- **Force ACTIVE via direct DB update** after provision when testing scheduler behavior — mocked docker/health-poll doesn't fully activate the tenant.
+- **Slack DM assertion**: inspect `fetchMock.mock.calls` to find the `chat.postMessage` call and parse the request body JSON to verify message content.
+- **disk_quota_exceeded clear**: triggered silently (no audit event) when ratio < 0.95 and flag was previously 1 — test the DB field directly, not via audit log.
+</learnings>

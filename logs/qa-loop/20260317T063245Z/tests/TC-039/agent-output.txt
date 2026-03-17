@@ -1,0 +1,19 @@
+The test file and qa-progress.txt are already committed and show PASS. All 9 tests pass.
+
+<status>PASS</status>
+<evidence>All 9 TC-039 tests passed in 155ms:
+- ✓ message-server.js file exists at docker/tenant-image/message-server.js
+- ✓ source code validates X-Relay-Token against RELAY_TOKEN env var
+- ✓ returns 401 when X-Relay-Token header is missing
+- ✓ returns 401 when X-Relay-Token is wrong
+- ✓ 401 response matches error shape {ok: false, error: string}
+- ✓ returns 400 error shape {ok: false, error: string} on invalid JSON body
+- ✓ success response shape is {ok: true, response: string, blocks: null} (using mock openclaw)
+- ✓ source defines success response shape {ok: true, response, blocks}
+- ✓ source defines error response shape {ok: false, error}</evidence>
+<reason>N/A</reason>
+<learnings>
+- **Mock openclaw must drain stdin before exiting:** message-server.js writes the message text to `child.stdin` then calls `child.stdin.end()`. If the mock exits before reading stdin (e.g. just `echo`), Node.js emits unhandled EPIPE on `child.stdin` → server process crashes → "socket hang up" in test client. Fix: use `cat > /dev/null` before echoing so the mock drains stdin first.
+- **PATH injection for mock executables in spawned servers:** Prepend a tmpDir containing the mock binary to PATH in the server's env. Since message-server.js passes `env: { ...process.env }` to its child spawns, the modified PATH propagates correctly.
+- **waitForServer using 401 as readiness signal:** When the server enforces auth, a no-token POST getting 401 (not ECONNREFUSED) reliably confirms the server is up and accepting connections.
+</learnings>

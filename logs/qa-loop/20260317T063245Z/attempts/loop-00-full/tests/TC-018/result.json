@@ -1,0 +1,14 @@
+{
+  "id": "TC-018",
+  "title": "Tenant ID computation → sha256(team:user).slice(0,16)",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "✓ tests/unit/tc-018.test.ts (5 tests) 8ms — all assertions pass: - TC-018: computes sha256(T12345:U67890).slice(0,16) correctly - TC-018: result is exactly 16 hex characters - TC-018: is deterministic for same inputs - TC-018: different users produce different IDs - TC-018: different teams produce different IDs Full suite: 369/369 tests, 54 files, all passed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-018/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-018/stderr.log",
+  "executedAt": "2026-03-17T08:26:08Z"
+}

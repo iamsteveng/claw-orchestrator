@@ -1,0 +1,12 @@
+<status>PASS</status>
+<evidence>All 6 TC-036 tests passed in 17ms. Full suite: 70/70 test files, 458/458 tests passed.
+- ✓ TC-036: dockerRun constructs resource limit flags correctly (--cpus, --memory, --memory-swap, --pids-limit, --ulimit nofile=1024:1024)
+- ✓ TC-036: dockerRun includes --name=claw-tenant-<id> format
+- ✓ TC-036: dockerRun includes -d flag for detached mode
+- ✓ TC-036: dockerRun appends :ro suffix on readOnlyBindMounts
+- ✓ TC-036: dockerStop passes --time=10 flag
+- ✓ TC-036: dockerRm passes -f flag</evidence>
+<reason>N/A</reason>
+<learnings>
+**pnpm sub-package execa mock path**: When `@claw/docker-client` has its own `node_modules/execa` (not hoisted to the workspace root by pnpm), `vi.mock('execa', factory)` from a root-level test file does NOT intercept the execa used by the docker-client source. The fix is to mock the concrete resolved path: `vi.mock('../../packages/docker-client/node_modules/execa/index.js', factory)` and import from the same path for `vi.mocked()`. This matches the module identity vitest uses in its registry. Tests co-located within the package (like `packages/docker-client/src/index.test.ts`) work fine because mock and source share the same pnpm package resolution context.
+</learnings>

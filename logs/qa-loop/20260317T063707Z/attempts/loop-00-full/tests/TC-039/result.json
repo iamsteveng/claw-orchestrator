@@ -1,0 +1,14 @@
+{
+  "id": "TC-039",
+  "title": "Message endpoint in tenant container validates relay token",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "All 9 TC-039 tests passed in 149ms: - ✓ message-server.js file exists at docker/tenant-image/message-server.js - ✓ source validates X-Relay-Token against RELAY_TOKEN env var (contains RELAY_TOKEN, 'x-relay-token', 401, Unauthorized) - ✓ returns 401 when X-Relay-Token header is missing - ✓ returns 401 when X-Relay-Token is wrong - ✓ 401 response matches error shape {ok: false, error: string} - ✓ returns 400 error shape {ok: false, error: string} on invalid JSON body - ✓ success response shape is {ok: true, response: string, blocks: null} (using mock openclaw) - ✓ source defines success response shape {ok: true, response, blocks} - ✓ source defines error response shape {ok: false, error}",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-039/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-039/stderr.log",
+  "executedAt": "2026-03-17T09:49:41Z"
+}

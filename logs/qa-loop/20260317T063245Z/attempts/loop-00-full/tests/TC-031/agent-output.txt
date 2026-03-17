@@ -1,0 +1,17 @@
+The test file exists, was already committed, and passes. The evidence is already captured.
+
+<status>PASS</status>
+<evidence>TC-031 passed all 8 tests in 1652ms:
+- Wrong X-Relay-Token → 401 {ok: false, error: 'Unauthorized'}
+- Missing X-Relay-Token → 401 {ok: false, error: 'Unauthorized'}  
+- No MESSAGE_DELIVERED audit event for rejected messages
+- Correct relay token (with mocked fetch) → 200 {ok: true}
+- MESSAGE_DELIVERED audit event written with correct slackEventId
+Overall suite: 429/430 tests passing (TC-027 failure is pre-existing, unrelated)</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- Relay token validation fires before allowlist/status/quota checks — wrong/missing `x-relay-token` returns 401 immediately
+- To test successful message delivery (200), mock `globalThis.fetch` via `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(...))` since the control-plane forwards to the container via fetch; always call `fetchSpy.mockRestore()` after the inject call
+- The relay token from `POST /v1/tenants/provision` response (`body.relayToken`) equals the `relay_token` stored on the tenant row and is the correct value for the `x-relay-token` header
+- For the ACTIVE state needed by the 200 path, directly updating the DB (`prisma.tenant.update({ status: 'ACTIVE' })`) is simpler than waiting for the background `pollUntilHealthy` mock to complete via `setImmediate` flushes
+</learnings>

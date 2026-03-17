@@ -1,0 +1,14 @@
+{
+  "id": "TC-011",
+  "title": "auth-profiles.json bind-mount → included in docker run options",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 3 TC-011 tests passed in 6ms (322/322 total tests). readOnlyBindMounts includes `{homedir}/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json`; simulated docker arg ends with `:ro`; env contains HOME=/home/agent, XDG_CONFIG_HOME=/home/agent/.config, XDG_CACHE_HOME=/home/agent/.cache, XDG_STATE_HOME=/home/agent/.local/state; cpus=\"1.0\", memory=\"1536m\", pidsLimit=256.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-011/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-011/stderr.log",
+  "executedAt": "2026-03-17T07:53:13Z"
+}

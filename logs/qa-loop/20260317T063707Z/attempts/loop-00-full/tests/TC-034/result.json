@@ -1,0 +1,14 @@
+{
+  "id": "TC-034",
+  "title": "tenant-shell script validates container is running",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 5 TC-034 tests passed in 9ms. Full suite: 448/448 tests passed across 68 files. Tests verified: (1) script exists at scripts/tenant-shell.sh, (2) shebang #!/bin/bash present, (3) contains `docker exec -it --user agent`, (4) validates TENANT_ID argument with `if [ -z \"${TENANT_ID}\" ] → exit 1`, (5) validates container running via `docker inspect` before exec.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-034/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-034/stderr.log",
+  "executedAt": "2026-03-17T09:36:59Z"
+}

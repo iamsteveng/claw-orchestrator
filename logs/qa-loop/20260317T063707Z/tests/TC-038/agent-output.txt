@@ -1,0 +1,17 @@
+<status>PASS</status>
+<evidence>All 8 TC-038 tests passed in 217ms:
+- ✓ health-server.js file exists at docker/tenant-image/health-server.js
+- ✓ source code contains GET /health handler (http.createServer, req.url !== '/health', req.method !== 'GET')
+- ✓ GET /health sets Content-Type: application/json
+- ✓ unhealthy response shape: {ok: false, status: 'starting', checks: {openclaw: bool, workspace_mounted: bool, home_mounted: bool}} — no uptime_ms, HTTP 503
+- ✓ source code defines healthy response shape {ok: true, status: 'healthy', checks, uptime_ms}
+- ✓ source code defines unhealthy response shape {ok: false, status: 'starting', checks}
+- ✓ source code defines all three required check fields (openclaw, workspace_mounted, home_mounted)
+- ✓ runtime GET /health returns JSON-parseable response with all required shape fields</evidence>
+<reason>N/A — all tests passed</reason>
+<learnings>
+- **Standalone script testing via patched source spawn:** health-server.js starts listening immediately when executed. To test it on a non-default port, spawn via `spawn(process.execPath, ['-e', source.replace('const PORT = 3101', 'const PORT = TEST_PORT')])` — no need for a temp file.
+- **Test env always gets unhealthy response:** In the test environment, all three checks fail (no openclaw process, /workspace and /home/agent don't exist) → server always returns 503. Healthy response shape must be verified via source code inspection.
+- **waitForServer polling pattern:** Retry `httpGet` in a loop with short delays to reliably wait for a spawned HTTP server without arbitrary sleeps.
+- **Dual verification strategy:** For response shapes that can't be triggered in test env (healthy), use source code inspection (string contains checks) alongside runtime verification for the reachable code path (unhealthy).
+</learnings>

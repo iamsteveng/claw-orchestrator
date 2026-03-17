@@ -1,0 +1,16 @@
+<status>PASS</status>
+<evidence>All 7 TC-016 tests passed in 1459ms (361/361 total tests across 52 files):
+- ✓ reconcile() runs without error
+- ✓ PROVISIONING tenant → status=FAILED after reconciliation
+- ✓ STARTING tenant → status=FAILED after reconciliation
+- ✓ expired startup_lock → deleted after reconciliation
+- ✓ stale PROCESSING message → status=PENDING after reconciliation
+- ✓ SYSTEM_STARTUP audit log entry written (actor='system', tenant_id=null)
+- ✓ ACTIVE tenant status unchanged (only PROVISIONING/STARTING are reset)</evidence>
+<reason>N/A — all tests passed</reason>
+<learnings>
+- **SQLite INT overflow with real timestamps**: `Date.now()` (~1.7e12) exceeds SQLite's INT32 max. Must use small mock timestamps via `vi.spyOn(Date, 'now').mockImplementation(() => mockNow++)` with `mockNow` starting around `16_000_000`.
+- **Stale-threshold delta arithmetic**: The reconcile function uses `now - 120_000` as the 2-minute cutoff. With small mockNow values, "old" timestamps must be near 0 (e.g., 1000–2000) so the delta is >> 120,000 regardless of how many `Date.now()` calls happen before reconcile runs.
+- **Extract internal functions for testability**: `reconcile()` was defined inside `index.ts` without an export. Extracted to `startup-reconciliation.ts` with a named export, then `index.ts` imports from there. This is the right pattern for testing startup-phase logic.
+- **Duck-typed log**: `reconcile()` accepts `log: { info, warn }` — a no-op object `{ info: () => {}, warn: () => {} }` works cleanly in tests without needing a Fastify instance.
+</learnings>

@@ -1,0 +1,19 @@
+<status>PASS</status>
+<evidence>
+All 5 TC-013 tests passed in 24ms (330/330 total tests, 49 test files):
+- ✓ TC-013: step 1 — acquireStartupLock(requestId1) returns {acquired: true}
+- ✓ TC-013: step 2 — concurrent acquireStartupLock(requestId2) returns {acquired: false}
+- ✓ TC-013: step 3 — after releaseStartupLock(requestId1), acquireStartupLock(requestId3) returns {acquired: true}
+- ✓ TC-013: step 4 — stale lock (expires_at 1ms ago) is overridden, {acquired: true}
+- ✓ TC-013: full sequence — mutual exclusion and stale takeover
+
+At most one lock holder enforced; stale locks expire and can be taken over.
+</evidence>
+<reason>N/A</reason>
+<learnings>
+- **Unit tests for startup-lock use mocked Prisma** — no DB or HTTP server needed. A `makePrisma()` helper returning vi.fn()-backed stubs for startupLock.create/findUnique/delete/deleteMany is sufficient.
+- **Stale lock override mock sequence**: `create` mock must reject first (unique violation via `mockRejectedValueOnce`), `findUnique` returns expired row (expires_at < Date.now()), `delete` resolves, then `create` resolves again via `mockResolvedValueOnce`. Two chained calls on same mock handle the retry path.
+- **`tests/unit/` directory is new** — did not exist before TC-013. The vitest config includes `tests/**/*.test.ts` so the new directory is automatically picked up without config changes.
+- **No `vi.stubEnv + vi.resetModules` needed for pure unit tests** — these patterns are only needed for e2e/integration tests requiring DATA_DIR isolation from parallel workers.
+- **`mockRejectedValueOnce` + `mockResolvedValueOnce` chaining**: Chain directly on the same `vi.fn()` mock object (e.g., `create.mockRejectedValueOnce(err).mockResolvedValueOnce({})`) to simulate insert-fail-then-succeed for stale-lock takeover.
+</learnings>

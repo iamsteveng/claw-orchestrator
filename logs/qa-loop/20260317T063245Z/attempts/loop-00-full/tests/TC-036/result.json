@@ -1,0 +1,14 @@
+{
+  "id": "TC-036",
+  "title": "Docker client wrapper → correct CLI flags constructed",
+  "level": "unit",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 6 TC-036 tests passed in 23ms: - ✓ TC-036: dockerRun constructs resource limit flags correctly (--cpus 1.0, --memory 1536m, --memory-swap 1536m, --pids-limit 256, --ulimit nofile=1024:1024) - ✓ TC-036: dockerRun includes --name=claw-tenant-<id> format - ✓ TC-036: dockerRun includes -d flag for detached mode - ✓ TC-036: dockerRun appends :ro suffix on readOnlyBindMounts - ✓ TC-036: dockerStop passes --time=10 flag (--time 10) - ✓ TC-036: dockerRm passes -f flag Full test suite: 70/70 files, 458/458 tests passed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-036/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-036/stderr.log",
+  "executedAt": "2026-03-17T09:43:14Z"
+}

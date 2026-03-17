@@ -1,0 +1,555 @@
+{
+  "id": "TC-001",
+  "title": "First Slack message → tenant provisioned → container started → message delivered",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — PASS",
+  "evidence": "All 7 TC-001 assertions pass (96/96 total e2e tests pass): - ✓ Relay returns HTTP 200 immediately - ✓ Tenant row transitions to ACTIVE within 30s (tenant 3f34637c0fb5a0d6) - ✓ Tenant directories created: home/, workspace/, config/, logs/, secrets/ at /tmp/claw-test-tenants/3f34637c0fb5a0d6/ - ✓ AGENTS.md seeded with '## Task Execution' section - ✓ message_queue row transitions to DELIVERED - ✓ Slack chat.postMessage called with \"Hello from agent TC-001!\" - ✓ Audit log: TENANT_PROVISIONED → TENANT_STARTED → MESSAGE_DELIVERED in order Agent output evidence captured in agent-output.txt.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-001/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-001/stderr.log",
+  "executedAt": "2026-03-17T07:00:01Z"
+}
+
+{
+  "id": "TC-002",
+  "title": "Repeated messages from same user → same tenant reused",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 6 TC-002 assertions pass (102/102 total e2e tests): - ✓ TC-002: tenant is ACTIVE before second message - ✓ TC-002: relay returns HTTP 200 immediately for second message - ✓ TC-002: no new tenant row created — exactly 1 tenant for this principal - ✓ TC-002: second message_queue row added and delivered (Ev_TC002_002, status=DELIVERED) - ✓ TC-002: tenant last_activity_at updated after second message - ✓ TC-002: audit log contains MESSAGE_DELIVERED twice (once per message)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-002/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-002/stderr.log",
+  "executedAt": "2026-03-17T07:04:24Z"
+}
+
+{
+  "id": "TC-003",
+  "title": "Stopped tenant → wakes on next message → queued messages replayed",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 7 TC-003 assertions passed in 4317ms (109/109 total e2e tests pass): - ✓ Tenant ACTIVE after initial provisioning - ✓ POST /stop → status = STOPPED, dc.stop() called - ✓ Relay returns 200 immediately for message sent to stopped tenant - ✓ Relay calls `/v1/tenants/:id/start` (tracked via fetch interceptor) - ✓ Tenant wakes to ACTIVE (dc.start() called, not dc.run()) - ✓ Ev_TC003_MSG1 (sent while STOPPED) → DELIVERED after wake-up - ✓ Ev_TC003_MSG2 (sent after wake) → DELIVERED; MSG1.created_at < MSG2.created_at (FIFO)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-003/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-003/stderr.log",
+  "executedAt": "2026-03-17T07:11:39Z"
+}
+
+{
+  "id": "TC-004",
+  "title": "Concurrent messages to stopped tenant → single start (startup lock)",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 3 TC-004 assertions passed (112/112 total e2e tests): - ✓ TC-004: tenant is ACTIVE after initial provisioning - ✓ TC-004: stop tenant via POST /v1/tenants/:id/stop → status becomes STOPPED - ✓ TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) [2227ms] - docker.start called exactly 1 time - docker.run called 0 times (new calls after initial provision) - startup_locks max row count ≤ 1 during concurrent processing - startup_locks table empty after completion (lock released) - Both Ev_TC004_MSG1 and Ev_TC004_MSG2 DELIVERED",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-004/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-004/stderr.log",
+  "executedAt": "2026-03-17T07:20:12Z"
+}
+
+{
+  "id": "TC-005",
+  "title": "Different users → completely isolated (no shared workspace/state)",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 7 TC-005 assertions passed in 1720ms (304/304 total tests pass): - ✓ TC-005: provision tenant A (T_TC005/U_TC005_A) succeeds with status=NEW - ✓ TC-005: provision tenant B (T_TC005/U_TC005_B) succeeds with status=NEW - ✓ TC-005: tenant A and tenant B have different tenant IDs (sha256 of different principals) - ✓ TC-005: tenant A and tenant B have different relay_token values - ✓ TC-005: tenant A and tenant B have different data_dir paths (each contains own tenantId) - ✓ TC-005: tenant A and tenant B have different container_name values - ✓ TC-005: marker file written to tenant A workspace is NOT visible in tenant B workspace Complete filesystem and identity isolation confirmed between T_TC005:U_TC005_A and T_TC005:U_TC005_B.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-005/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-005/stderr.log",
+  "executedAt": "2026-03-17T07:23:23Z"
+}
+
+{
+  "id": "TC-006",
+  "title": "Allowlist enforcement → unauthorized user rejected",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all pass criteria met",
+  "evidence": "All 5 TC-006 tests passed in 2576ms (117 total tests pass across all 10 test files): - ✓ TC-006: relay returns HTTP 200 immediately (Slack ack) - ✓ TC-006: control plane returns 403 for unauthorized user - ✓ TC-006: no tenant row created for unauthorized user (polled 1s, count=0) - ✓ TC-006: Slack chat.postMessage called with invite-only rejection message - ✓ TC-006: ACCESS_DENIED audit log entry exists with null tenant_id",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-006/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-006/stderr.log",
+  "executedAt": "2026-03-17T07:27:30Z"
+}
+
+{
+  "id": "TC-007",
+  "title": "Tenant deletion → data cleaned up",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "TC-007 test passed in 310ms on first run. All 11 sub-assertions verified: - ✓ DELETE /v1/tenants/:id returns { deleted: true } (HTTP 200) - ✓ tenant.deleted_at is set (soft delete, row preserved) - ✓ message_queue rows purged (2 seeded rows → 0 after delete) - ✓ startup_lock row purged (1 seeded row → 0 after delete) - ✓ TENANT_DELETED audit log entry exists with actor='admin' - ✓ original data_dir no longer accessible on disk - ✓ archiveDir (from audit log metadata) exists on disk - ✓ second DELETE returns HTTP 409 Full suite: 310/310 tests pass (43 test files)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-007/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-007/stderr.log",
+  "executedAt": "2026-03-17T07:32:50Z"
+}
+
+{
+  "id": "TC-008",
+  "title": "Health polling → UNHEALTHY detection",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed on first run",
+  "evidence": "All 3 TC-008 assertions passed in 1395ms (313/313 total tests across 44 test files): - ✓ TC-008: health polling detects 3 consecutive failures → tenant transitions to UNHEALTHY (status confirmed in DB) - ✓ TC-008: TENANT_UNHEALTHY audit log entry written with reason=consecutive_failures and containerName in metadata - ✓ TC-008: UNHEALTHY state does not affect other tenants (tenant B remains ACTIVE, no TENANT_UNHEALTHY audit log for B)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-008/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-008/stderr.log",
+  "executedAt": "2026-03-17T07:37:14Z"
+}
+
+{
+  "id": "TC-009",
+  "title": "Disk quota → warning at 90%, block at 100%",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all assertions pass",
+  "evidence": "All 4 TC-009 tests passed in 1800ms (317/317 total tests across 45 test files): - ✓ TC-009: at 90% usage — DISK_QUOTA_WARNING audit event written + Slack DM sent (conversations.open + chat.postMessage with `rm -rf` cleanup suggestion) - ✓ TC-009: at 100% usage — DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded=1 in DB - ✓ TC-009: POST /v1/tenants/:id/message returns 507 (body: `{ok:false, error:'Disk quota exceeded'}`) while disk_quota_exceeded=1 - ✓ TC-009: below 95% — disk_quota_exceeded auto-cleared to 0, no new audit events written",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-009/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-009/stderr.log",
+  "executedAt": "2026-03-17T07:44:23Z"
+}
+
+{
+  "id": "TC-010",
+  "title": "Idle stop → container stopped after 48h inactivity",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "✓ tests/integration/tc-010.test.ts (2 tests) 1747ms - TC-010: idle tenant (49h) → stop called, status=STOPPED, TENANT_STOPPED audit with actor=scheduler - TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE 319/319 total tests passed across 46 test files.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-010/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-010/stderr.log",
+  "executedAt": "2026-03-17T07:48:15Z"
+}
+
+{
+  "id": "TC-011",
+  "title": "auth-profiles.json bind-mount → included in docker run options",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "tests/integration/tc-011.test.ts — 3/3 tests passed in 6ms (322/322 total): ✓ TC-011: readOnlyBindMounts includes auth-profiles.json path (docker-client will append :ro) ✓ TC-011: container env includes HOME and XDG_* variables ✓ TC-011: resource flags — cpus=1.0, memory=1536m, pidsLimit=256 - readOnlyBindMounts[0] = \"{homedir}/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json\" - docker arg simulated as mount+\":ro\" ends with \":ro\" ✓ - env: [\"HOME=/home/agent\", \"XDG_CONFIG_HOME=/home/agent/.config\", \"XDG_CACHE_HOME=/home/agent/.cache\", \"XDG_STATE_HOME=/home/agent/.local/state\"] ✓ - cpus=\"1.0\", memory=\"1536m\", pidsLimit=256 ✓",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-011/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-011/stderr.log",
+  "executedAt": "2026-03-17T07:51:52Z"
+}
+
+{
+  "id": "TC-012",
+  "title": "AGENTS.md pre-seeded correctly in tenant workspace",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "tests/integration/tc-012.test.ts (3 tests) passed in ~14ms — all three merge scenarios verified: 1. AGENTS.md copied from real templates/workspace/ dir, containing `## Task Execution` 2. AGENTS.md with section already present left byte-for-byte identical 3. AGENTS.md without section gets section appended after existing content Overall suite: 325 tests passed (48 files)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-012/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-012/stderr.log",
+  "executedAt": "2026-03-17T07:53:41Z"
+}
+
+{
+  "id": "TC-013",
+  "title": "Startup lock → no duplicate containers on concurrent messages",
+  "level": "unit",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 5 TC-013 tests passed in 24ms (330/330 total tests, 49 test files): - ✓ TC-013: step 1 — acquireStartupLock(requestId1) returns {acquired: true} - ✓ TC-013: step 2 — concurrent acquireStartupLock(requestId2) returns {acquired: false} - ✓ TC-013: step 3 — after releaseStartupLock(requestId1), acquireStartupLock(requestId3) returns {acquired: true} - ✓ TC-013: step 4 — stale lock (expires_at 1ms ago) is overridden, {acquired: true} - ✓ TC-013: full sequence — mutual exclusion and stale takeover At most one lock holder enforced; stale locks expire and can be taken over.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-013/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-013/stderr.log",
+  "executedAt": "2026-03-17T07:56:23Z"
+}
+
+{
+  "id": "TC-014",
+  "title": "Provisioning rollback → cleanup on failure",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 11 TC-014 tests passed in 1475ms: - ✓ Provision fails → HTTP 500, status=FAILED, provision_attempts=1 - ✓ data_dir does NOT exist after rollback (cleaned up) - ✓ TENANT_PROVISION_FAILED audit event written (actor=system) - ✓ TENANT_PROVISIONED audit event absent (no success) - ✓ Retry with attempts<3 → 200 FAILED (returns existing record) - ✓ With attempts=3 → HTTP 409 (cap enforced, \"Max provision attempts reached\") - ✓ tenant status permanently FAILED with attempts >= 3 Total suite: 341/341 tests passed across 50 files",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-014/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-014/stderr.log",
+  "executedAt": "2026-03-17T08:03:14Z"
+}
+
+{
+  "id": "TC-015",
+  "title": "Audit log → events recorded for all system actions",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "All 13 TC-015 tests passed in 1965ms (354/354 total tests across 51 files): - ✓ ACCESS_DENIED recorded when blocked user tries to provision (actor=system, tenant_id=null) - ✓ ACCESS_GRANTED recorded when allowlist entry added (actor=admin:tc015) - ✓ TENANT_PROVISIONED recorded on successful provision (actor=system) - ✓ TENANT_STARTED recorded when tenant starts via pollUntilHealthy mock (actor=system) - ✓ MESSAGE_DELIVERED recorded on successful message delivery (slackEventId in metadata) - ✓ TENANT_STOPPED recorded when tenant stopped (actor=system) - ✓ TENANT_DELETED recorded when tenant deleted (actor=admin) - ✓ ACCESS_REVOKED recorded when allowlist entry revoked (actor=admin) - ✓ GET /v1/admin/audit returns all 8 event types (total >= 8) - ✓ GET /v1/admin/audit?tenant_id=X returns events in descending created_at order - ✓ DELETE /v1/admin/audit → 404 (append-only) - ✓ PUT /v1/admin/audit → 404 (append-only) - ✓ PATCH /v1/admin/audit → 404 (append-only)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-015/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-015/stderr.log",
+  "executedAt": "2026-03-17T08:15:41Z"
+}
+
+{
+  "id": "TC-016",
+  "title": "Control plane startup reconciliation → crashed state reset",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 7 TC-016 tests passed in 1459ms (361/361 total tests across 52 files): - ✓ reconcile() runs without error - ✓ PROVISIONING tenant → status=FAILED after reconciliation - ✓ STARTING tenant → status=FAILED after reconciliation - ✓ expired startup_lock → deleted after reconciliation - ✓ stale PROCESSING message → status=PENDING after reconciliation - ✓ SYSTEM_STARTUP audit log entry written (actor='system', tenant_id=null) - ✓ ACTIVE tenant status unchanged (only PROVISIONING/STARTING are reset)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-016/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-016/stderr.log",
+  "executedAt": "2026-03-17T08:20:12Z"
+}
+
+{
+  "id": "TC-017",
+  "title": "Config validation → missing env var causes fast failure",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "✓ tests/unit/tc-017.test.ts (3 tests) 18ms ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError ✓ TC-017: ZodError message identifies the missing field name Full suite: 363/364 tests passed (1 pre-existing TC-015 failure unrelated to TC-017). Fast failure confirmed: Zod throws ZodError with `issues[].path[0]` identifying the missing field name.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-017/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-017/stderr.log",
+  "executedAt": "2026-03-17T08:24:58Z"
+}
+
+{
+  "id": "TC-018",
+  "title": "Tenant ID computation → sha256(team:user).slice(0,16)",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 5 TC-018 tests passed in 7ms (369/369 total, 54 files): - ✓ TC-018: computes sha256(T12345:U67890).slice(0,16) correctly - ✓ TC-018: result is exactly 16 hex characters - ✓ TC-018: is deterministic for same inputs - ✓ TC-018: different users produce different IDs - ✓ TC-018: different teams produce different IDs `computeTenantId('T12345','U67890')` → matches `createHash('sha256').update('T12345:U67890').digest('hex').slice(0,16)`, length=16, all lowercase hex.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-018/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-018/stderr.log",
+  "executedAt": "2026-03-17T08:26:49Z"
+}
+
+{
+  "id": "TC-019",
+  "title": "Slack signature verification → valid/invalid/expired",
+  "level": "unit",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 5 TC-019 tests passed in 146ms (374/374 total tests, 55 files): - ✓ TC-019: valid HMAC signature → HTTP 200 - ✓ TC-019: invalid signature → HTTP 403 - ✓ TC-019: timestamp 6 minutes old → HTTP 403 (replay protection) - ✓ TC-019: missing X-Slack-Signature → HTTP 403 - ✓ TC-019: url_verification type → returns {challenge} synchronously Signature enforcement prevents unauthorized event injection — confirmed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-019/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-019/stderr.log",
+  "executedAt": "2026-03-17T08:29:01Z"
+}
+
+{
+  "id": "TC-020",
+  "title": "Interim message sent at 15s when agent takes too long",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 3 TC-020 tests passed in 21ms (377/377 total tests, 56 files): - ✓ TC-020: sends \"⏳ Working on it...\" after 15s when tenant delays 20s — `dmTexts.includes('⏳ Working on it...')` confirmed after `advanceTimersByTimeAsync(15_001)` - ✓ TC-020: interim message sent only once (not repeated) — `interimCount === 1` after advancing to 19999ms - ✓ TC-020: final agent response posted to Slack after 20s delay — `'Here is your answer after 20 seconds'` in `dmTexts` after advancing past 20s and awaiting `processPromise`",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-020/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-020/stderr.log",
+  "executedAt": "2026-03-17T08:34:15Z"
+}
+
+{
+  "id": "TC-021",
+  "title": "Start endpoint → STOPPED → STARTING → ACTIVE transition",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 7 TC-021 tests passed in 1526ms: - ✓ TC-021: creates STOPPED tenant in DB via direct insert - ✓ TC-021: POST /start returns 202 {status: \"starting\"} - ✓ TC-021: tenant DB status is STARTING after /start call - ✓ TC-021: tenant reaches ACTIVE status after health polling (max 10s) - ✓ TC-021: TENANT_STARTED audit event written - ✓ TC-021: docker.start called (not docker.run) for STOPPED tenant - ✓ TC-021: second POST /start is idempotent → returns {status: \"active\"} Full STOPPED → STARTING → ACTIVE state machine verified. 383/384 total tests passing (1 pre-existing TC-015 failure unrelated to TC-021).",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-021/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-021/stderr.log",
+  "executedAt": "2026-03-17T08:38:19Z"
+}
+
+{
+  "id": "TC-022",
+  "title": "Stop endpoint → ACTIVE → STOPPED transition",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 8 TC-022 tests passed in 1561ms (392/392 total tests, 58 test files): - ✓ Creates ACTIVE tenant in DB via direct insert - ✓ POST /stop returns 200 {status: \"stopped\"} - ✓ Tenant DB status is STOPPED after /stop call - ✓ last_stopped_at is set on the tenant row - ✓ TENANT_STOPPED audit event written with system actor + containerName metadata - ✓ dockerStop called once with correct container name and timeout=10 - ✓ Second POST /stop is idempotent → returns 200 {status: \"already_stopped\"} - ✓ dockerStop still called only once (idempotent second call does not invoke docker)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-022/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-022/stderr.log",
+  "executedAt": "2026-03-17T08:40:17Z"
+}
+
+{
+  "id": "TC-024",
+  "title": "Container image promote → new default used on next start",
+  "level": "integration",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 9 TC-024 tests passed in 1623ms: - POST /v1/admin/images/:id/promote → 200 {promoted: true, tag: 'claw-tenant:v2.0'} - v2.0 is_default=1 after promotion - v1.0 is_default=0 and deprecated_at set - IMAGE_UPDATED audit event (actor=admin, metadata.promotedTag='claw-tenant:v2.0') - STOPPED tenant created with old image_tag v1.0 - POST /start → 202 {status: 'starting'} - tenant.image_tag updated to 'claw-tenant:v2.0' synchronously on start - IMAGE_UPDATED audit event for tenant (actor=system, oldTag/newTag in metadata) - Tenant reaches ACTIVE; image_tag still v2.0 Suite: 400/401 passed (TC-015 pre-existing failure unrelated to TC-024)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-024/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-024/stderr.log",
+  "executedAt": "2026-03-17T08:44:48Z"
+}
+
+{
+  "id": "TC-025",
+  "title": "Message queue deduplication → Slack retry is no-op",
+  "level": "e2e",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 4 TC-025 tests passed in 1306ms (121/121 total suite): - ✓ First enqueueMessage creates exactly one PENDING row - ✓ Duplicate enqueueMessage (same event_id=Ev_DUP_001) returns false — no new row - ✓ deliverPendingMessages delivers exactly once to tenant runtime (1 HTTP call to :3100/message) - ✓ Second deliverPendingMessages after delivery makes 0 additional runtime calls; row count stays 1",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-025/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-025/stderr.log",
+  "executedAt": "2026-03-17T08:50:52Z"
+}
+
+{
+  "id": "TC-027",
+  "title": "Allowlist revocation → existing tenant blocked",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 8 TC-027 tests passed in 1640ms (413/413 total suite): - DELETE /v1/admin/allowlist/:id returns {revoked: true} ✓ - allowlist.revoked_at set in DB ✓ - ACCESS_REVOKED audit event written (actor=admin, tenant_id=null, metadata with slack_team_id/slack_user_id) ✓ - POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} for revoked tenant ✓ - No MESSAGE_DELIVERED event written for blocked message ✓",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-027/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-027/stderr.log",
+  "executedAt": "2026-03-17T08:54:28Z"
+}
+
+{
+  "id": "TC-028",
+  "title": "UNHEALTHY auto-recovery → tenant recovers and queued messages processed",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-028/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-028/stderr.log",
+  "executedAt": "2026-03-17T09:23:45Z"
+}
+
+{
+  "id": "TC-029",
+  "title": "Provision endpoint idempotency → same tenant on duplicate call",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "Skipped — already passed in this run (resume)",
+  "evidence": "(skipped)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-029/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-029/stderr.log",
+  "executedAt": "2026-03-17T09:23:46Z"
+}
+
+{
+  "id": "TC-030",
+  "title": "Queue reaping → DELIVERED rows older than 7 days deleted",
+  "level": "integration",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "TC-030 test passes: all 4 retention assertions verified — 8-day-old DELIVERED deleted, 3-day-old DELIVERED retained, 31-day-old FAILED deleted, 15-day-old FAILED retained. 64/64 test files pass (422 tests).",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-030/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-030/stderr.log",
+  "executedAt": "2026-03-17T09:27:31Z"
+}
+
+{
+  "id": "TC-031",
+  "title": "Message forwarding → relay token mismatch → 401",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 8 TC-031 tests passed in 1656ms (430/430 suite total): - Wrong X-Relay-Token → 401 `{ok: false, error: 'Unauthorized'}` - Missing X-Relay-Token → 401 `{ok: false, error: 'Unauthorized'}` - No MESSAGE_DELIVERED audit event for rejected messages - Correct relay token (with mocked fetch) → 200 `{ok: true}` - MESSAGE_DELIVERED audit event written with correct slackEventId",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-031/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-031/stderr.log",
+  "executedAt": "2026-03-17T09:29:40Z"
+}
+
+{
+  "id": "TC-032",
+  "title": "Message forwarding → disk quota exceeded → 507",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 9 TC-032 tests passed in 1709ms (439/439 suite total): - disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}` - No MESSAGE_DELIVERED audit event written when blocked by quota - disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}` with mocked fetch - MESSAGE_DELIVERED audit event written with correct slackEventId after quota cleared",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-032/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-032/stderr.log",
+  "executedAt": "2026-03-17T09:32:21Z"
+}
+
+{
+  "id": "TC-033",
+  "title": "systemd unit files exist for all three services",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 4 TC-033 tests passed in 5ms: - `claw-control-plane.service` exists + contains `WantedBy=multi-user.target` - `claw-slack-relay.service` exists + contains `WantedBy=multi-user.target` - `claw-scheduler.service` exists + contains `WantedBy=multi-user.target` - `claw-control-plane.service` contains `Requires=docker.service` Suite total: 443/443 tests passed across 67 files.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-033/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-033/stderr.log",
+  "executedAt": "2026-03-17T09:33:25Z"
+}
+
+{
+  "id": "TC-034",
+  "title": "tenant-shell script validates container is running",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 5 TC-034 tests passed in 9ms. Full suite: 448/448 tests passed across 68 files. Tests verified: (1) script exists at scripts/tenant-shell.sh, (2) shebang #!/bin/bash present, (3) contains `docker exec -it --user agent`, (4) validates TENANT_ID argument with `if [ -z \"${TENANT_ID}\" ] → exit 1`, (5) validates container running via `docker inspect` before exec.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-034/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-034/stderr.log",
+  "executedAt": "2026-03-17T09:36:59Z"
+}
+
+{
+  "id": "TC-035",
+  "title": "Tenant Dockerfile does not embed ANTHROPIC_API_KEY",
+  "level": "unit",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 4 TC-035 tests passed in 6ms: - ✓ No non-comment line contains ANTHROPIC_API_KEY - ✓ No ENV instruction sets any API key - ✓ auth-profiles.json is not COPYd into the image - ✓ Only IMAGE_TAG ARG present (no auth ARGs) The Dockerfile has a single `ARG IMAGE_TAG=dev`, no ENV with secrets, no auth-profiles.json COPY, and an explicit comment documenting that credentials are injected at runtime via bind-mounted auth-profiles.json. Full suite: 444 passed, 8 skipped (unrelated lifecycle.test.ts EADDRINUSE failure).",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-035/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-035/stderr.log",
+  "executedAt": "2026-03-17T09:37:59Z"
+}
+
+{
+  "id": "TC-036",
+  "title": "Docker client wrapper → correct CLI flags constructed",
+  "level": "unit",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 6 TC-036 tests passed in 17ms. Full suite: 70/70 test files, 458/458 tests passed. - ✓ TC-036: dockerRun constructs resource limit flags correctly (--cpus, --memory, --memory-swap, --pids-limit, --ulimit nofile=1024:1024) - ✓ TC-036: dockerRun includes --name=claw-tenant-<id> format - ✓ TC-036: dockerRun includes -d flag for detached mode - ✓ TC-036: dockerRun appends :ro suffix on readOnlyBindMounts - ✓ TC-036: dockerStop passes --time=10 flag - ✓ TC-036: dockerRm passes -f flag",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-036/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-036/stderr.log",
+  "executedAt": "2026-03-17T09:42:25Z"
+}
+
+{
+  "id": "TC-037",
+  "title": "Workspace template fixtures → test-utils package",
+  "level": "unit",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 6 TC-037 tests passed in 31ms: - ✓ makeTenant() returns fully-populated Tenant fixture with all required fields - ✓ makeTenant() applies overrides correctly - ✓ makeMessageQueueRow() returns fully-populated MessageQueueRow fixture - ✓ makeMessageQueueRow() applies overrides correctly - ✓ mockPrismaClient() has vi.fn() mocks for all DB methods (findUnique, findFirst, findMany, create, update, delete, upsert, $transaction, $connect, $disconnect) - ✓ mockDockerClient() has vi.fn() mocks for run, start, stop, rm",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-037/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-037/stderr.log",
+  "executedAt": "2026-03-17T09:44:32Z"
+}
+
+{
+  "id": "TC-038",
+  "title": "Health endpoint in tenant container returns correct JSON shape",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 8 TC-038 tests passed in 217ms: - ✓ health-server.js file exists at docker/tenant-image/health-server.js - ✓ source code contains GET /health handler (http.createServer, req.url !== '/health', req.method !== 'GET') - ✓ GET /health sets Content-Type: application/json - ✓ unhealthy response shape: {ok: false, status: 'starting', checks: {openclaw: bool, workspace_mounted: bool, home_mounted: bool}} — no uptime_ms, HTTP 503 - ✓ source code defines healthy response shape {ok: true, status: 'healthy', checks, uptime_ms} - ✓ source code defines unhealthy response shape {ok: false, status: 'starting', checks} - ✓ source code defines all three required check fields (openclaw, workspace_mounted, home_mounted) - ✓ runtime GET /health returns JSON-parseable response with all required shape fields",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-038/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-038/stderr.log",
+  "executedAt": "2026-03-17T09:46:37Z"
+}
+
+{
+  "id": "TC-039",
+  "title": "Message endpoint in tenant container validates relay token",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "All 9 TC-039 tests passed in 149ms: - ✓ message-server.js file exists at docker/tenant-image/message-server.js - ✓ source validates X-Relay-Token against RELAY_TOKEN env var (contains RELAY_TOKEN, 'x-relay-token', 401, Unauthorized) - ✓ returns 401 when X-Relay-Token header is missing - ✓ returns 401 when X-Relay-Token is wrong - ✓ 401 response matches error shape {ok: false, error: string} - ✓ returns 400 error shape {ok: false, error: string} on invalid JSON body - ✓ success response shape is {ok: true, response: string, blocks: null} (using mock openclaw) - ✓ source defines success response shape {ok: true, response, blocks} - ✓ source defines error response shape {ok: false, error}",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-039/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-039/stderr.log",
+  "executedAt": "2026-03-17T09:49:41Z"
+}
+

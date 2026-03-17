@@ -1,0 +1,5 @@
+Iteration: 4/13
+Story: US-032 - unknown
+Result: completed
+Commit: 1efbfe7
+Summary: US-032 is complete. Here's what was implemented: **US-032: Tenant image entrypoint script** - `docker/tenant-image/entrypoint.sh` — bash script (set -euo pipefail) that: - Sets env vars (`HOME`, `XDG_*` paths for the `

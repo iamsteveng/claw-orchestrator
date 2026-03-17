@@ -1,0 +1,17 @@
+<status>PASS</status>
+<evidence>All 5 TC-019 tests passed in 146ms (374/374 total tests, 55 files):
+- ✓ TC-019: valid HMAC signature → HTTP 200
+- ✓ TC-019: invalid signature → HTTP 403
+- ✓ TC-019: timestamp 6 minutes old → HTTP 403 (replay protection)
+- ✓ TC-019: missing X-Slack-Signature → HTTP 403
+- ✓ TC-019: url_verification type → returns {challenge} synchronously
+
+Signature enforcement prevents unauthorized event injection — confirmed.</evidence>
+<reason>N/A — all tests passed</reason>
+<learnings>
+- `buildSlackRelayApp` from `app-factory.ts` + Fastify's `app.inject()` is the cleanest pattern for unit-testing the relay: zero ports, zero network, fast execution.
+- Pass `vi.fn()` as the `fetchFn` argument to prevent fire-and-forget `processSlackEventWithConfig` calls from making real network requests.
+- `SlackRelayConfig` requires all 4 fields: `SLACK_RELAY_PORT`, `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN`, `CONTROL_PLANE_URL` (must be a valid URL string).
+- Replay protection window is 5 minutes (`MAX_TIMESTAMP_AGE_SECONDS = 300`); `Math.floor(Date.now()/1000) - 6*60` always triggers the 403.
+- The `timingSafeEqual` path requires equal-length buffers — provide a full 64-hex-char fake signature (`v0=invalid...deadbeef`) to reach the comparison rather than the early-exit length-mismatch path.
+</learnings>

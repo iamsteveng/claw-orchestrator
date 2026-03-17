@@ -1,0 +1,14 @@
+{
+  "id": "TC-022",
+  "title": "Stop endpoint → ACTIVE → STOPPED transition",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 8 TC-022 tests passed in 1515ms: - ✓ Creates ACTIVE tenant in DB via direct insert - ✓ POST /stop returns 200 {status: \"stopped\"} - ✓ Tenant DB status is STOPPED after /stop call - ✓ last_stopped_at is set on the tenant row - ✓ TENANT_STOPPED audit event written with system actor + containerName metadata - ✓ dockerStop called once with correct container name and timeout=10 - ✓ Second POST /stop is idempotent → returns 200 {status: \"already_stopped\"} - ✓ dockerStop still called only once (idempotent second call does not invoke docker) The only test failure in the suite was TC-015 (pre-existing, unrelated to TC-022).",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-022/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-022/stderr.log",
+  "executedAt": "2026-03-17T08:41:21Z"
+}

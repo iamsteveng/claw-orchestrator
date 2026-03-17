@@ -1,0 +1,16 @@
+<status>PASS</status>
+<evidence>All 6 TC-036 tests passed in 23ms:
+- ✓ TC-036: dockerRun constructs resource limit flags correctly (--cpus 1.0, --memory 1536m, --memory-swap 1536m, --pids-limit 256, --ulimit nofile=1024:1024)
+- ✓ TC-036: dockerRun includes --name=claw-tenant-<id> format
+- ✓ TC-036: dockerRun includes -d flag for detached mode
+- ✓ TC-036: dockerRun appends :ro suffix on readOnlyBindMounts
+- ✓ TC-036: dockerStop passes --time=10 flag (--time 10)
+- ✓ TC-036: dockerRm passes -f flag
+
+Full test suite: 70/70 files, 458/458 tests passed.</evidence>
+<reason>N/A</reason>
+<learnings>
+**pnpm sub-package execa mock path issue**: When `@claw/docker-client` has its own `node_modules/execa` (symlinked via pnpm but not hoisted to the workspace root), `vi.mock('execa', factory)` from a root-level test file does NOT intercept the execa used by the docker-client source when running in some test worker contexts. The reliable fix is to use a relative import path for the DockerClient source (`../../packages/docker-client/src/index.js`) instead of the package name, AND ensure the mock for `'execa'` is hoisted at the top of the test file. Tests co-located within the package (`packages/docker-client/src/index.test.ts`) work reliably because mock and source share the same pnpm package resolution context.
+
+**Parallel test worker isolation**: When running the full suite with `--grep TC-036`, some test workers may fail with EADDRINUSE port conflicts. Running with `--testFile` targeting specific files avoids this. The TC-036 unit tests themselves pass cleanly in all configurations.
+</learnings>

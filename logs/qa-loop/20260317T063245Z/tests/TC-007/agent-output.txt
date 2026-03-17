@@ -1,0 +1,21 @@
+<status>PASS</status>
+<evidence>TC-007 passed in 314ms. All assertions verified:
+- ✓ DELETE /v1/tenants/:id returns {deleted: true} (HTTP 200)
+- ✓ tenant.deleted_at is set (soft delete, row preserved in DB)
+- ✓ message_queue rows purged (2 seeded → 0 after delete)
+- ✓ startup_lock row purged (1 seeded → 0 after delete)
+- ✓ TENANT_DELETED audit log entry exists with actor='admin'
+- ✓ original data_dir no longer accessible on disk
+- ✓ archiveDir (from audit log metadata) exists on disk
+- ✓ second DELETE returns HTTP 409
+
+Full suite: 310/310 tests pass (43 test files)</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- **archiveDir from audit log metadata**: The DELETE endpoint stores `archiveDir` in TENANT_DELETED audit log metadata JSON `{ containerName, archiveDir }`. Parse it to get the exact archive path rather than reconstructing manually.
+- **Archive path quirk in test env**: `DATA_DIR=/tmp/claw-test-tenants` has no `/data/tenants/` substring, so the replace is a no-op → `archiveBase === srcDir`. Then `access(archiveBase)` finds it exists → appends timestamp: `archiveDir = ${srcDir}-${mockNow}`. Archive lands at `${DATA_DIR}/${tenantId}-<timestamp>`, not in a separate `tenants-archive` dir.
+- **Soft delete only**: Tenant row preserved with `deleted_at` set. Second DELETE hits `deleted_at !== null` → 409.
+- **`vi.mock` hoisting works for docker-client**: TC-007 uses `vi.mock('@claw/docker-client', ...)` (hoisted) instead of passing `dockerClient` in buildApp options — both approaches work.
+- **No `vi.stubEnv + resetModules` needed for pure integration tests**: Only needed for e2e tests with DATA_DIR isolation concerns.
+- **mockNow = 9_000_000** for TC-007 (continuation: TC-001: 3M → TC-006: 8M).
+</learnings>

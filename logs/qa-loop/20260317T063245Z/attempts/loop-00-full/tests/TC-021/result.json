@@ -1,0 +1,14 @@
+{
+  "id": "TC-021",
+  "title": "Start endpoint → STOPPED → STARTING → ACTIVE transition",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 7 TC-021 tests passed in 1505ms (384/384 total tests, 57 files): - ✓ Creates STOPPED tenant in DB via direct insert - ✓ POST /start returns 202 {status: \"starting\"} - ✓ Tenant DB status is STARTING after /start call - ✓ Tenant reaches ACTIVE status after health polling (max 10s) - ✓ TENANT_STARTED audit event written with system actor + containerName metadata - ✓ docker.start called (not docker.run) for STOPPED tenant - ✓ Second POST /start is idempotent → returns 200 {status: \"active\"} Full STOPPED → STARTING → ACTIVE state machine confirmed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-021/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-021/stderr.log",
+  "executedAt": "2026-03-17T08:38:32Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "TC-019",
+  "title": "Slack signature verification → valid/invalid/expired",
+  "level": "unit",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 5 TC-019 tests passed in 146ms (374/374 total tests, 55 files): - ✓ TC-019: valid HMAC signature → HTTP 200 - ✓ TC-019: invalid signature → HTTP 403 - ✓ TC-019: timestamp 6 minutes old → HTTP 403 (replay protection) - ✓ TC-019: missing X-Slack-Signature → HTTP 403 - ✓ TC-019: url_verification type → returns {challenge} synchronously Signature enforcement prevents unauthorized event injection — confirmed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-019/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-019/stderr.log",
+  "executedAt": "2026-03-17T08:29:01Z"
+}

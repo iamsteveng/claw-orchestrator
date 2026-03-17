@@ -1,0 +1,14 @@
+{
+  "id": "TC-037",
+  "title": "Workspace template fixtures → test-utils package",
+  "level": "unit",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 6 TC-037 tests passed in 13ms: ✓ makeTenant() returns fully-populated Tenant fixture, ✓ makeTenant() applies overrides, ✓ makeMessageQueueRow() returns fully-populated MessageQueueRow fixture, ✓ makeMessageQueueRow() applies overrides, ✓ mockPrismaClient() has vi.fn() mocks for all DB methods (findUnique, findFirst, findMany, create, update, delete, upsert, $transaction, $connect, $disconnect), ✓ mockDockerClient() has vi.fn() mocks for run/start/stop/rm. Test file: tests/unit/tc-037.test.ts already implemented and committed.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-037/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-037/stderr.log",
+  "executedAt": "2026-03-17T09:44:46Z"
+}

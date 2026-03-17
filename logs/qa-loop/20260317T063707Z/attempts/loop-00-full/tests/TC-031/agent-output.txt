@@ -1,0 +1,13 @@
+<status>PASS</status>
+<evidence>All 8 TC-031 tests passed in 1656ms (430/430 suite total):
+- Wrong X-Relay-Token → 401 `{ok: false, error: 'Unauthorized'}`
+- Missing X-Relay-Token → 401 `{ok: false, error: 'Unauthorized'}`
+- No MESSAGE_DELIVERED audit event for rejected messages
+- Correct relay token (with mocked fetch) → 200 `{ok: true}`
+- MESSAGE_DELIVERED audit event written with correct slackEventId</evidence>
+<reason>N/A</reason>
+<learnings>
+- Relay token validation fires before allowlist check — wrong/missing `x-relay-token` returns 401 before other guards (403, 507, 503).
+- To test successful message delivery (200), mock `globalThis.fetch` via `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(...))` — the control-plane forwards to the container via fetch, which would fail without a real container. Always call `fetchSpy.mockRestore()` after the request to avoid polluting other tests.
+- The relay token returned in the `POST /v1/tenants/provision` response (`body.relayToken`) is the same value that must be sent as the `x-relay-token` header on message requests.
+</learnings>

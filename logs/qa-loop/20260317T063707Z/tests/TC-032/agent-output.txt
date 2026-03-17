@@ -1,0 +1,12 @@
+<status>PASS</status>
+<evidence>All 9 TC-032 tests passed in 1709ms (439/439 suite total):
+- disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}`
+- No MESSAGE_DELIVERED audit event written when blocked by quota
+- disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}` with mocked fetch
+- MESSAGE_DELIVERED audit event written with correct slackEventId after quota cleared</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- The `disk_quota_exceeded` check in the message endpoint fires after relay token auth (401) and allowlist check (403), but before the ACTIVE status check (503). Setting it via `prisma.tenant.update({ data: { disk_quota_exceeded: 1 } })` directly is sufficient to trigger 507 without needing the scheduler.
+- The test structure mirrors TC-031 exactly: provision → allowlist → start → flush setImmediate queues → manipulate DB flag → assert blocked response → clear flag → assert 200 with `vi.spyOn(globalThis, 'fetch')` mock.
+- The 507 guard does not require the tenant to be ACTIVE — it fires regardless of tenant status once the relay token is validated.
+</learnings>
