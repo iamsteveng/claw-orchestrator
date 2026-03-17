@@ -31,3 +31,22 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
+
+TC-024 Agent Output Evidence
+============================
+Test: Container image promote → new default used on next start
+Run: 2026-03-17 08:43:42 UTC
+Result: PASS — 9/9 tests passed in 1593ms
+
+Test Results:
+  ✓ TC-024: POST /v1/admin/images/:id/promote returns {promoted: true, tag}
+  ✓ TC-024: v2.0 is_default=1 after promotion
+  ✓ TC-024: v1.0 is_default=0 and deprecated_at set after promotion
+  ✓ TC-024: IMAGE_UPDATED audit event written for promotion (actor=admin)
+  ✓ TC-024: create STOPPED tenant with old image_tag v1.0
+  ✓ TC-024: POST /start returns 202 {status: "starting"}
+  ✓ TC-024: tenant image_tag updated to v2.0 after start
+  ✓ TC-024: IMAGE_UPDATED audit event written for tenant with old→new tag
+  ✓ TC-024: tenant reaches ACTIVE status after health polling
+
+Suite total: 401/401 tests passed (59 test files)

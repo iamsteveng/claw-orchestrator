@@ -622,3 +622,29 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **Seed tenant with old image_tag**: Create STOPPED tenant with `image_tag: 'claw-tenant:v1.0'` to trigger the IMAGE_UPDATED audit event on start.
   - **mockNow = 24_000_000** for TC-024 to avoid collisions with other test files.
 ---
+
+### TC-024 [PASS] Container image promote → new default used on next start
+- **Evidence:** All 9 TC-024 tests passed in 1623ms: - POST /v1/admin/images/:id/promote → 200 {promoted: true, tag: 'claw-tenant:v2.0'} - v2.0 is_default=1 after promotion - v1.0 is_default=0 and deprecated_at set - IMAGE_UPDATED audit event (actor=admin, metadata.promotedTag='claw-tenant:v2.0') - STOPPED tenant created with old image_tag v1.0 - POST /start → 202 {status: 'starting'} - tenant.image_tag updated to 'claw-tenant:v2.0' synchronously on start - IMAGE_UPDATED audit event for tenant (actor=system, oldTag/newTag in metadata) - Tenant reaches ACTIVE; image_tag still v2.0 Suite: 400/401 passed (TC-015 pre-existing failure unrelated to TC-024)
+- **Learnings:**
+  - - **promote endpoint is transactional**: `$transaction` sets all other images `is_default=0, deprecated_at=now` then sets target `is_default=1`. Verify both sides. - **image_tag update is synchronous on /start**: Resolved and updated before returning 202 — no setImmediate flushing needed to check image_tag. - **Two IMAGE_UPDATED events on this path**: One from promote (actor=admin, tenant_id=null, metadata={promotedTag}), one from /start when tag changes (actor=system, tenant_id=tenantId, metadata={oldTag, newTag}). Filter by tenant_id to distinguish. - **Seed tenant with old image_tag**: Create STOPPED tenant with `image_tag: 'claw-tenant:v1.0'` to trigger the IMAGE_UPDATED audit event on start. - **mockNow = 24_000_000** for TC-024 to avoid timestamp collisions.
+---
+
+### TC-024 [PASS] Container image promote → new default used on next start
+- **Evidence:** All 9 TC-024 tests passed in 1593ms (401/401 total suite):
+  - ✓ POST /v1/admin/images/:id/promote returns {promoted: true, tag: 'claw-tenant:v2.0'}
+  - ✓ v2.0 is_default=1 after promotion
+  - ✓ v1.0 is_default=0 and deprecated_at set after promotion
+  - ✓ IMAGE_UPDATED audit event written for promotion (actor=admin, tenant_id=null, metadata.promotedTag=v2.0)
+  - ✓ STOPPED tenant created with image_tag='claw-tenant:v1.0'
+  - ✓ POST /start returns 202 {status: "starting"}
+  - ✓ Tenant image_tag updated to 'claw-tenant:v2.0' synchronously on start
+  - ✓ IMAGE_UPDATED audit event written for tenant image change (actor=system, oldTag=v1.0, newTag=v2.0)
+  - ✓ Tenant reaches ACTIVE status after health polling
+- Test file was already implemented in a prior agent run; no Phase 1 changes needed.
+- **Learnings:**
+  - **Two IMAGE_UPDATED events in this flow**: promote writes one with `tenant_id=null, actor=admin, metadata.promotedTag`; /start writes another with `tenant_id=<id>, actor=system, metadata.{oldTag, newTag}`.
+  - **image_tag update is synchronous in /start**: The start endpoint checks `imageTag !== tenant.image_tag` and updates the tenant row + writes IMAGE_UPDATED *before* returning 202. No setImmediate flushing needed to verify image_tag change.
+  - **promote endpoint transaction**: Uses `prisma.$transaction` to atomically demote old defaults (is_default=0, deprecated_at=now) and promote the target (is_default=1).
+  - **Only STOPPED tenants need docker.start**: For STOPPED status, the start endpoint calls `dc.start(containerName)` — no docker.run needed. Tenant must have status=STOPPED (not NEW) to avoid provisioning path.
+  - **Minimal seeding for promote tests**: Only containerImage rows needed; no DATA_DIR dirs required for the promote endpoint itself.
+---
