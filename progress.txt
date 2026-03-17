@@ -441,3 +441,16 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - cleanArchiveDirectories uses fs.stat mtimeMs to detect 30-day-old directories; handles missing archiveDir gracefully
   - 124 total tests passing
 ---
+
+## 2026-03-17 - US-030
+- What was implemented: Capacity queue retry — scheduler starts queued tenants when capacity opens
+- Files changed:
+  - packages/shared-config/src/schemas.ts (added MAX_ACTIVE_TENANTS + ACTIVE_TENANTS_OVERFLOW_POLICY to schedulerConfigSchema)
+  - apps/scheduler/src/capacity-retry.ts (new: getActiveCount, retryQueuedTenants)
+  - apps/scheduler/src/capacity-retry.test.ts (new: 6 unit tests)
+  - apps/scheduler/src/index.ts (integrated retryQueuedTenants on every tick)
+- **Learnings for future iterations:**
+  - retryQueuedTenants no-ops when overflowPolicy='reject'; only starts ONE tenant per call (take: 1 + ordered by queued_for_start_at ASC)
+  - MAX_ACTIVE_TENANTS and ACTIVE_TENANTS_OVERFLOW_POLICY added to schedulerConfigSchema (same defaults as controlPlaneConfigSchema)
+  - 130 total tests passing
+---
