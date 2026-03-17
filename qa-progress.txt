@@ -419,3 +419,19 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - Stale message threshold is >2 minutes (not >=2 minutes) — test used 3 minutes ago to be safely over threshold.
   - `SYSTEM_STARTUP` audit log has `tenant_id: null` and `actor: 'system'` — check these specific fields.
 ---
+
+### TC-016 [PASS] Control plane startup reconciliation → crashed state reset
+- **Evidence:** All 7 TC-016 tests passed in 1431ms: - ✓ reconcile() runs without error - ✓ PROVISIONING tenant → status=FAILED - ✓ STARTING tenant → status=FAILED - ✓ expired startup_lock → deleted - ✓ stale PROCESSING message → status=PENDING - ✓ SYSTEM_STARTUP audit log entry written (actor='system', tenant_id=null) - ✓ ACTIVE tenant status unchanged Full suite: 52 test files, 361 tests all passed.
+- **Learnings:**
+  - - TC-016 uses an isolated per-run SQLite DB (`/tmp/test-tc016-<uuid>.db`), avoiding parallel test interference — good pattern for reconciliation tests. - `reconcile()` accepts `(prisma, log)` where `log` is duck-typed `{ info, warn }`, enabling clean testing without a real logger. - Stale message threshold is >2 minutes; test used 3 minutes to safely exceed it. - `SYSTEM_STARTUP` audit log has `tenant_id: null` and `actor: 'system'` — verify both fields.
+---
+
+### TC-016 [PASS] Control plane startup reconciliation → crashed state reset
+- All 7 TC-016 tests passed (361/361 total tests across 52 files, 1459ms)
+- Extracted `reconcile()` to `startup-reconciliation.ts` (exported) and updated `index.ts` to import from it
+- **Learnings:**
+  - SQLite INT column cannot hold real `Date.now()` timestamps (~1.7e12) — must use small fake timestamps (e.g., `mockNow = 16_000_000`) via `vi.spyOn(Date, 'now')`
+  - For stale-threshold checks like `updated_at < now - 120_000`, use "old" timestamps near 0 (e.g., 1000, 2000) so the delta is >> 120_000 regardless of when reconcile runs
+  - `reconcile()` is in `index.ts` but not exported by default — extract to a separate module for testability
+  - Duck-typed `log: { info, warn }` pattern makes reconcile easy to test without a real Fastify logger
+---

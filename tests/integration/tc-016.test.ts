@@ -8,13 +8,17 @@
  *  4. Stale PROCESSING message (updated_at > 2 min ago) → status=PENDING
  *  5. SYSTEM_STARTUP audit log entry written
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 
 import { reconcile } from '../../apps/control-plane/src/startup-reconciliation.js';
+
+// Use small incrementing timestamps to stay within SQLite Int32 range
+let mockNow = 16_000_000;
+vi.spyOn(Date, 'now').mockImplementation(() => mockNow++);
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,9 +51,11 @@ beforeAll(async () => {
   prisma = new PrismaClient({ datasourceUrl: dbUrl });
   await prisma.$connect();
 
-  const now = Date.now();
-  const threeMinutesAgo = now - 3 * 60 * 1000;
-  const fiveMinutesAgo = now - 5 * 60 * 1000;
+  // Use small fake timestamps well within SQLite Int32 range.
+  // mockNow starts at 16_000_000. "Old" timestamps near 0 ensure the delta
+  // is >> 120_000 (2 min in ms), so stale-check and expiry-check both fire.
+  const fiveMinutesAgo = 1000;
+  const threeMinutesAgo = 2000;
 
   // ── 1. PROVISIONING tenant ─────────────────────────────────────────────────
   provisioningTenantId = randomUUID().slice(0, 16);
