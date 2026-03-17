@@ -29,6 +29,8 @@ export const schedulerConfigSchema = z.object({
   CONTROL_PLANE_URL: z.string().url(),
   SLACK_BOT_TOKEN: z.string().min(1),
   DATA_MOUNT: z.string().min(1).default('/data'),
+  MAX_ACTIVE_TENANTS: z.coerce.number().int().positive().default(10),
+  ACTIVE_TENANTS_OVERFLOW_POLICY: z.enum(['queue', 'reject']).default('queue'),
 });
 
 export type SchedulerConfig = z.infer<typeof schedulerConfigSchema>;

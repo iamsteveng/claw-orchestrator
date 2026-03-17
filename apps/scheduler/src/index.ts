@@ -3,6 +3,7 @@ import { schedulerConfig } from '@claw/shared-config/scheduler';
 import { stopIdleTenants } from './idle-stop.js';
 import { checkDiskQuotas, checkHostDisk } from './disk-quota.js';
 import { reapMessageQueue, sweepStaleLocks, cleanArchiveDirectories, archiveAuditLog } from './reaper.js';
+import { retryQueuedTenants } from './capacity-retry.js';
 import pino from 'pino';
 
 const log = pino({ base: { service: 'scheduler' } });
@@ -19,6 +20,14 @@ async function runJobs(): Promise<void> {
   await sweepStaleLocks(prisma, log);
 
   await stopIdleTenants(prisma, schedulerConfig.CONTROL_PLANE_URL, idleStopMs, log);
+
+  await retryQueuedTenants(
+    prisma,
+    schedulerConfig.CONTROL_PLANE_URL,
+    schedulerConfig.MAX_ACTIVE_TENANTS,
+    schedulerConfig.ACTIVE_TENANTS_OVERFLOW_POLICY,
+    log,
+  );
 
   tickCount++;
   if (tickCount % DISK_CHECK_TICKS === 0) {
