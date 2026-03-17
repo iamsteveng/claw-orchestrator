@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { makeTenant, makeMessageQueueRow, mockPrismaClient, mockDockerClient } from '../../packages/test-utils/src/index.js';
-import { TenantStatus, MessageStatus } from '@claw/shared-types';
+import { TenantStatus } from '../../packages/shared-types/src/tenant.js';
+import { MessageStatus } from '../../packages/shared-types/src/message.js';
 
 describe('TC-037 Workspace template fixtures → test-utils package', () => {
   it('TC-037: makeTenant() returns a fully-populated Tenant fixture', () => {
