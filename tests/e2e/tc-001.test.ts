@@ -10,6 +10,12 @@
  * - message_queue row transitions to DELIVERED
  * - Slack chat.postMessage called with agent response
  * - Audit log contains TENANT_PROVISIONED, TENANT_STARTED, MESSAGE_DELIVERED in order
+ *
+ * Uses a private DATA_DIR (/tmp/claw-tc001-isolated) to avoid interference from
+ * other e2e test files that wipe /tmp/claw-test-tenants in their afterAll hooks
+ * when running concurrently. The isolation is achieved by calling vi.stubEnv +
+ * vi.resetModules before dynamically importing buildApp, forcing controlPlaneConfig
+ * to re-evaluate with the isolated DATA_DIR.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
@@ -17,13 +23,13 @@ import { execSync } from 'node:child_process';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { mkdir, rm, readFile, access, writeFile } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
+import type { buildApp as BuildAppFn } from '../../apps/control-plane/src/app-factory.js';
+import type { buildSlackRelayApp as BuildRelayFn } from '../../apps/slack-relay/src/app-factory.js';
 
-// Mock Date.now() to small incrementing counter to avoid SQLite Int32 overflow
+// Mock Date.now() to small incrementing counter to avoid SQLite Int32 overflow.
+// Must be set before any module that calls Date.now() at load time.
 let mockNow = 3_000_000;
 vi.spyOn(Date, 'now').mockImplementation(() => mockNow++);
-
-import { buildApp } from '../../apps/control-plane/src/app-factory.js';
-import { buildSlackRelayApp } from '../../apps/slack-relay/src/app-factory.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,8 +38,10 @@ const TEST_USER_ID = 'U_TC001';
 const SIGNING_SECRET = 'test-signing-secret';
 const BOT_TOKEN = 'xoxb-test-token';
 
-// Use the same DATA_DIR that controlPlaneConfig resolves to (set by vitest-setup.ts)
-const TEST_DATA_DIR = process.env.DATA_DIR ?? '/tmp/claw-test-tenants';
+// Private data dir — completely separate from /tmp/claw-test-tenants to avoid
+// being wiped by isolation.test.ts / control-plane-extended.test.ts afterAll hooks
+// that do rm -rf /tmp/claw-test-tenants when running concurrently.
+const TEST_DATA_DIR = '/tmp/claw-tc001-isolated';
 
 // Ports distinct from other e2e tests
 // first-message: 13298/13299, lifecycle: 13301/13302, isolation: 13303, cp-extended: 13305
@@ -105,6 +113,13 @@ const slackPostMessageCalls: Array<{ channel: string; text?: string; blocks?: un
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
+  // 0. Override DATA_DIR and reset module cache so that when buildApp is imported
+  //    below, @claw/shared-config/control-plane re-evaluates with the new DATA_DIR.
+  //    This prevents /tmp/claw-test-tenants from being used (which other concurrent
+  //    test files can delete in their afterAll hooks).
+  vi.stubEnv('DATA_DIR', TEST_DATA_DIR);
+  vi.resetModules();
+
   // 1. Create temp SQLite DB
   tempDbPath = `/tmp/test-tc001-${randomUUID()}.db`;
   const dbUrl = `file:${tempDbPath}`;
@@ -142,7 +157,12 @@ beforeAll(async () => {
     },
   });
 
-  // 5. Build control-plane with mocked docker client
+  // 5. Dynamically import buildApp AFTER vi.resetModules() so that
+  //    @claw/shared-config/control-plane re-evaluates with DATA_DIR=TEST_DATA_DIR.
+  const { buildApp } = await import('../../apps/control-plane/src/app-factory.js') as {
+    buildApp: typeof BuildAppFn;
+  };
+
   cpApp = await buildApp(prisma, { logger: false, dockerClient: mockDockerClient });
   await cpApp.listen({ port: CP_PORT, host: '127.0.0.1' });
 
@@ -193,7 +213,11 @@ beforeAll(async () => {
 
   globalThis.fetch = mockedFetch;
 
-  // 7. Build slack-relay
+  // 7. Build slack-relay (also dynamically imported so it picks up reset modules)
+  const { buildSlackRelayApp } = await import('../../apps/slack-relay/src/app-factory.js') as {
+    buildSlackRelayApp: typeof BuildRelayFn;
+  };
+
   const relayConfig = {
     SLACK_RELAY_PORT: RELAY_PORT,
     SLACK_SIGNING_SECRET: SIGNING_SECRET,
@@ -215,9 +239,9 @@ afterAll(async () => {
     await unlink(tempDbPath);
   } catch { /* best-effort */ }
 
-  // Clean up only this test's tenant directory (not the shared base dir)
+  // Clean up the entire private data dir (no other test uses /tmp/claw-tc001-isolated)
   try {
-    await rm(`${TEST_DATA_DIR}/${computeExpectedTenantId(TEST_TEAM_ID, TEST_USER_ID)}`, { recursive: true, force: true });
+    await rm(TEST_DATA_DIR, { recursive: true, force: true });
   } catch { /* best-effort */ }
 }, 30_000);
 
