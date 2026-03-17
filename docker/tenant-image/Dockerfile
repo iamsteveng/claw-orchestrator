@@ -52,6 +52,7 @@ WORKDIR /home/agent
 
 # Copy server scripts to /usr/local/lib/
 COPY --chown=root:root health-server.js /usr/local/lib/claw-health-server.js
+COPY --chown=root:root message-server.js /usr/local/lib/claw-message-server.js
 
 # Copy entrypoint script (runs as root to set up dirs; drops to agent via USER below)
 COPY --chown=root:root entrypoint.sh /usr/local/bin/entrypoint.sh

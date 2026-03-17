@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+// message-server.js — Message endpoint for Claw tenant containers
+// Runs on port 3100. POST /message forwards messages to the OpenClaw agent.
+// No external dependencies — uses Node.js built-ins only.
+
+'use strict';
+
+const http = require('http');
+const { spawn } = require('child_process');
+
+const PORT = 3100;
+const RELAY_TOKEN = process.env.RELAY_TOKEN || '';
+
+/**
+ * Forward a message to the openclaw CLI via stdin and collect stdout response.
+ * @param {string} text - The message text to send
+ * @returns {Promise<{response: string, blocks: null}>}
+ */
+function forwardToOpenclaw(text) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('openclaw', ['--message-mode'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (err) => {
+      reject(new Error(`Failed to spawn openclaw: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ response: stdout.trim(), blocks: null });
+      } else {
+        reject(new Error(stderr.trim() || `openclaw exited with code ${code}`));
+      }
+    });
+
+    // Write message text to stdin and close
+    child.stdin.write(text);
+    child.stdin.end();
+  });
+}
+
+/**
+ * Parse a JSON body from an incoming request.
+ * @param {http.IncomingMessage} req
+ * @returns {Promise<unknown>}
+ */
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk.toString();
+    });
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(data));
+      } catch {
+        reject(new Error('Invalid JSON body'));
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+/**
+ * Validate that a parsed body matches RelayMessageRequest shape.
+ * @param {unknown} body
+ * @returns {string | null} error message or null if valid
+ */
+function validateBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return 'Request body must be a JSON object';
+  }
+  const required = ['messageId', 'slackEventId', 'userId', 'teamId', 'text', 'slackPayload', 'timestamp'];
+  for (const field of required) {
+    if (!(field in body)) {
+      return `Missing required field: ${field}`;
+    }
+  }
+  if (typeof body.text !== 'string') {
+    return 'Field "text" must be a string';
+  }
+  if (typeof body.timestamp !== 'number') {
+    return 'Field "timestamp" must be a number';
+  }
+  return null;
+}
+
+const server = http.createServer(async (req, res) => {
+  if (req.method !== 'POST' || req.url !== '/message') {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Not found' }));
+    return;
+  }
+
+  // Validate relay token
+  const token = req.headers['x-relay-token'];
+  if (!RELAY_TOKEN || token !== RELAY_TOKEN) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+    return;
+  }
+
+  let body;
+  try {
+    body = await parseBody(req);
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: err.message }));
+    return;
+  }
+
+  const validationError = validateBody(body);
+  if (validationError) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: validationError }));
+    return;
+  }
+
+  process.stdout.write(
+    JSON.stringify({
+      level: 'info',
+      msg: 'Received message',
+      messageId: body.messageId,
+      slackEventId: body.slackEventId,
+    }) + '\n'
+  );
+
+  try {
+    const result = await forwardToOpenclaw(body.text);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, response: result.response, blocks: result.blocks }));
+  } catch (err) {
+    process.stderr.write(
+      JSON.stringify({
+        level: 'error',
+        msg: 'openclaw error',
+        messageId: body.messageId,
+        error: err.message,
+      }) + '\n'
+    );
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: err.message }));
+  }
+});
+
+server.listen(PORT, '0.0.0.0', () => {
+  process.stdout.write(`[message-server] Listening on port ${PORT}\n`);
+});
