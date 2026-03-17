@@ -481,6 +481,20 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
 
+## 2026-03-17 - US-034
+- What was implemented: Tenant container message endpoint server on port 3100
+- Files changed:
+  - docker/tenant-image/message-server.js (new: HTTP server, POST /message, relay token auth, openclaw CLI invocation via stdin pipe)
+  - docker/tenant-image/Dockerfile (added COPY for message-server.js to /usr/local/lib/claw-message-server.js)
+- **Learnings for future iterations:**
+  - message-server.js uses only Node.js built-ins (http, child_process) — no npm deps needed
+  - RELAY_TOKEN env var is validated against X-Relay-Token header; 401 on mismatch
+  - openclaw is invoked with --message-mode flag, message text passed via stdin, stdout read as response
+  - entrypoint.sh already had conditional start logic for /usr/local/lib/claw-message-server.js
+  - Logs messageId + slackEventId at info level for each received message
+  - 130 total tests passing
+---
+
 ## 2026-03-17 - US-033
 - What was implemented: Tenant container health endpoint server on port 3101
 - Files changed:
