@@ -193,3 +193,61 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **Use `mockNow = 9_000_000`** for TC-007 (TC-001: 3M → TC-006: 8M sequence).
   - **No vi.stubEnv + resetModules needed for integration tests**: Only needed for e2e tests that need DATA_DIR isolation from parallel workers.
 ---
+
+### TC-007 [PASS] Tenant deletion → data cleaned up
+- **Evidence:** TC-007 passed in 314ms. All assertions verified: - ✓ DELETE /v1/tenants/:id returns {deleted: true} (HTTP 200) - ✓ tenant.deleted_at is set (soft delete, row preserved in DB) - ✓ message_queue rows purged (2 seeded → 0 after delete) - ✓ startup_lock row purged (1 seeded → 0 after delete) - ✓ TENANT_DELETED audit log entry exists with actor='admin' - ✓ original data_dir no longer accessible on disk - ✓ archiveDir (from audit log metadata) exists on disk - ✓ second DELETE returns HTTP 409 Full suite: 310/310 tests pass (43 test files)
+- **Learnings:**
+  - - **archiveDir from audit log metadata**: The DELETE endpoint stores `archiveDir` in TENANT_DELETED audit log metadata JSON `{ containerName, archiveDir }`. Parse it to get the exact archive path rather than reconstructing manually. - **Archive path quirk in test env**: `DATA_DIR=/tmp/claw-test-tenants` has no `/data/tenants/` substring, so the replace is a no-op → `archiveBase === srcDir`. Then `access(archiveBase)` finds it exists → appends timestamp: `archiveDir = ${srcDir}-${mockNow}`. Archive lands at `${DATA_DIR}/${tenantId}-<timestamp>`, not in a separate `tenants-archive` dir. - **Soft delete only**: Tenant row preserved with `deleted_at` set. Second DELETE hits `deleted_at !== null` → 409. - **`vi.mock` hoisting works for docker-client**: TC-007 uses `vi.mock('@claw/docker-client', ...)` (hoisted) instead of passing `dockerClient` in buildApp options — both approaches work. - **No `vi.stubEnv + resetModules` needed for pure integration tests**: Only needed for e2e tests with DATA_DIR isolation concerns. - **mockNow = 9_000_000** for TC-007 (continuation: TC-001: 3M → TC-006: 8M).
+---
+
+### TC-008 [PASS] Health polling → UNHEALTHY detection
+- All 3 TC-008 assertions passed in 1346ms (313/313 total tests pass across 44 test files):
+  - ✓ TC-008: health polling detects 3 consecutive failures → tenant transitions to UNHEALTHY
+  - ✓ TC-008: TENANT_UNHEALTHY audit log entry written with reason=consecutive_failures
+  - ✓ TC-008: UNHEALTHY state does not affect other tenants (isolation)
+- **What worked:** Test file already existed. Uses `vi.mock` for recovery module, direct DB seeding of ACTIVE tenants, `vi.stubGlobal('fetch', ...)` returning 503, `vi.useFakeTimers() + vi.runAllTimersAsync()` to fast-forward through poll intervals, and reads audit log directly from Prisma. mockNow=10_000_000.
+- **Learnings:**
+  - **`vi.useFakeTimers() + vi.runAllTimersAsync()`** is the correct pattern for testing polling logic that uses setInterval/setTimeout — it fast-forwards all timers without real wall-clock waiting.
+  - **`pollUntilHealthy` returns `'timeout'`** when max consecutive failures are reached, signaling exhaustion. The UNHEALTHY status is written to DB before this return.
+  - **TENANT_UNHEALTHY audit log metadata**: Contains `{ reason: 'consecutive_failures', containerName }` — both fields must be asserted.
+  - **Recovery mock is critical**: Without mocking `attemptAutoRecovery`, pollUntilHealthy would attempt docker/network calls on failures. Use `vi.mock('../../apps/control-plane/src/recovery.js', () => ({ attemptAutoRecovery: vi.fn().mockResolvedValue(undefined) }))`.
+  - **mockNow = 10_000_000** for TC-008 (TC-001: 3M → TC-007: 9M sequence).
+  - **Port assignment**: No HTTP servers needed — pure unit/integration test against health-poll.js directly.
+---
+
+### TC-008 [PASS] Health polling → UNHEALTHY detection
+- **Evidence:** All 3 TC-008 assertions passed in 1346ms (313/313 total tests across 44 files): - ✓ TC-008: health polling detects 3 consecutive failures → tenant transitions to UNHEALTHY (status confirmed in DB) - ✓ TC-008: TENANT_UNHEALTHY audit log entry written with reason=consecutive_failures and containerName in metadata - ✓ TC-008: UNHEALTHY state does not affect other tenants (tenant B remains ACTIVE, no TENANT_UNHEALTHY audit log for B)
+- **Learnings:**
+  - - **`vi.useFakeTimers() + vi.runAllTimersAsync()`** is the correct pattern for testing polling functions that use setInterval/setTimeout — fast-forwards all pending timers without real wall-clock delay. - **`pollUntilHealthy` returns `'timeout'`** when max consecutive health check failures are reached; UNHEALTHY status is written to DB before this return value. - **TENANT_UNHEALTHY audit log metadata** contains `{ reason: 'consecutive_failures', containerName }` — assert both fields. - **Recovery mock is essential**: Mock `attemptAutoRecovery` via `vi.mock('../../apps/control-plane/src/recovery.js', ...)` to prevent real docker/network calls on health failures in the integration test. - **No HTTP servers needed**: TC-008 tests health-poll.js directly against a seeded SQLite DB — no relay or control-plane HTTP setup required. - **mockNow = 10_000_000** continues the sequence (TC-001: 3M → TC-007: 9M).
+---
+
+### TC-008 [PASS] Health polling → UNHEALTHY detection
+- **Evidence:** All 3 TC-008 assertions passed in 1395ms (313/313 total tests across 44 test files): - ✓ TC-008: health polling detects 3 consecutive failures → tenant transitions to UNHEALTHY (status confirmed in DB) - ✓ TC-008: TENANT_UNHEALTHY audit log entry written with reason=consecutive_failures and containerName in metadata - ✓ TC-008: UNHEALTHY state does not affect other tenants (tenant B remains ACTIVE, no TENANT_UNHEALTHY audit log for B)
+- **Learnings:**
+  - - **Call `pollUntilHealthy()` directly** for health polling integration tests — no HTTP server or relay needed. Import the function, provide a real PrismaClient, mocked fetch, and fake timers. - **`vi.useFakeTimers() + vi.runAllTimersAsync()`** fast-forwards all setTimeout/setInterval calls, collapsing 3×2s poll intervals into milliseconds. - **`vi.stubGlobal('fetch', ...)` mocks the global fetch** used by `checkHealth()`. Mock returning `{ ok: false, status: 503 }` simulates a down container health endpoint. - **Mock `recovery.js` relative path** (`../../apps/control-plane/src/recovery.js`) to prevent `attemptAutoRecovery` from executing docker/network calls after UNHEALTHY is detected. - **Seed ACTIVE tenants directly via prisma.tenant.create()** — avoids the full provision HTTP flow for tests that only care about health polling behavior. - **`pollUntilHealthy` returns `'timeout'`** when max consecutive failures are reached; UNHEALTHY is written to DB before this return. - **TENANT_UNHEALTHY audit log metadata** contains `{ reason: 'consecutive_failures', containerName }` — assert both fields. - **mockNow = 10_000_000** for TC-008 (sequence: TC-001: 3M → TC-007: 9M). - Use `vi.unstubAllGlobals()` after the fetch mock to prevent leakage into subsequent tests.
+---
+
+### TC-009 [PASS] Disk quota → warning at 90%, block at 100%, auto-clear below 95%
+- **Evidence:** All 4 TC-009 assertions passed in 1742ms (317/317 total tests across 45 test files): - ✓ DISK_QUOTA_WARNING audit event written and Slack DM with cleanup suggestion sent at 90% - ✓ DISK_QUOTA_EXCEEDED audit event written and disk_quota_exceeded=1 set at 100% - ✓ POST /v1/tenants/:id/message returns 507 while disk_quota_exceeded=1 - ✓ disk_quota_exceeded reset to 0 when usage drops below 95%
+- **Learnings:**
+  - **Math.floor(QUOTA_BYTES * 0.9) produces a ratio of 0.8999... < 0.9** due to floating-point precision. Using `Math.floor` with the 90% threshold means the value is strictly below the threshold, so DISK_QUOTA_WARNING never triggers. Fix: use `Math.ceil(QUOTA_BYTES * 0.9)` to guarantee ratio >= 0.9.
+  - **checkDiskQuotas accepts injected getDiskFn** — pass `vi.fn().mockResolvedValue(bytes)` as the 4th argument to bypass real `du -sb` calls. The mock ignores the path argument and returns the configured bytes value for any tenant.
+  - **fetchFn injection for Slack DMs** — pass a `vi.fn()` as the 5th argument to checkDiskQuotas. Mock `conversations.open` with `{ ok: true, channel: { id: 'D_...' } }` and all other URLs with `{ ok: true }`. Inspect `fetchMock.mock.calls` to assert the postMessage body text.
+  - **Force tenant ACTIVE via direct DB update** after provision — provisioning with mocked docker doesn't fully activate, so set status='ACTIVE' with `prisma.tenant.update()` after the provision call.
+  - **Import checkDiskQuotas dynamically** after `vi.resetModules()` using `await import('../../apps/scheduler/src/disk-quota.js')` — ensures it uses the same module context as the app.
+  - **mockNow = 11_000_000** for TC-009 (sequence: TC-001: 3M → TC-008: 10M → TC-009: 11M).
+  - **disk_quota_exceeded=0 is set by checkDiskQuotas** when ratio < 0.95 AND the tenant previously had disk_quota_exceeded=1. No new audit event is written on clear.
+---
+
+### TC-009 [PASS] Disk quota → warning at 90%, block at 100% (re-run with Math.ceil fix)
+- **Evidence:** All 4 TC-009 tests passed (317/317 total tests across 45 test files) in 1800ms: - ✓ DISK_QUOTA_WARNING audit event written + Slack DM with `rm -rf` cleanup suggestion at 90% - ✓ DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded=1 at 100% - ✓ POST /v1/tenants/:id/message returns 507 while disk_quota_exceeded=1 - ✓ disk_quota_exceeded reset to 0 when usage drops below 95% (no new audit events on clear)
+- **Fix applied:** WARN_BYTES changed from `Math.floor(QUOTA_BYTES * 0.9)` to `Math.ceil(QUOTA_BYTES * 0.9)` — the floor produced 0.8999... which failed the `>= 0.9` threshold check.
+- **Learnings:**
+  - **Float precision at boundary thresholds**: `Math.floor(x * 0.9)` gives a value that when divided back by x yields 0.8999..., strictly below 0.9. Always use `Math.ceil` when computing test values that must meet or exceed a threshold.
+---
+
+### TC-009 [PASS] Disk quota → warning at 90%, block at 100%
+- **Evidence:** All 4 TC-009 tests passed (317/317 total tests across 45 test files) in 1742ms: - ✓ DISK_QUOTA_WARNING audit event written + Slack DM with `rm -rf` cleanup suggestion at 90% - ✓ DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded=1 at 100% - ✓ POST /v1/tenants/:id/message returns 507 while disk_quota_exceeded=1 - ✓ disk_quota_exceeded reset to 0 when usage drops below 95% (no new audit events)
+- **Learnings:**
+  - - **Math.floor float precision trap**: `Math.floor(QUOTA_BYTES * 0.9)` produces 0.8999... when divided back — strictly below the 0.9 threshold, so warning never fires. Fix: use `Math.ceil(QUOTA_BYTES * 0.9)` for thresholds at exact percentages. - **checkDiskQuotas is fully injectable**: pass `vi.fn().mockResolvedValue(bytes)` as getDiskFn (4th arg) and a fetch mock as fetchFn (5th arg) — no real `du` or Slack API needed. - **Force ACTIVE via direct DB update** after provision when testing scheduler behavior — mocked docker/health-poll doesn't fully activate the tenant. - **Slack DM assertion**: inspect `fetchMock.mock.calls` to find the `chat.postMessage` call and parse the request body JSON to verify message content. - **disk_quota_exceeded clear**: triggered silently (no audit event) when ratio < 0.95 and flag was previously 1 — test the DB field directly, not via audit log.
+---

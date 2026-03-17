@@ -45,10 +45,12 @@ vi.spyOn(Date, 'now').mockImplementation(() => mockNow++);
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const QUOTA_BYTES = 12 * 1024 * 1024 * 1024; // 12 GB
-const WARN_BYTES = Math.floor(QUOTA_BYTES * 0.9);  // 90% = 10.8 GB
-const EXCEEDED_BYTES = QUOTA_BYTES;                // 100%
-const CLEAR_BYTES = Math.floor(QUOTA_BYTES * 0.8); // 80% — well below 95% threshold
+const QUOTA_BYTES = 12 * 1024 * 1024 * 1024; // 12 GB = 12884901888
+// Math.floor(QUOTA_BYTES * 0.9) = 11596411699 bytes, which divided back gives 0.89999... < 0.9
+// Use Math.ceil to guarantee ratio >= 0.9 threshold
+const WARN_BYTES = Math.ceil(QUOTA_BYTES * 0.9);   // 90% — guaranteed >= WARN_THRESHOLD
+const EXCEEDED_BYTES = QUOTA_BYTES;                 // 100%
+const CLEAR_BYTES = Math.floor(QUOTA_BYTES * 0.8);  // 80% — well below 95% threshold
 
 const TEST_TEAM_ID = 'T_TC009';
 const TEST_USER_ID = 'U_TC009';
