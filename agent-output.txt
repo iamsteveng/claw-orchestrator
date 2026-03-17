@@ -1,20 +1,3 @@
-TC-009 Agent Output Evidence
-============================
-Test: Disk quota → warning at 90%, block at 100%
-Test file: tests/integration/tc-009.test.ts
-Result: PASS — 4/4 tests passed in 1800ms
-
-Test output:
- ✓ tests/integration/tc-009.test.ts (4 tests) 1800ms
-   - TC-009: at 90% usage — DISK_QUOTA_WARNING audit event written + Slack DM sent
-   - TC-009: at 100% usage — DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded = 1
-   - TC-009: POST /v1/tenants/:id/message returns 507 when disk_quota_exceeded = 1
-   - TC-009: below 95% — disk_quota_exceeded auto-cleared to 0
-
-All 317 tests pass across 45 test files.
-
----
-
 TC-001 Agent Output Evidence
 ============================
 Tenant ID: 3f34637c0fb5a0d6
@@ -28,3 +11,36 @@ For any task that is complex enough to take more than ~2 minutes:
 - Don't block the conversation
 - When it's done, report back with a concise summary of what was done
 
+
+TC-010 Agent Output Evidence
+============================
+Test: Idle stop → container stopped after 48h inactivity
+Result: PASS (2/2 tests passed in 1744ms, 319/319 total)
+
+Test assertions:
+✓ TC-010: idle tenant (49h) → stop called, status=STOPPED, TENANT_STOPPED audit with actor=scheduler
+✓ TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE
+
+Implementation notes:
+- mockNow = 200_000_000 (allows 49h lookback without Int32 overflow)
+- Idle tenant last_activity_at = baseTime - 49h; recent tenant = baseTime - 47h
+- stopIdleTenants calls POST /v1/tenants/:id/stop with body {actor: 'scheduler'}
+- makeAppFetch delegates to Fastify app.inject — no real HTTP server needed
+- idle-stop.ts updated to pass actor='scheduler' in fetch body
+
+TC-011 Agent Output Evidence
+============================
+Test: auth-profiles.json bind-mount → included in docker run options
+Result: PASS (3/3 tests passed in 6ms, 322/322 total)
+
+Test assertions:
+✓ TC-011: readOnlyBindMounts includes auth-profiles.json path (docker-client will append :ro)
+✓ TC-011: container env includes HOME and XDG_* variables
+✓ TC-011: resource flags — cpus=1.0, memory=1536m, pidsLimit=256
+
+Implementation notes:
+- Pure unit test of buildDockerRunOptions — no DB or app setup needed
+- readOnlyBindMounts array contains hostPath:containerPath; docker-client appends :ro internally
+- Verified: hostPath ends in auth-profiles.json, simulated dockerArg = mount+':ro' ends with :ro
+- env contains HOME=/home/agent, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME
+- Default resource limits: cpus='1.0', memory='1536m', pidsLimit=256

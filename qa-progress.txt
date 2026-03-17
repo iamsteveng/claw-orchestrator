@@ -251,3 +251,35 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
 - **Learnings:**
   - - **Math.floor float precision trap**: `Math.floor(QUOTA_BYTES * 0.9)` produces 0.8999... when divided back — strictly below the 0.9 threshold, so warning never fires. Fix: use `Math.ceil(QUOTA_BYTES * 0.9)` for thresholds at exact percentages. - **checkDiskQuotas is fully injectable**: pass `vi.fn().mockResolvedValue(bytes)` as getDiskFn (4th arg) and a fetch mock as fetchFn (5th arg) — no real `du` or Slack API needed. - **Force ACTIVE via direct DB update** after provision when testing scheduler behavior — mocked docker/health-poll doesn't fully activate the tenant. - **Slack DM assertion**: inspect `fetchMock.mock.calls` to find the `chat.postMessage` call and parse the request body JSON to verify message content. - **disk_quota_exceeded clear**: triggered silently (no audit event) when ratio < 0.95 and flag was previously 1 — test the DB field directly, not via audit log.
 ---
+
+### TC-009 [PASS] Disk quota → warning at 90%, block at 100%
+- **Evidence:** All 4 TC-009 tests passed in 1800ms (317/317 total tests across 45 test files): - ✓ TC-009: at 90% usage — DISK_QUOTA_WARNING audit event written + Slack DM sent (conversations.open + chat.postMessage with `rm -rf` cleanup suggestion) - ✓ TC-009: at 100% usage — DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded=1 in DB - ✓ TC-009: POST /v1/tenants/:id/message returns 507 (body: `{ok:false, error:'Disk quota exceeded'}`) while disk_quota_exceeded=1 - ✓ TC-009: below 95% — disk_quota_exceeded auto-cleared to 0, no new audit events written
+- **Learnings:**
+  - - **Float precision at threshold boundary**: `Math.floor(QUOTA_BYTES * 0.9)` computes `11596411699` which divides back to `0.8999...`, strictly below the `>=0.9` check in `checkDiskQuotas`. Fix: use `Math.ceil(QUOTA_BYTES * 0.9)` = `11596411700` which divides to `0.9000...`. Always use `Math.ceil` when computing test byte values that must meet or exceed a threshold. - **checkDiskQuotas is fully injectable**: pass `vi.fn().mockResolvedValue(bytes)` as `getDiskFn` (4th arg) and a fetch mock as `fetchFn` (5th arg) — no real `du` or Slack API calls needed. - **disk_quota_exceeded clear is silent**: no audit event is written when the flag is cleared below 95%; assert the DB field directly. - **Pass `dockerClient` directly to `buildApp`** instead of using `vi.mock('@claw/docker-client')` when the test doesn't need provisioning — avoids the hoisting complexity. - **mockNow = 11_000_000** for TC-009 (sequence: TC-001: 3M → TC-008: 10M → TC-009: 11M).
+---
+
+### TC-010 [PASS] Idle stop → container stopped after 48h inactivity
+- All 2 tests passed in 1747ms: ✓ idle tenant (49h) → status=STOPPED, TENANT_STOPPED audit event with actor=scheduler, log.info called with tenantId; ✓ recent tenant (47h) → status=ACTIVE, no TENANT_STOPPED audit event
+- **Fix applied:** `idle-stop.ts` was not passing `actor` in the request body — control plane defaulted to 'system'. Added `body: JSON.stringify({ actor: 'scheduler' })` to the stop fetch call.
+- **Learnings:**
+  - **makeAppFetch pattern**: For scheduler integration tests that use fetch internally, create a thin fetch wrapper that routes `/v1/tenants/:id/stop` calls through `app.inject()` — avoids starting a real HTTP server while still testing full HTTP round-trip through the control plane.
+  - **mockNow baseline for idle-stop**: Use mockNow = 200_000_000 as the baseline (not continuing the TC sequence numbering) since 49h = 176_400_000ms requires the baseline to exceed that. Idle tenant's last_activity_at = 200_000_000 - 176_400_000 = 23_600_000, well within SQLite INT32 range.
+  - **Seed tenants directly in DB** (not via provision API) for scheduler-focused tests; set last_activity_at explicitly to control idle timing.
+  - **idleStopMs as a parameter**: `stopIdleTenants` accepts `idleStopMs` as a parameter — pass `48 * 60 * 60 * 1000` (not a small test value) because `Date.now()` is mocked to return the baseline value during the test.
+---
+
+### TC-010 [PASS] Idle stop → container stopped after 48h inactivity
+- **Evidence:** ✓ tests/integration/tc-010.test.ts (2 tests) 1747ms - TC-010: idle tenant (49h) → stop called, status=STOPPED, TENANT_STOPPED audit with actor=scheduler - TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE 319/319 total tests passed across 46 test files.
+- **Learnings:**
+  - - **`idle-stop.ts` was missing `actor: 'scheduler'`** in the stop request body — the control plane defaults to `'system'`. Added `body: JSON.stringify({ actor: 'scheduler' })` to fix it. - **`makeAppFetch` pattern**: For scheduler integration tests where the function uses `fetch` internally, create a thin wrapper that routes `/v1/tenants/:id/stop` calls through `app.inject()` — avoids starting a real HTTP server while still exercising the full control plane path. - **mockNow baseline for idle-stop tests**: Use 200_000_000 as the baseline (not continuing the sequence). 49h = 176_400_000ms requires baseline > 176_400_000. Idle tenant's `last_activity_at = 200_000_000 - 176_400_000 = 23_600_000`, safely within SQLite INT32 range. - **Seed tenants directly in DB** with explicit `last_activity_at` values rather than provisioning through the API — faster and gives precise control over idle timing.
+---
+
+### TC-010 [PASS] Idle stop → container stopped after 48h inactivity
+- **Evidence:** Both TC-010 tests passed in 1744ms (319/319 total tests across 46 test files): - ✓ TC-010: idle tenant (49h) → POST /stop called, status=STOPPED, TENANT_STOPPED audit event with actor=scheduler - ✓ TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE
+- **What worked:** Direct tenant seeding via prisma (no provision endpoint) + `makeAppFetch` delegate pattern (routes fetch calls through `app.inject`). Updated `idle-stop.ts` to pass `body: JSON.stringify({ actor: 'scheduler' })` so the CP records actor=scheduler in the audit log.
+- **Learnings:**
+  - **mockNow = 200_000_000 for 48h tests**: The mockNow sequence (TC-001: 3M → TC-009: 11M) is too small to compute 48h lookbacks (48h = 172.8M ms). Use 200_000_000 as the TC-010 baseline — it's well within SQLite Int32 range (max 2.1B) and allows 49h/47h offsets to be positive.
+  - **Direct tenant seeding pattern**: For scheduler integration tests, seed ACTIVE tenants directly via `prisma.tenant.create()` with explicit `last_activity_at` values. This is simpler than provisioning via the HTTP endpoint and avoids docker mock complexity.
+  - **makeAppFetch delegate pattern**: Create a custom fetchFn that intercepts `/v1/tenants/:id/stop` URLs and routes them through `app.inject()` instead of a real HTTP port. Eliminates the need to start a real HTTP server.
+  - **actor field requires explicit body**: The CP stop endpoint defaults actor to 'system' (`req.body?.actor ?? 'system'`). The scheduler must pass `body: JSON.stringify({ actor: 'scheduler' })` to record the correct actor in the audit log. Updated `idle-stop.ts` with this change.
+---
