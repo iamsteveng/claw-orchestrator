@@ -1,0 +1,17 @@
+The `qa-progress.txt` already has a TC-002 PASS entry. The test file was already correct (it checks by `slack_event_id` not `slack_event_text`). The current run got 6/6 TC-002 tests passing and all 102 tests passed overall.
+
+<status>PASS</status>
+<evidence>All 6 TC-002 assertions passed (102/102 total e2e tests pass):
+- ✓ tenant is ACTIVE before second message
+- ✓ relay returns HTTP 200 immediately for second message
+- ✓ no new tenant row created — exactly 1 tenant for this principal
+- ✓ second message_queue row added and delivered (matched by slack_event_id=Ev_TC002_002)
+- ✓ tenant last_activity_at updated after second message
+- ✓ audit log contains MESSAGE_DELIVERED twice</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- `message_queue` has no text/slack_event_text field — message text is not persisted directly. Identify messages by `slack_event_id` (unique column) rather than matching by text content inside the `payload` JSON blob.
+- TC-002 is fully self-contained: it sends the first message in `beforeAll` and polls until ACTIVE, so it doesn't depend on TC-001 state.
+- Use `mockNow = 4_000_000` (distinct from TC-001's 3_000_000) to avoid Date.now mock collisions across parallel workers.
+- The `last_activity_at` assertion correctly uses `>=` (not `>`) because with mocked Date.now, timestamps may be equal if updates happen in the same tick.
+</learnings>

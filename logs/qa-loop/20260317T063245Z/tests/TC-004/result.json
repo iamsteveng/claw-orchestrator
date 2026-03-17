@@ -1,0 +1,14 @@
+{
+  "id": "TC-004",
+  "title": "Concurrent messages to stopped tenant → single start (startup lock)",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 112 tests pass (3 TC-004-specific tests in tc-004.test.ts): - ✓ TC-004: tenant is STOPPED before concurrent messages - ✓ TC-004: two concurrent Slack events both return HTTP 200 immediately - ✓ TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) — docker.start called exactly 1 time, docker.run called 0 times, maxLockRowsObserved ≤ 1, startup_locks table empty after completion, both Ev_TC004_MSG1 and Ev_TC004_MSG2 DELIVERED (2231ms) Total test duration: 12.60s, 112/112 pass.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-004/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-004/stderr.log",
+  "executedAt": "2026-03-17T07:27:02Z"
+}

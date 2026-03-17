@@ -1,0 +1,14 @@
+{
+  "id": "TC-013",
+  "title": "Startup lock → no duplicate containers on concurrent messages",
+  "level": "unit",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 5 TC-013 tests passed in 24ms (330/330 total tests, 49 test files): - ✓ TC-013: step 1 — acquireStartupLock(requestId1) returns {acquired: true} - ✓ TC-013: step 2 — concurrent acquireStartupLock(requestId2) returns {acquired: false} - ✓ TC-013: step 3 — after releaseStartupLock(requestId1), acquireStartupLock(requestId3) returns {acquired: true} - ✓ TC-013: step 4 — stale lock (expires_at 1ms ago) is overridden, {acquired: true} - ✓ TC-013: full sequence — mutual exclusion and stale takeover At most one lock holder enforced; stale locks expire and can be taken over.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-013/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-013/stderr.log",
+  "executedAt": "2026-03-17T07:56:23Z"
+}

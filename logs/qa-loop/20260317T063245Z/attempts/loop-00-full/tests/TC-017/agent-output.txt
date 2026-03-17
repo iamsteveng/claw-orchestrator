@@ -1,0 +1,19 @@
+<status>PASS</status>
+<evidence>All 3 TC-017 tests passed in 22ms:
+- ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError (field in issues)
+- ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError (field in issues)
+- ✓ TC-017: ZodError message identifies the missing field name
+
+Full suite: 53 files, 364 tests, all passed.</evidence>
+<reason>N/A</reason>
+<learnings>
+1. **`zod` is not a workspace-root dependency**: `import { ZodError } from 'zod'` fails in `tests/unit/` because zod lives in `packages/shared-config/node_modules`. Use `err.name === 'ZodError'` + `err.issues` shape check instead.
+
+2. **`vi.resetModules()` + dynamic import breaks zod resolution**: After `vi.resetModules()`, Vite fails with `Failed to load url zod`. Never use this pattern for Zod-based config modules in this codebase. The vitest-setup.ts comment says this pattern works, but it doesn't in practice.
+
+3. **Test schemas directly, not config singletons**: The config modules are module-level singletons. To test fast-failure, call the exported Zod schema's `.parse(process.env)` directly after deleting the required env var. Same pattern as `packages/shared-config/src/config.test.ts`.
+
+4. **Import via `@claw/shared-config` package name** (pointing to dist files), not via relative source path `../../packages/shared-config/src/schemas.js`, to avoid Vite URL resolution errors for transitive deps like zod.
+
+5. **Always restore env vars in `afterEach`**: Mutating `process.env` requires cleanup to avoid polluting parallel test workers.
+</learnings>

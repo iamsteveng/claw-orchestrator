@@ -1,0 +1,14 @@
+{
+  "id": "TC-030",
+  "title": "Queue reaping → DELIVERED rows older than 7 days deleted",
+  "level": "integration",
+  "priority": "P2",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 4 retention policy assertions passed in 1546ms (422/422 suite): - ✓ 8-day-old DELIVERED row deleted - ✓ 3-day-old DELIVERED row retained - ✓ 31-day-old FAILED row deleted - ✓ 15-day-old FAILED row retained",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-030/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-030/stderr.log",
+  "executedAt": "2026-03-17T09:27:33Z"
+}

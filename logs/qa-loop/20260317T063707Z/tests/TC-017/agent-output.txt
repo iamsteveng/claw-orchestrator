@@ -1,0 +1,20 @@
+<status>PASS</status>
+<evidence>
+✓ tests/unit/tc-017.test.ts (3 tests) 18ms
+  ✓ TC-017: missing SLACK_SIGNING_SECRET → slack-relay config throws ZodError
+  ✓ TC-017: missing DATABASE_URL → control-plane config throws ZodError  
+  ✓ TC-017: ZodError message identifies the missing field name
+
+Full suite: 363/364 tests passed (1 pre-existing TC-015 failure unrelated to TC-017).
+Fast failure confirmed: Zod throws ZodError with `issues[].path[0]` identifying the missing field name.
+</evidence>
+<reason>N/A</reason>
+<learnings>
+1. **`zod` not a workspace-root dependency**: `import { ZodError } from 'zod'` fails in `tests/unit/` because zod is only in `packages/shared-config/package.json`. Workaround: check `err.name === 'ZodError'` and cast to `{ issues: Array<{ path: unknown[] }> }` instead of importing the class.
+
+2. **`vi.resetModules()` + dynamic import breaks zod resolution**: After `vi.resetModules()`, Vite's resolver throws `Failed to load url zod`. Never use this pattern when testing Zod-based config modules.
+
+3. **Test schemas directly, not config singletons**: Config modules are module-level singletons parsed once at load time. To test fast-failure, call the exported Zod schema's `.parse(process.env)` directly after deleting the missing key — same pattern as `packages/shared-config/src/config.test.ts`.
+
+4. **Linter may auto-rewrite relative imports to package aliases**: A linter changed `../../packages/shared-config/src/schemas.js` → `@claw/shared-config`, which broke resolution. Use explicit relative paths for cross-package imports from `tests/unit/`.
+</learnings>

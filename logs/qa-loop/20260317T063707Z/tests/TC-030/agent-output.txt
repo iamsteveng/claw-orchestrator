@@ -1,0 +1,9 @@
+<status>PASS</status>
+<evidence>TC-030 test passes: all 4 retention assertions verified — 8-day-old DELIVERED deleted, 3-day-old DELIVERED retained, 31-day-old FAILED deleted, 15-day-old FAILED retained. 64/64 test files pass (422 tests).</evidence>
+<reason>N/A</reason>
+<learnings>
+- **Prisma `Int` = 32-bit (max ~2.1B)**: Real `Date.now()` ms values (~1.77 trillion in 2026) overflow INT32. Integration tests that write timestamps directly via Prisma must use mocked time.
+- **Mock pattern for time-dependent reaper tests**: `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` at module top-level (before imports) intercepts `Date.now()` in both test code and the imported module. Pick `MOCK_NOW = 1_800_000_000` so that even 31-day offsets in ms (`-878M`) fit within INT32 range.
+- **Always include `principal` field** when creating Tenant rows directly — it's `@unique` and required by schema. Omitting it causes create failures.
+- **Prisma `Int` vs SQLite INTEGER**: SQLite's native INTEGER is 64-bit, but Prisma enforces 32-bit range at the application layer for `Int` columns, blocking ms timestamps.
+</learnings>

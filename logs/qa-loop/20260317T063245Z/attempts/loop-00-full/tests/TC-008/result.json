@@ -1,0 +1,14 @@
+{
+  "id": "TC-008",
+  "title": "Health polling → UNHEALTHY detection",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 3 TC-008 assertions passed in 1346ms (313/313 total tests across 44 files): - ✓ TC-008: health polling detects 3 consecutive failures → tenant transitions to UNHEALTHY (status confirmed in DB) - ✓ TC-008: TENANT_UNHEALTHY audit log entry written with reason=consecutive_failures and containerName in metadata - ✓ TC-008: UNHEALTHY state does not affect other tenants (tenant B remains ACTIVE, no TENANT_UNHEALTHY audit log for B)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-008/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-008/stderr.log",
+  "executedAt": "2026-03-17T07:36:49Z"
+}

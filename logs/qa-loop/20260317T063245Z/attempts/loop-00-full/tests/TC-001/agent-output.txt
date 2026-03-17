@@ -1,0 +1,31 @@
+<status>PASS</status>
+<evidence>
+All 7 TC-001 assertions pass (96/96 total e2e tests pass when run concurrently):
+- ✓ Relay returns HTTP 200 immediately
+- ✓ Tenant row transitions to ACTIVE within 30s (tenant ID: 3f34637c0fb5a0d6)
+- ✓ Tenant directories created: home/, workspace/, config/, logs/, secrets/ at /tmp/claw-tc001-isolated/3f34637c0fb5a0d6/
+- ✓ AGENTS.md seeded with '## Task Execution' section
+- ✓ message_queue row transitions to DELIVERED
+- ✓ Slack chat.postMessage called with "Hello from agent TC-001!"
+- ✓ Audit log: TENANT_PROVISIONED → TENANT_STARTED → MESSAGE_DELIVERED in order
+
+Agent output captured in agent-output.txt:
+```
+Tenant ID: 3f34637c0fb5a0d6
+Team: T_TC001 / User: U_TC001
+Data Dir: /tmp/claw-tc001-isolated
+AGENTS.md: ## Task Execution (+ full content)
+```
+</evidence>
+<reason>N/A — all tests pass</reason>
+<learnings>
+1. **Parallel e2e afterAll cleanup race**: `isolation.test.ts` and `control-plane-extended.test.ts` both call `rm('/tmp/claw-test-tenants', { recursive: true })` in afterAll at ~1.7s. TC-001 creates dirs at ~1.2s but its directory check runs at ~3s (after health poll makes tenant ACTIVE). By then the shared dir is gone → test fails in concurrent mode but passes in isolation.
+
+2. **Fix: vi.stubEnv + vi.resetModules + dynamic import**: In `beforeAll`, call `vi.stubEnv('DATA_DIR', '/tmp/claw-tc001-isolated'); vi.resetModules()`, then `const { buildApp } = await import('path/to/app-factory.js')`. This forces `@claw/shared-config/control-plane` to re-evaluate with the isolated DATA_DIR in a fresh module cache. Use `import type { fn as FnType }` for type annotations.
+
+3. **vi.mock doesn't intercept @claw/shared-config/control-plane for indirect imports**: Even with `vi.hoisted()`, the module resolves to pre-compiled dist files. The mock registers but `app-factory.ts` uses the already-cached real module. `vi.stubEnv + vi.resetModules` is the correct solution.
+
+4. **TENANT_PROVISIONED audit = reliable provisioning success signal**: Only written after dirs, relay-token, seedWorkspace, and status=NEW all succeed. Missing this event with a PASSING tenant-ACTIVE check indicates provisioning FAILED → tenant started via the FAILED→start path (no FAILED guard in start endpoint) → ACTIVE with no dirs on disk.
+
+5. **Date.now() mock must start above 2M**: Starting at 3_000_000 works well. Keep different starting values per test file (2M, 3M, 5M, 7M...) to avoid SQLite Int32 range issues.
+</learnings>

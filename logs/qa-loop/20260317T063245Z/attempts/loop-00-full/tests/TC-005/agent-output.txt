@@ -1,0 +1,23 @@
+All 309 tests pass including all 7 TC-005 tests. The test was already implemented and passes successfully.
+
+<status>PASS</status>
+<evidence>All 7 TC-005 assertions passed in 1691ms (309/309 total tests pass):
+- ✓ TC-005: provision tenant A (T_TC005/U_TC005_A) succeeds with status=NEW
+- ✓ TC-005: provision tenant B (T_TC005/U_TC005_B) succeeds with status=NEW
+- ✓ TC-005: tenant A and tenant B have different tenant IDs (sha256 of different principals)
+- ✓ TC-005: tenant A and tenant B have different relay_token values
+- ✓ TC-005: tenant A and tenant B have different data_dir paths (each contains own tenantId)
+- ✓ TC-005: tenant A and tenant B have different container_name values
+- ✓ TC-005: marker file written to tenant A workspace is NOT visible in tenant B workspace
+
+Complete filesystem and identity isolation confirmed between T_TC005:U_TC005_A and T_TC005:U_TC005_B.</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- The `/v1/tenants/provision` endpoint is fully synchronous — when it returns 200, all tenant directories (home/, workspace/, config/, logs/, secrets/) are already created on disk. No polling needed for isolation tests.
+- Response body from provision only contains `{ tenantId, status, relayToken }` — `data_dir` and `container_name` must be fetched from DB via `prisma.tenant.findUnique()`.
+- No relay app or Slack signing needed for pure control-plane isolation tests — significantly reduces setup complexity.
+- Filesystem isolation check: write a marker file to tenantA's workspace path, assert that same filename doesn't exist in tenantB's workspace path.
+- `container_name` is always `claw-tenant-${tenantId}` — asserting it contains the tenantId confirms per-user isolation.
+- Use `mockNow = 7_000_000` for TC-005 (TC-001: 3M, TC-002: 4M, TC-003: 5M, TC-004: 6M, TC-005: 7M).
+- Port assignment: TC-005 CP=13315 (no relay port needed).
+</learnings>

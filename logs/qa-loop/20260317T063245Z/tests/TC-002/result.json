@@ -1,0 +1,14 @@
+{
+  "id": "TC-002",
+  "title": "Repeated messages from same user → same tenant reused",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 6 TC-002 assertions passed (102/102 total e2e tests pass): - ✓ tenant is ACTIVE before second message - ✓ relay returns HTTP 200 immediately for second message - ✓ no new tenant row created — exactly 1 tenant for this principal - ✓ second message_queue row added and delivered (matched by slack_event_id=Ev_TC002_002) - ✓ tenant last_activity_at updated after second message - ✓ audit log contains MESSAGE_DELIVERED twice",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-002/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-002/stderr.log",
+  "executedAt": "2026-03-17T07:04:27Z"
+}

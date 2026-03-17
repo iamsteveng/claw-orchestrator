@@ -1,0 +1,10 @@
+{
+  "label": "loop-00-full",
+  "status": "PASS",
+  "totals": {
+    "total": 37,
+    "passed": 37,
+    "failed": 0
+  },
+  "completedAt": "2026-03-17T09:49:41Z"
+}

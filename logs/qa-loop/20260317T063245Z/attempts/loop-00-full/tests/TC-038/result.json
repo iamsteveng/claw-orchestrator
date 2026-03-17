@@ -1,0 +1,14 @@
+{
+  "id": "TC-038",
+  "title": "Health endpoint in tenant container returns correct JSON shape",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 8 TC-038 tests passed in 209ms: - ✓ health-server.js file exists at docker/tenant-image/health-server.js - ✓ source code contains GET /health handler (http.createServer, req.url/method checks) - ✓ GET /health sets Content-Type: application/json - ✓ Unhealthy response shape: {ok: false, status: 'starting', checks: {openclaw: bool, workspace_mounted: bool, home_mounted: bool}} — no uptime_ms, HTTP 503 - ✓ Source code defines healthy shape {ok: true, status: 'healthy', checks, uptime_ms} - ✓ Source code defines unhealthy shape {ok: false, status: 'starting', checks} - ✓ All three check fields (openclaw, workspace_mounted, home_mounted) defined in source - ✓ Runtime GET /health returns JSON-parseable response with required shape fields",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-038/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-038/stderr.log",
+  "executedAt": "2026-03-17T09:46:54Z"
+}

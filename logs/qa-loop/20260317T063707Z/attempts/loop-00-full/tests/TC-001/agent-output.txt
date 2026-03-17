@@ -1,0 +1,23 @@
+<status>PASS</status>
+<evidence>
+All 7 TC-001 assertions pass (96/96 total e2e tests pass):
+- ✓ Relay returns HTTP 200 immediately
+- ✓ Tenant row transitions to ACTIVE within 30s (tenant 3f34637c0fb5a0d6)
+- ✓ Tenant directories created: home/, workspace/, config/, logs/, secrets/ at /tmp/claw-test-tenants/3f34637c0fb5a0d6/
+- ✓ AGENTS.md seeded with '## Task Execution' section
+- ✓ message_queue row transitions to DELIVERED
+- ✓ Slack chat.postMessage called with "Hello from agent TC-001!"
+- ✓ Audit log: TENANT_PROVISIONED → TENANT_STARTED → MESSAGE_DELIVERED in order
+
+Agent output evidence captured in agent-output.txt.
+</evidence>
+<reason>N/A — PASS</reason>
+<learnings>
+1. **Parallel e2e afterAll cleanup race**: All test files share `DATA_DIR=/tmp/claw-test-tenants`. Files that do `rm(TEST_DATA_DIR, recursive)` in afterAll destroy other workers' tenant dirs. Fix: scope cleanup to specific tenant subdirs only.
+
+2. **vi.mock for @claw/shared-config/control-plane doesn't work**: The package resolves to pre-compiled dist files. Even with `vi.hoisted()`, the mock factory doesn't intercept the already-evaluated singleton. Don't rely on vi.mock to override this config.
+
+3. **FAILED tenant→ACTIVE path**: When provisioning fails and rolls back dirs, the relay's polling loop still receives a 200 OK response (FAILED status, attempts<3). It then calls `/start` (no FAILED guard), mock docker resolves, health poll sets ACTIVE — leaving the tenant ACTIVE with no filesystem dirs.
+
+4. **TENANT_PROVISIONED audit event = reliable success signal**: This event is only written after dirs, relay-token, workspace seeding, and status=NEW all succeed. Its presence confirms the full provisioning flow worked.
+</learnings>

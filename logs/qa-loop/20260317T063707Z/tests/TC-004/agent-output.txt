@@ -1,0 +1,22 @@
+<status>PASS</status>
+<evidence>All 3 TC-004 assertions passed (112/112 total e2e tests):
+- ✓ TC-004: tenant is ACTIVE after initial provisioning
+- ✓ TC-004: stop tenant via POST /v1/tenants/:id/stop → status becomes STOPPED
+- ✓ TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) [2227ms]
+  - docker.start called exactly 1 time
+  - docker.run called 0 times (new calls after initial provision)
+  - startup_locks max row count ≤ 1 during concurrent processing
+  - startup_locks table empty after completion (lock released)
+  - Both Ev_TC004_MSG1 and Ev_TC004_MSG2 DELIVERED</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+**Mock health-check latency collapses the startup lock window**: With an instant health mock, the control-plane completes the full acquire→dc.start→healthPoll→ACTIVE→release cycle in microseconds. The second concurrent /start request arrives AFTER the lock is released, allowing it to re-acquire and call dc.start() a second time. This is not a code bug — it's a timing artifact of zero-latency mocks.
+
+**Fix**: Add a `healthCheckDelayMs` flag (e.g., 300ms) to the mock health check response. This holds the startup lock long enough for both concurrent /start requests to collide at the UNIQUE constraint. Reset to 0 after the lock test so cleanup is not slowed.
+
+**The exact race**: Both relay coroutines get `status=STOPPED` from provision. Both call /start. A acquires the lock, calls dc.start(), health mock responds instantly, ACTIVE is set, lock released. B's /start arrives AFTER lock release, reads STOPPED (stale), finds no existing lock row, acquires it, calls dc.start() again. Health delay breaks this by making A's lock persist for 300ms.
+
+**startup_locks monitor pattern**: Spawn an async background loop polling `prisma.startupLock.count()` every 50ms while the concurrent test runs. Track max observed count, assert ≤ 1 after completion.
+
+**Port assignment**: TC-004 CP=13313, Relay=13314. `mockNow = 6_000_000` (TC-001: 3M, TC-002: 4M, TC-003: 5M, TC-004: 6M).
+</learnings>

@@ -1,0 +1,14 @@
+{
+  "id": "TC-003",
+  "title": "Stopped tenant → wakes on next message → queued messages replayed",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 7 TC-003 assertions passed in 4317ms (109/109 total e2e tests pass): - ✓ Tenant ACTIVE after initial provisioning - ✓ POST /stop → status = STOPPED, dc.stop() called - ✓ Relay returns 200 immediately for message sent to stopped tenant - ✓ Relay calls `/v1/tenants/:id/start` (tracked via fetch interceptor) - ✓ Tenant wakes to ACTIVE (dc.start() called, not dc.run()) - ✓ Ev_TC003_MSG1 (sent while STOPPED) → DELIVERED after wake-up - ✓ Ev_TC003_MSG2 (sent after wake) → DELIVERED; MSG1.created_at < MSG2.created_at (FIFO)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-003/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-003/stderr.log",
+  "executedAt": "2026-03-17T07:11:39Z"
+}

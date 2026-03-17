@@ -1,0 +1,13 @@
+# claw-backup.timer — Daily 03:00 UTC backup timer for Claw Orchestrator
+# Requires the corresponding claw-backup.service unit.
+# Install: copy to /etc/systemd/system/ and run: systemctl enable --now claw-backup.timer
+
+[Unit]
+Description=Claw Orchestrator Daily Backup Timer
+
+[Timer]
+OnCalendar=*-*-* 03:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,14 @@
+{
+  "id": "TC-009",
+  "title": "Disk quota → warning at 90%, block at 100%",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — PASS",
+  "evidence": "All 4 TC-009 tests passed (317/317 total tests across 45 test files) in 1742ms: - ✓ DISK_QUOTA_WARNING audit event written + Slack DM with `rm -rf` cleanup suggestion at 90% - ✓ DISK_QUOTA_EXCEEDED audit event written + disk_quota_exceeded=1 at 100% - ✓ POST /v1/tenants/:id/message returns 507 while disk_quota_exceeded=1 - ✓ disk_quota_exceeded reset to 0 when usage drops below 95% (no new audit events)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-009/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-009/stderr.log",
+  "executedAt": "2026-03-17T07:42:50Z"
+}

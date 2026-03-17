@@ -1,0 +1,19 @@
+<status>PASS</status>
+<evidence>All 8 TC-027 tests passed in 1789ms (413/413 total suite):
+- ✓ POST /v1/admin/allowlist adds U_REVOKE to allowlist
+- ✓ POST /v1/tenants/provision succeeds for allowlisted U_REVOKE (status=NEW)
+- ✓ POST /v1/tenants/:id/start activates tenant (status=ACTIVE)
+- ✓ DELETE /v1/admin/allowlist/:id returns {revoked: true}
+- ✓ allowlist entry has revoked_at set in DB
+- ✓ ACCESS_REVOKED audit event written (actor=admin, tenant_id=null, metadata with slack_team_id/slack_user_id)
+- ✓ POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} for revoked tenant
+- ✓ no MESSAGE_DELIVERED event written for blocked message</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- `isAllowed()` checks `revoked_at IS NULL` on EVERY message delivery — no caching, so revocation takes effect immediately on the next request to the already-active tenant
+- The message endpoint checks allowlist BEFORE checking tenant status (lines 299–303 of app-factory.ts) — so even ACTIVE tenants get 403 immediately after revocation without any container interaction
+- Revocation is a soft delete on the allowlist row: sets `revoked_at=now`, does NOT touch the tenant row, container, or data directory
+- `ACCESS_REVOKED` audit event has `tenant_id=null` — it's recorded at the allowlist level; team/user IDs go in metadata
+- The test file was pre-existing and already committed — TC-027 had been implemented by a prior agent run. Always check before reimplementing.
+- `mockNow = 27_000_000` keeps timestamps within SQLite Int32 range and avoids conflicts with other test files
+</learnings>

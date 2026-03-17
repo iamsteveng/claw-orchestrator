@@ -1,0 +1,14 @@
+{
+  "id": "TC-012",
+  "title": "AGENTS.md pre-seeded correctly in tenant workspace",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "tests/integration/tc-012.test.ts (3 tests) passed in ~22ms. All three merge scenarios verified: 1. AGENTS.md created from real templates/workspace/ dir with `## Task Execution` section 2. AGENTS.md with section already present left byte-for-byte identical 3. AGENTS.md without section gets `## Task Execution` appended after existing content Overall suite: 325 tests passed (48 files)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-012/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-012/stderr.log",
+  "executedAt": "2026-03-17T07:54:02Z"
+}

@@ -1,0 +1,94 @@
+
+> claw-orchestrator@0.1.0 test /home/ubuntu/.openclaw/workspace/claw-orchestrator
+> vitest run -- --grep TC-030 --reporter=verbose
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+
+ RUN  v2.1.9 /home/ubuntu/.openclaw/workspace/claw-orchestrator
+
+ ✓ tests/e2e/scheduler-and-system.test.ts (24 tests) 1499ms
+ ✓ tests/integration/tc-015.test.ts (13 tests) 1958ms
+ ✓ tests/e2e/control-plane-extended.test.ts (42 tests) 3233ms
+   ✓ TC-014: Provisioning rollback → cleanup on failure > docker run failure → status=FAILED, directories cleaned up, audit event 541ms
+ ✓ tests/integration/tc-028.test.ts (5 tests) 1554ms
+ ✓ tests/e2e/tc-001.test.ts (7 tests) 3997ms
+   ✓ TC-001: First Slack message → tenant provisioned → container started → message delivered > TC-001: message_queue row transitions to DELIVERED 2015ms
+ ✓ apps/slack-relay/src/events.test.ts (17 tests) 4131ms
+   ✓ processSlackEvent — US-025: tenant start + status polling > does NOT call start again when tenant is already STARTING 2003ms
+   ✓ processSlackEvent — US-025: tenant start + status polling > calls start when tenant status is STOPPED (not STARTING or ACTIVE) 2002ms
+ ✓ tests/e2e/first-message.test.ts (8 tests) 4250ms
+   ✓ E2E: First Slack message — provisions tenant and delivers response > message_queue row was created with status=DELIVERED after processing 2215ms
+ ✓ tests/integration/tc-009.test.ts (4 tests) 1719ms
+ ✓ tests/integration/control-plane.test.ts (6 tests) 2098ms
+ ✓ tests/integration/tc-027.test.ts (8 tests) 1607ms
+ ✓ tests/e2e/tc-003.test.ts (7 tests) 4024ms
+   ✓ TC-003: Stopped tenant → wakes on next message → queued messages replayed > TC-003: first queued message is DELIVERED after wake-up 2016ms
+ ✓ apps/slack-relay/src/interim-message.test.ts (6 tests) 28ms
+ ✓ tests/e2e/tc-004.test.ts (3 tests) 3890ms
+   ✓ TC-004: Concurrent messages to stopped tenant → single start (startup lock) > TC-004: two concurrent messages trigger only ONE docker start (startup lock prevents duplicate) 2227ms
+ ✓ tests/e2e/tc-002.test.ts (6 tests) 3799ms
+   ✓ TC-002: Repeated messages from same user → same tenant reused > TC-002: no new tenant row created — exactly 1 tenant for this principal 503ms
+   ✓ TC-002: Repeated messages from same user → same tenant reused > TC-002: second message_queue row added and delivered 1612ms
+ ✓ tests/integration/tc-005.test.ts (7 tests) 1676ms
+ ✓ tests/integration/tc-024.test.ts (9 tests) 1593ms
+ ✓ tests/integration/tc-014.test.ts (11 tests) 1549ms
+ ✓ tests/e2e/tc-006.test.ts (5 tests) 2661ms
+   ✓ TC-006: Allowlist enforcement → unauthorized user rejected > TC-006: no tenant row created for unauthorized user 1004ms
+ ✓ tests/integration/tc-021.test.ts (7 tests) 1435ms
+ ✓ apps/slack-relay/src/event-handler.test.ts (9 tests) 2037ms
+   ✓ waitForTenantActive > polls until ACTIVE (status changes on 2nd poll) 2003ms
+ ✓ tests/integration/tc-010.test.ts (2 tests) 1768ms
+ ✓ tests/integration/tc-007.test.ts (1 test) 1814ms
+   ✓ TC-007: Tenant deletion → data cleaned up > TC-007: cleans up all tenant resources on DELETE and returns 409 on second attempt 322ms
+ ✓ tests/integration/tc-029.test.ts (3 tests) 1530ms
+ ✓ tests/integration/tc-016.test.ts (7 tests) 1505ms
+ ✓ tests/integration/tc-008.test.ts (3 tests) 1433ms
+ ✓ tests/unit/tc-013.test.ts (5 tests) 12ms
+ ✓ tests/e2e/lifecycle.test.ts (8 tests) 11548ms
+   ✓ TC-003: Stopped tenant → wakes on message → queued messages replayed > sending a message to stopped tenant triggers wake-up and delivery 2229ms
+   ✓ TC-004: Concurrent messages to stopped tenant → single start > concurrent messages → both delivered, startup lock prevents race conditions 2278ms
+   ✓ TC-006: Allowlist enforcement → unauthorized user rejected > no allowlist entry → 403 from CP, rejection DM sent, no tenant created 2004ms
+   ✓ TC-025: Message queue deduplication → Slack retry is no-op > duplicate slack event_id results in single message_queue row 3228ms
+ ✓ packages/docker-client/src/index.test.ts (10 tests) 17ms
+ ✓ tests/e2e/tc-025.test.ts (4 tests) 1456ms
+ ✓ tests/integration/tc-020.test.ts (3 tests) 22ms
+ ✓ apps/control-plane/tests/unit/tenant-transitions.test.ts (20 tests) 13ms
+ ✓ apps/scheduler/src/capacity-retry.test.ts (6 tests) 15ms
+ ✓ apps/control-plane/src/health-monitor.test.ts (3 tests) 55ms
+ ✓ tests/unit/tc-019.test.ts (5 tests) 152ms
+ ✓ apps/scheduler/src/disk-quota.test.ts (5 tests) 18ms
+ ✓ apps/scheduler/src/idle-stop.test.ts (5 tests) 16ms
+ ✓ apps/control-plane/src/health-poll.test.ts (4 tests) 26ms
+ ✓ apps/scheduler/src/reaper.test.ts (5 tests) 14ms
+ ✓ tests/integration/tc-022.test.ts (8 tests) 1636ms
+ ✓ tests/integration/tc-030.test.ts (1 test) 1546ms
+ ✓ tests/unit/tc-017.test.ts (3 tests) 12ms
+ ✓ apps/control-plane/src/recovery.test.ts (3 tests) 21ms
+ ✓ tests/e2e/isolation.test.ts (7 tests) 1842ms
+ ✓ packages/shared-config/src/config.test.ts (10 tests) 15ms
+ ✓ apps/control-plane/src/auto-recovery.test.ts (4 tests) 23ms
+ ✓ apps/control-plane/src/startup-lock.test.ts (4 tests) 12ms
+ ✓ apps/scheduler/tests/unit/disk-quota.test.ts (5 tests) 25ms
+ ✓ apps/control-plane/src/rollback-provisioning.test.ts (5 tests) 16ms
+ ✓ apps/control-plane/src/run-tenant-container.test.ts (4 tests) 17ms
+ ✓ apps/control-plane/src/seed-workspace.test.ts (4 tests) 22ms
+ ✓ apps/control-plane/src/rollback-provision.test.ts (4 tests) 13ms
+ ✓ apps/scheduler/tests/unit/idle-stop.test.ts (4 tests) 22ms
+ ✓ tests/integration/tc-011.test.ts (3 tests) 6ms
+ ✓ apps/slack-relay/tests/unit/signature.test.ts (7 tests) 10ms
+ ✓ apps/control-plane/src/container-image.test.ts (5 tests) 12ms
+ ✓ tests/integration/tc-012.test.ts (3 tests) 16ms
+ ✓ apps/control-plane/tests/unit/startup-lock.test.ts (4 tests) 23ms
+ ✓ apps/control-plane/src/docker-run-options.test.ts (5 tests) 9ms
+ ✓ apps/slack-relay/src/verify-signature.test.ts (5 tests) 6ms
+ ✓ apps/control-plane/tests/unit/allowlist.test.ts (4 tests) 21ms
+ ✓ packages/shared-config/src/index.test.ts (3 tests) 149ms
+ ✓ apps/control-plane/tests/unit/capacity.test.ts (5 tests) 20ms
+ ✓ apps/control-plane/src/allowlist.test.ts (4 tests) 12ms
+ ✓ tests/unit/tc-018.test.ts (5 tests) 8ms
+
+ Test Files  64 passed (64)
+      Tests  422 passed (422)
+   Start at  09:26:16
+   Duration  15.11s (transform 1.81s, setup 201ms, collect 9.05s, tests 75.67s, environment 16ms, prepare 6.72s)
+

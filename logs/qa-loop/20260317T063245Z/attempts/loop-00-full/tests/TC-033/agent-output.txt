@@ -1,0 +1,6 @@
+The test was already implemented and the `qa-progress.txt` already has TC-033 entries. All tests passed.
+
+<status>PASS</status>
+<evidence>All 4 TC-033 tests passed in 5ms: claw-control-plane.service, claw-slack-relay.service, and claw-scheduler.service all exist in deploy/systemd/, each contains WantedBy=multi-user.target, and claw-control-plane.service contains Requires=docker.service. Full suite: 443/443 tests passed across 67 files.</evidence>
+<reason>N/A</reason>
+<learnings>File existence + content checks with fs.existsSync + readFileSync are sufficient for unit-level infrastructure verification — no server/DB setup needed. Path resolution via join(__dirname, '../../deploy/systemd', filename) works reliably from tests/unit/. All three service files were already correctly structured.</learnings>

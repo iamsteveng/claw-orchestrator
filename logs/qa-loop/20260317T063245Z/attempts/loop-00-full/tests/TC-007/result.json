@@ -1,0 +1,14 @@
+{
+  "id": "TC-007",
+  "title": "Tenant deletion → data cleaned up",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "TC-007 passed in 314ms. All assertions verified: - ✓ DELETE /v1/tenants/:id returns {deleted: true} (HTTP 200) - ✓ tenant.deleted_at is set (soft delete, row preserved in DB) - ✓ message_queue rows purged (2 seeded → 0 after delete) - ✓ startup_lock row purged (1 seeded → 0 after delete) - ✓ TENANT_DELETED audit log entry exists with actor='admin' - ✓ original data_dir no longer accessible on disk - ✓ archiveDir (from audit log metadata) exists on disk - ✓ second DELETE returns HTTP 409 Full suite: 310/310 tests pass (43 test files)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-007/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-007/stderr.log",
+  "executedAt": "2026-03-17T07:35:37Z"
+}

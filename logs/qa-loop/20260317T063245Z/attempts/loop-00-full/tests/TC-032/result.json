@@ -1,0 +1,14 @@
+{
+  "id": "TC-032",
+  "title": "Message forwarding → disk quota exceeded → 507",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 9 TC-032 tests passed in 1692ms (439/439 suite total): - disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}` - No MESSAGE_DELIVERED audit event written when blocked by quota - disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}` with mocked fetch - MESSAGE_DELIVERED audit event written with correct slackEventId `E_TC032_OK`",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-032/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-032/stderr.log",
+  "executedAt": "2026-03-17T09:32:53Z"
+}

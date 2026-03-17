@@ -1,0 +1,14 @@
+<status>PASS</status>
+<evidence>All 4 TC-035 tests passed in 7ms:
+- ✓ No non-comment line contains ANTHROPIC_API_KEY
+- ✓ No ENV instruction sets any API key
+- ✓ auth-profiles.json is not COPYd into the image
+- ✓ Only IMAGE_TAG ARG present (no auth ARGs)
+
+The Dockerfile uses `ARG IMAGE_TAG=dev` only, no ENV secrets, no COPY of auth-profiles.json. An explicit design comment states credentials are injected at runtime via bind-mounted auth-profiles.json.</evidence>
+<reason>N/A</reason>
+<learnings>
+- Dockerfile static analysis via `readFileSync` + line-by-line assertions is fast (7ms) and reliable for security/compliance checks.
+- When asserting "no line contains X", always filter out comment lines first: `lines.filter(l => !l.trimStart().startsWith('#') && l.includes('X'))`. A design comment (`# NOTE: No auth credentials (ANTHROPIC_API_KEY, etc.)`) caused a false failure on the initial naive check.
+- ARG-based assertions: filter lines matching `/^\s*ARG\s+/i` then check for auth-related patterns — clean way to enumerate all build args.
+</learnings>

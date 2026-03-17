@@ -1,0 +1,15 @@
+<status>PASS</status>
+<evidence>All 6 TC-002 assertions pass (102/102 total e2e tests):
+- ✓ TC-002: tenant is ACTIVE before second message
+- ✓ TC-002: relay returns HTTP 200 immediately for second message
+- ✓ TC-002: no new tenant row created — exactly 1 tenant for this principal
+- ✓ TC-002: second message_queue row added and delivered (Ev_TC002_002, status=DELIVERED)
+- ✓ TC-002: tenant last_activity_at updated after second message
+- ✓ TC-002: audit log contains MESSAGE_DELIVERED twice (once per message)</evidence>
+<reason>N/A</reason>
+<learnings>
+- `message_queue` has no text/content field — message text is not persisted in the DB. Identify messages by `slack_event_id` (unique column on the model), not by text content.
+- TC-002 should be self-contained: send the first message in `beforeAll` and wait for tenant ACTIVE before tests run — no dependency on TC-001.
+- Use distinct `mockNow` starting values per test file (e.g., 4_000_000 for TC-002) to avoid Date.now mock collisions in parallel workers.
+- `last_activity_at` assertion should use `>=` rather than `>` since mocked timestamps can be equal within the same tick.
+</learnings>

@@ -1,0 +1,14 @@
+{
+  "id": "TC-006",
+  "title": "Allowlist enforcement → unauthorized user rejected",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — all tests passed",
+  "evidence": "All 5 TC-006 assertions passed in 2509ms (117/117 total tests pass across 10 test files): - ✓ TC-006: relay returns HTTP 200 immediately (Slack ack) - ✓ TC-006: control plane returns 403 for unauthorized user - ✓ TC-006: no tenant row created for unauthorized user (polled 1s, count=0) - ✓ TC-006: Slack chat.postMessage called with invite-only rejection message - ✓ TC-006: ACCESS_DENIED audit log entry exists with null tenant_id",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-006/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-006/stderr.log",
+  "executedAt": "2026-03-17T07:28:58Z"
+}

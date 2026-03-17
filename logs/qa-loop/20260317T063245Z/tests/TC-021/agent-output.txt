@@ -1,0 +1,18 @@
+<status>PASS</status>
+<evidence>All 7 TC-021 tests passed in 1505ms (384/384 total tests, 57 files):
+- ✓ Creates STOPPED tenant in DB via direct insert
+- ✓ POST /start returns 202 {status: "starting"}
+- ✓ Tenant DB status is STARTING after /start call
+- ✓ Tenant reaches ACTIVE status after health polling (max 10s)
+- ✓ TENANT_STARTED audit event written with system actor + containerName metadata
+- ✓ docker.start called (not docker.run) for STOPPED tenant
+- ✓ Second POST /start is idempotent → returns 200 {status: "active"}
+
+Full STOPPED → STARTING → ACTIVE state machine confirmed.</evidence>
+<reason>N/A — all tests passed</reason>
+<learnings>
+- **`principal` field required on tenant create**: `prisma.tenant.create()` requires a `principal` field (format: `T_XXX:U_XXX`) — omitting it causes a Prisma validation error. This field is a `@unique` String in the schema.
+- **STOPPED → docker.start (not docker.run)**: The start endpoint checks `previousStatus === TenantStatus.NEW` to decide whether to create a new container (`dc.run()`) or restart an existing one (`dc.start(containerName)`). For STOPPED tenants, it always calls `start`.
+- **pollUntilHealthy mock flushes via setImmediate**: The `void pollUntilHealthy(...)` background call completes after two `setImmediate` flushes — same pattern as TC-015.
+- **Idempotency returns 200 (not 202)**: The `/start` endpoint returns HTTP 200 with `{status: 'active'}` when the tenant is already ACTIVE — before acquiring the startup lock, making it a fast O(1) early exit.
+</learnings>

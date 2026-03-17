@@ -1,0 +1,5 @@
+Iteration: 2/13
+Story: US-030 - unknown
+Result: completed (after retry)
+Commit: 92a493c
+Summary: US-030 is complete. Here's what was implemented: - **`capacity-retry.ts`**: `getActiveCount()` queries ACTIVE tenants; `retryQueuedTenants()` finds the earliest-queued STOPPED tenant and starts it via the control plane A

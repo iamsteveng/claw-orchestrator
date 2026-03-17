@@ -1,0 +1,14 @@
+{
+  "id": "TC-001",
+  "title": "First Slack message → tenant provisioned → container started → message delivered",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — PASS",
+  "evidence": "All 7 TC-001 assertions pass (96/96 total e2e tests pass): - ✓ Relay returns HTTP 200 immediately - ✓ Tenant row transitions to ACTIVE within 30s (tenant 3f34637c0fb5a0d6) - ✓ Tenant directories created: home/, workspace/, config/, logs/, secrets/ at /tmp/claw-test-tenants/3f34637c0fb5a0d6/ - ✓ AGENTS.md seeded with '## Task Execution' section - ✓ message_queue row transitions to DELIVERED - ✓ Slack chat.postMessage called with \"Hello from agent TC-001!\" - ✓ Audit log: TENANT_PROVISIONED → TENANT_STARTED → MESSAGE_DELIVERED in order Agent output evidence captured in agent-output.txt.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-001/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-001/stderr.log",
+  "executedAt": "2026-03-17T07:00:01Z"
+}

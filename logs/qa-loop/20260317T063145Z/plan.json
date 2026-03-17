@@ -1,0 +1,1430 @@
+{
+  "qaPlanSchemaVersion": "1.0.0",
+  "planId": "claw-orchestrator-e2e",
+  "source": {
+    "path": "test-plan-spec.md",
+    "generatedAt": "2026-03-17T00:00:00Z"
+  },
+  "execution": {
+    "defaultRetryRule": {
+      "maxRetries": 0,
+      "retryOn": [
+        "flake",
+        "timeout"
+      ]
+    }
+  },
+  "tests": [
+    {
+      "id": "TC-001",
+      "source": "US-040, US-007, US-008",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "First Slack message \u2192 tenant provisioned \u2192 container started \u2192 message delivered",
+      "steps": [
+        "Pre-seed allowlist entry for test user (team T_TC001, user U_TC001)",
+        "POST fake Slack event to relay /slack/events with valid HMAC signature",
+        "Verify relay returns HTTP 200 immediately (before provisioning completes)",
+        "Poll DB until tenant row exists with status=ACTIVE (max 30s)",
+        "Assert tenant directories created: home/, workspace/, config/, logs/, secrets/",
+        "Assert AGENTS.md seeded in workspace with '## Task Execution' section",
+        "Assert message_queue row transitions to DELIVERED",
+        "Assert Slack chat.postMessage called with agent response",
+        "Assert audit log contains TENANT_PROVISIONED, TENANT_STARTED, MESSAGE_DELIVERED in order"
+      ],
+      "commands": [
+        "pnpm test:e2e -- --grep \"TC-001\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Full provisioning flow completes; message delivered; audit trail present"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Full provisioning flow completes; message delivered; audit trail present",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-002",
+      "source": "US-040, US-024",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Repeated messages from same user \u2192 same tenant reused",
+      "steps": [
+        "Ensure TC-001 tenant is ACTIVE",
+        "Send second Slack event with same team+user, different event_id",
+        "Assert relay returns HTTP 200 immediately",
+        "Assert no new tenant row created (count = 1 for this principal)",
+        "Assert same tenant_id used for both messages",
+        "Assert second message_queue row added and delivered",
+        "Assert tenant last_activity_at updated"
+      ],
+      "commands": [
+        "pnpm test:e2e -- --grep \"TC-002\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Same tenant reused; message count incremented; no duplicate provisioning"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Same tenant reused; message count incremented; no duplicate provisioning",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-003",
+      "source": "US-025, US-011",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Stopped tenant \u2192 wakes on next message \u2192 queued messages replayed",
+      "steps": [
+        "Provision a tenant and bring to ACTIVE",
+        "Stop the tenant via POST /v1/tenants/:id/stop",
+        "Assert tenant status = STOPPED",
+        "Send a Slack event to the relay for this tenant",
+        "Assert relay calls /v1/tenants/:id/start",
+        "Mock health endpoint returns healthy after start",
+        "Poll until tenant status = ACTIVE",
+        "Assert queued message_queue rows are delivered in order"
+      ],
+      "commands": [
+        "pnpm test:e2e -- --grep \"TC-003\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Tenant wakes; queued messages replayed in FIFO order"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Tenant wakes; queued messages replayed in FIFO order",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-004",
+      "source": "US-007, US-009",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Concurrent messages to stopped tenant \u2192 single start (startup lock)",
+      "steps": [
+        "Provision a tenant and set status=STOPPED",
+        "Send two Slack events simultaneously (Promise.all)",
+        "Assert only ONE call to dockerStart / dockerRun (mock call count)",
+        "Assert both messages are eventually delivered",
+        "Assert startup_locks table has at most 1 row at any time",
+        "Assert no duplicate containers (docker run called exactly once)"
+      ],
+      "commands": [
+        "pnpm test:e2e -- --grep \"TC-004\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Startup lock prevents duplicate container starts"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Startup lock prevents duplicate container starts",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-005",
+      "source": "US-003, US-007",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Different users \u2192 completely isolated (no shared workspace/state)",
+      "steps": [
+        "Provision tenant A (team T1, user U1) via POST /v1/tenants/provision",
+        "Provision tenant B (team T1, user U2) via POST /v1/tenants/provision",
+        "Assert different tenant IDs (sha256 of different principals)",
+        "Assert different data_dir paths",
+        "Assert different container_name values",
+        "Assert different relay_token values",
+        "Write a marker file to tenant A workspace",
+        "Assert marker file NOT present in tenant B workspace path"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-005\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Complete filesystem and identity isolation between tenants"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Complete filesystem and identity isolation between tenants",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-006",
+      "source": "US-015, US-023",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Allowlist enforcement \u2192 unauthorized user rejected",
+      "steps": [
+        "Ensure no allowlist entry exists for team T_BLOCKED, user U_BLOCKED",
+        "POST Slack event from T_BLOCKED/U_BLOCKED to relay",
+        "Assert relay returns HTTP 200 (Slack ack)",
+        "Assert control plane returns 403 on /v1/tenants/provision",
+        "Assert NO tenant row created for this user",
+        "Assert Slack chat.postMessage called with invite-only rejection message",
+        "Assert ACCESS_DENIED audit log entry exists"
+      ],
+      "commands": [
+        "pnpm test:e2e -- --grep \"TC-006\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Access denied; rejection DM sent; no tenant created"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Access denied; rejection DM sent; no tenant created",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-007",
+      "source": "US-014, US-029",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Tenant deletion \u2192 data cleaned up",
+      "steps": [
+        "Provision tenant and create workspace files",
+        "Call DELETE /v1/tenants/:id",
+        "Assert response {deleted: true}",
+        "Assert tenant row has deleted_at set (soft delete)",
+        "Assert message_queue rows for tenant purged",
+        "Assert startup_locks row purged",
+        "Assert TENANT_DELETED audit log entry",
+        "Assert tenant data_dir moved to tenants-archive/",
+        "Assert second DELETE returns HTTP 409"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-007\" --reporter=verbose"
+      ],
+      "passFail": [
+        "All tenant resources cleaned up; audit trail preserved"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "All tenant resources cleaned up; audit trail preserved",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-008",
+      "source": "US-017, US-010",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Health polling \u2192 UNHEALTHY detection",
+      "steps": [
+        "Provision tenant and set status=ACTIVE",
+        "Start health monitor polling",
+        "Mock health endpoint to return 503 for 3 consecutive polls",
+        "Assert tenant status transitions to UNHEALTHY",
+        "Assert TENANT_UNHEALTHY audit log entry written with reason",
+        "Assert UNHEALTHY state does not affect other tenants"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-008\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Health polling detects failure; UNHEALTHY state set"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Health polling detects failure; UNHEALTHY state set",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-009",
+      "source": "US-028",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Disk quota \u2192 warning at 90%, block at 100%",
+      "steps": [
+        "Mock du -sb to return 10.8 GB (90% of 12 GB quota)",
+        "Run disk check scheduler tick",
+        "Assert DISK_QUOTA_WARNING audit event written",
+        "Assert Slack DM sent with cleanup suggestion",
+        "Mock du -sb to return 12 GB (100% of quota)",
+        "Run disk check scheduler tick",
+        "Assert DISK_QUOTA_EXCEEDED audit event written",
+        "Assert tenant.disk_quota_exceeded = 1",
+        "Assert POST /v1/tenants/:id/message returns 507 while quota exceeded",
+        "Mock du -sb to return < 11.4 GB (< 95%)",
+        "Run disk check; assert disk_quota_exceeded reset to 0"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-009\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Warning at 90%, block at 100%, auto-clear below 95%"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Warning at 90%, block at 100%, auto-clear below 95%",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-010",
+      "source": "US-027",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Idle stop \u2192 container stopped after 48h inactivity",
+      "steps": [
+        "Create tenant with status=ACTIVE and last_activity_at = now - 49 hours",
+        "Run scheduler idle stop job",
+        "Assert POST /v1/tenants/:id/stop was called",
+        "Assert tenant status = STOPPED",
+        "Assert TENANT_STOPPED audit event with actor=scheduler",
+        "Create another tenant with last_activity_at = now - 47 hours",
+        "Run scheduler idle stop job",
+        "Assert second tenant is NOT stopped"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-010\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Idle tenants stopped after 48h; recent tenants unaffected"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Idle tenants stopped after 48h; recent tenants unaffected",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-011",
+      "source": "US-021, US-032",
+      "level": "integration",
+      "priority": "P1",
+      "title": "auth-profiles.json bind-mount \u2192 included in docker run options",
+      "steps": [
+        "Call buildDockerRunOptions with tenantId, image, dataDir",
+        "Assert returned options include readOnlyBindMounts",
+        "Assert bind mount contains path ending in auth-profiles.json",
+        "Assert bind mount is marked read-only (:ro)",
+        "Assert container env includes HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME",
+        "Assert resource flags: --cpus=1.0, --memory=1536m, --pids-limit=256"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-011\" --reporter=verbose"
+      ],
+      "passFail": [
+        "docker run options include auth-profiles.json:ro and correct env vars"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "docker run options include auth-profiles.json:ro and correct env vars",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-012",
+      "source": "US-008, US-035",
+      "level": "integration",
+      "priority": "P1",
+      "title": "AGENTS.md pre-seeded correctly in tenant workspace",
+      "steps": [
+        "Create a temp workspace directory (empty)",
+        "Call seedWorkspace(workspacePath, templatesDir)",
+        "Assert AGENTS.md created with '## Task Execution' section",
+        "Call seedWorkspace again (AGENTS.md already present with section)",
+        "Assert AGENTS.md untouched",
+        "Remove '## Task Execution' section from AGENTS.md",
+        "Call seedWorkspace again",
+        "Assert '## Task Execution' section appended to existing file"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-012\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Three merge scenarios handled correctly"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Three merge scenarios handled correctly",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-013",
+      "source": "US-009",
+      "level": "unit",
+      "priority": "P0",
+      "title": "Startup lock \u2192 no duplicate containers on concurrent messages",
+      "steps": [
+        "Call acquireStartupLock(tenantId, requestId1) \u2192 assert {acquired: true}",
+        "Call acquireStartupLock(tenantId, requestId2) \u2192 assert {acquired: false}",
+        "Call releaseStartupLock(tenantId, requestId1)",
+        "Call acquireStartupLock(tenantId, requestId3) \u2192 assert {acquired: true}",
+        "Insert stale lock (expires_at = 1 ms ago)",
+        "Call acquireStartupLock \u2192 assert stale lock overridden, {acquired: true}"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-013\" --reporter=verbose"
+      ],
+      "passFail": [
+        "At most one lock holder; stale locks expire and can be taken over"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "At most one lock holder; stale locks expire and can be taken over",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-014",
+      "source": "US-019",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Provisioning rollback \u2192 cleanup on failure",
+      "steps": [
+        "Mock docker.run to throw an error",
+        "Call POST /v1/tenants/provision for a new user",
+        "Assert tenant status = FAILED",
+        "Assert provision_attempts = 1",
+        "Assert data_dir directory does NOT exist (cleaned up)",
+        "Assert TENANT_PROVISION_FAILED audit log entry",
+        "Retry provision \u2192 assert attempts = 2",
+        "Retry twice more \u2192 assert status = FAILED permanently (attempts >= 3)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-014\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Rollback cleans up all resources; 3-attempt cap enforced"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Rollback cleans up all resources; 3-attempt cap enforced",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-015",
+      "source": "US-018",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Audit log \u2192 events recorded for all system actions",
+      "steps": [
+        "Provision a tenant \u2192 assert TENANT_PROVISIONED event",
+        "Start the tenant \u2192 assert TENANT_STARTED event",
+        "Deliver a message \u2192 assert MESSAGE_DELIVERED event",
+        "Stop the tenant \u2192 assert TENANT_STOPPED event",
+        "Delete the tenant \u2192 assert TENANT_DELETED event",
+        "Attempt access by blocked user \u2192 assert ACCESS_DENIED event",
+        "Add allowlist entry \u2192 assert ACCESS_GRANTED event",
+        "Revoke allowlist entry \u2192 assert ACCESS_REVOKED event",
+        "GET /v1/admin/audit?tenant_id=X \u2192 assert all events returned in desc order",
+        "Assert audit log rows cannot be deleted or updated (no DELETE/UPDATE endpoint)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-015\" --reporter=verbose"
+      ],
+      "passFail": [
+        "All 8 event types recorded; audit API returns them correctly"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "All 8 event types recorded; audit API returns them correctly",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-016",
+      "source": "US-006",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Control plane startup reconciliation \u2192 crashed state reset",
+      "steps": [
+        "Insert a tenant row with status=PROVISIONING into DB",
+        "Insert a tenant row with status=STARTING",
+        "Insert an expired startup_lock (expires_at in the past)",
+        "Insert a message_queue row with status=PROCESSING and updated_at = 3 minutes ago",
+        "Start/build the control plane app (calls reconciliation)",
+        "Assert PROVISIONING tenant \u2192 status=FAILED",
+        "Assert STARTING tenant \u2192 status=FAILED",
+        "Assert expired startup_lock deleted",
+        "Assert stale PROCESSING message \u2192 status=PENDING",
+        "Assert SYSTEM_STARTUP audit log entry written"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-016\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Startup reconciliation restores consistent state"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Startup reconciliation restores consistent state",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-017",
+      "source": "US-005",
+      "level": "unit",
+      "priority": "P2",
+      "title": "Config validation \u2192 missing env var causes fast failure",
+      "steps": [
+        "Remove SLACK_SIGNING_SECRET from process.env",
+        "Import slack-relay config module",
+        "Assert ZodError thrown with message identifying missing field",
+        "Remove DATABASE_URL from process.env",
+        "Import control-plane config module",
+        "Assert ZodError thrown"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-017\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Fast failure with descriptive error on startup"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Fast failure with descriptive error on startup",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-018",
+      "source": "US-002, US-001",
+      "level": "unit",
+      "priority": "P2",
+      "title": "Tenant ID computation \u2192 sha256(team:user).slice(0,16)",
+      "steps": [
+        "Compute tenantId for (T12345, U67890)",
+        "Assert result equals sha256('T12345:U67890').hex.slice(0,16)",
+        "Assert result is exactly 16 hex chars",
+        "Assert same inputs always produce same output (deterministic)",
+        "Assert different users produce different IDs"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-018\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Deterministic, collision-resistant 16-char hex ID"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Deterministic, collision-resistant 16-char hex ID",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-019",
+      "source": "US-023",
+      "level": "unit",
+      "priority": "P0",
+      "title": "Slack signature verification \u2192 valid/invalid/expired",
+      "steps": [
+        "POST /slack/events with valid HMAC signature \u2192 assert HTTP 200",
+        "POST /slack/events with invalid signature \u2192 assert HTTP 403",
+        "POST /slack/events with timestamp 6 minutes old \u2192 assert HTTP 403 (replay protection)",
+        "POST /slack/events with missing X-Slack-Signature \u2192 assert HTTP 403",
+        "POST /slack/events with type=url_verification \u2192 assert {challenge: ...} returned synchronously"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-019\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Signature enforcement prevents unauthorized event injection"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Signature enforcement prevents unauthorized event injection",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-020",
+      "source": "US-026",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Interim message sent at 15s when agent takes too long",
+      "steps": [
+        "Mock tenant runtime to delay response by 20 seconds",
+        "Send Slack event to relay",
+        "Assert chat.postMessage called with '\u23f3 Working on it...' after ~15s",
+        "Assert interim message sent only once",
+        "After mock response arrives at 20s, assert final response also posted to Slack"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-020\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Interim 'working on it' message sent on 15s timer"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Interim 'working on it' message sent on 15s timer",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-021",
+      "source": "US-039, US-011",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Start endpoint \u2192 STOPPED \u2192 STARTING \u2192 ACTIVE transition",
+      "steps": [
+        "Create tenant with status=STOPPED via DB",
+        "POST /v1/tenants/:id/start",
+        "Assert response status=202 with {status: 'starting'}",
+        "Assert tenant DB status=STARTING",
+        "Mock health endpoint returns 200 ok:true",
+        "Poll until tenant status=ACTIVE (max 10s)",
+        "Assert TENANT_STARTED audit event written",
+        "POST /v1/tenants/:id/start again \u2192 assert {status: 'active'} (idempotent)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-021\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Full STOPPED \u2192 STARTING \u2192 ACTIVE state machine"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Full STOPPED \u2192 STARTING \u2192 ACTIVE state machine",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-022",
+      "source": "US-013",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Stop endpoint \u2192 ACTIVE \u2192 STOPPED transition",
+      "steps": [
+        "Create tenant with status=ACTIVE",
+        "POST /v1/tenants/:id/stop",
+        "Assert response {status: 'stopped'}",
+        "Assert tenant DB status=STOPPED",
+        "Assert last_stopped_at set",
+        "Assert TENANT_STOPPED audit event written",
+        "POST /v1/tenants/:id/stop again \u2192 assert {status: 'already_stopped'}",
+        "Assert dockerStop called only once (not on second call)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-022\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Idempotent stop; correct DB transitions"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Idempotent stop; correct DB transitions",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-024",
+      "source": "US-020",
+      "level": "integration",
+      "priority": "P2",
+      "title": "Container image promote \u2192 new default used on next start",
+      "steps": [
+        "Seed default image (tag: v1.0)",
+        "Insert new image row (tag: v2.0, is_default=0)",
+        "POST /v1/admin/images/:id/promote for v2.0",
+        "Assert v2.0 is_default=1",
+        "Assert v1.0 is_default=0 and deprecated_at set",
+        "Start a tenant \u2192 assert image_tag = v2.0 on tenant row",
+        "Assert IMAGE_UPDATED audit event"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-024\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Image promotion works; tenants use new default on restart"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Image promotion works; tenants use new default on restart",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-025",
+      "source": "US-024, US-025",
+      "level": "e2e",
+      "priority": "P1",
+      "title": "Message queue deduplication \u2192 Slack retry is no-op",
+      "steps": [
+        "Send Slack event with event_id=Ev_DUP_001",
+        "Assert message_queue row created",
+        "Send identical Slack event again with same event_id (simulated Slack retry)",
+        "Assert message_queue row count = 1 (no duplicate)",
+        "Assert only one delivery attempt made to tenant runtime"
+      ],
+      "commands": [
+        "pnpm test:e2e -- --grep \"TC-025\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Duplicate Slack events idempotently ignored"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Duplicate Slack events idempotently ignored",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-027",
+      "source": "US-015",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Allowlist revocation \u2192 existing tenant blocked",
+      "steps": [
+        "Provision and activate tenant for user U_REVOKE",
+        "DELETE /v1/admin/allowlist/:id to revoke access",
+        "Assert response {revoked: true}",
+        "POST /v1/tenants/:id/message for revoked tenant",
+        "Assert response 403 {ok: false, error: 'Access revoked'}",
+        "Assert ACCESS_REVOKED audit event"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-027\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Revoked users cannot deliver messages to their tenant"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Revoked users cannot deliver messages to their tenant",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-028",
+      "source": "US-017",
+      "level": "integration",
+      "priority": "P1",
+      "title": "UNHEALTHY auto-recovery \u2192 tenant recovers and queued messages processed",
+      "steps": [
+        "Provision and activate tenant",
+        "Queue 2 messages while tenant is UNHEALTHY",
+        "Trigger UNHEALTHY detection (3 consecutive health poll failures)",
+        "Assert TENANT_UNHEALTHY audit event",
+        "Assert Slack DM sent about recovery attempt",
+        "Mock health endpoint to return healthy after 30s cooldown",
+        "Assert tenant returns to ACTIVE within 90s",
+        "Assert TENANT_RECOVERED audit event",
+        "Assert queued messages processed after recovery"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-028\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Auto-recovery completes; queued messages not dropped"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Auto-recovery completes; queued messages not dropped",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-029",
+      "source": "US-007",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Provision endpoint idempotency \u2192 same tenant on duplicate call",
+      "steps": [
+        "POST /v1/tenants/provision for (T1, U1) \u2192 assert tenant created",
+        "POST /v1/tenants/provision for (T1, U1) again",
+        "Assert same tenantId returned",
+        "Assert only 1 tenant row in DB for this principal",
+        "Assert no new audit events written on idempotent call"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-029\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Idempotent provisioning returns same tenant"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Idempotent provisioning returns same tenant",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-030",
+      "source": "US-029",
+      "level": "integration",
+      "priority": "P2",
+      "title": "Queue reaping \u2192 DELIVERED rows older than 7 days deleted",
+      "steps": [
+        "Insert DELIVERED message_queue row with created_at = 8 days ago",
+        "Insert DELIVERED message_queue row with created_at = 3 days ago",
+        "Insert FAILED message_queue row with created_at = 31 days ago",
+        "Insert FAILED message_queue row with created_at = 15 days ago",
+        "Run queue reaping job",
+        "Assert 8-day-old DELIVERED row deleted",
+        "Assert 3-day-old DELIVERED row NOT deleted",
+        "Assert 31-day-old FAILED row deleted",
+        "Assert 15-day-old FAILED row NOT deleted"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-030\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Correct retention policy applied"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Correct retention policy applied",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-031",
+      "source": "US-012",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Message forwarding \u2192 relay token mismatch \u2192 401",
+      "steps": [
+        "Provision and activate tenant with known relay_token",
+        "POST /v1/tenants/:id/message with wrong X-Relay-Token header",
+        "Assert HTTP 401 response {ok: false, error: 'Unauthorized'}",
+        "POST /v1/tenants/:id/message with correct relay token",
+        "Assert HTTP 200 (message forwarded)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-031\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Relay token validates message delivery authorization"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Relay token validates message delivery authorization",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-032",
+      "source": "US-012",
+      "level": "integration",
+      "priority": "P0",
+      "title": "Message forwarding \u2192 disk quota exceeded \u2192 507",
+      "steps": [
+        "Provision and activate tenant",
+        "Set tenant.disk_quota_exceeded = 1 directly in DB",
+        "POST /v1/tenants/:id/message with correct relay token",
+        "Assert HTTP 507 {ok: false, error: 'Disk quota exceeded'}",
+        "Set disk_quota_exceeded = 0",
+        "POST /v1/tenants/:id/message again",
+        "Assert HTTP 200 (message forwarded successfully)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-032\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Disk quota flag blocks message delivery"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Disk quota flag blocks message delivery",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-033",
+      "source": "US-036",
+      "level": "unit",
+      "priority": "P2",
+      "title": "systemd unit files exist for all three services",
+      "steps": [
+        "Assert deploy/systemd/claw-control-plane.service file exists",
+        "Assert deploy/systemd/claw-slack-relay.service file exists",
+        "Assert deploy/systemd/claw-scheduler.service file exists",
+        "Assert each file contains WantedBy=multi-user.target",
+        "Assert control-plane service has Requires=docker.service"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-033\" --reporter=verbose"
+      ],
+      "passFail": [
+        "All unit files present and correctly structured"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "All unit files present and correctly structured",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-034",
+      "source": "US-037",
+      "level": "unit",
+      "priority": "P2",
+      "title": "tenant-shell script validates container is running",
+      "steps": [
+        "Assert scripts/tenant-shell.sh file exists",
+        "Assert file contains docker exec -it --user agent",
+        "Assert file validates containerName argument",
+        "Assert shebang #!/bin/bash present"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-034\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Operator tool exists and is properly structured"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Operator tool exists and is properly structured",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-035",
+      "source": "US-031",
+      "level": "unit",
+      "priority": "P2",
+      "title": "Tenant Dockerfile does not embed ANTHROPIC_API_KEY",
+      "steps": [
+        "Read docker/tenant-image/Dockerfile",
+        "Assert no line contains ANTHROPIC_API_KEY",
+        "Assert no ENV instruction sets any API key",
+        "Assert auth-profiles.json is NOT COPY'd into the image",
+        "Assert image build ARG only has IMAGE_TAG (no auth args)"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-035\" --reporter=verbose"
+      ],
+      "passFail": [
+        "No credentials embedded in image"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "No credentials embedded in image",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-036",
+      "source": "US-004",
+      "level": "unit",
+      "priority": "P1",
+      "title": "Docker client wrapper \u2192 correct CLI flags constructed",
+      "steps": [
+        "Mock execa",
+        "Call dockerRun with sample options",
+        "Assert --cpus, --memory, --memory-swap, --pids-limit, --ulimit nofile present",
+        "Assert --name=claw-tenant-<id> present",
+        "Assert -d flag present (detached)",
+        "Assert :ro suffix on auth-profiles.json bind mount",
+        "Call dockerStop \u2192 assert --time=10 flag",
+        "Call dockerRm \u2192 assert -f flag"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-036\" --reporter=verbose"
+      ],
+      "passFail": [
+        "CLI arguments constructed correctly for all operations"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "CLI arguments constructed correctly for all operations",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-037",
+      "source": "US-038",
+      "level": "unit",
+      "priority": "P1",
+      "title": "Workspace template fixtures \u2192 test-utils package",
+      "steps": [
+        "Import makeTenant() from test-utils",
+        "Assert all required Tenant fields populated",
+        "Import makeMessageQueueRow()",
+        "Assert all required MessageQueueRow fields populated",
+        "Import mockPrismaClient()",
+        "Assert all DB methods are vi.fn() mocks",
+        "Import mockDockerClient()",
+        "Assert run, start, stop, rm are vi.fn() mocks"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-037\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Test utilities produce valid typed fixtures"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Test utilities produce valid typed fixtures",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-038",
+      "source": "US-033",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Health endpoint in tenant container returns correct JSON shape",
+      "steps": [
+        "Assert docker/tenant-image/health-server.js exists",
+        "Verify file exports GET /health handler",
+        "Verify healthy response shape: {ok: true, status: 'healthy', checks: {openclaw, workspace_mounted, home_mounted}, uptime_ms}",
+        "Verify unhealthy response shape: {ok: false, status: 'starting', checks: {...}}",
+        "Assert Content-Type application/json set"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-038\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Health server returns correct JSON shapes"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Health server returns correct JSON shapes",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-039",
+      "source": "US-034",
+      "level": "integration",
+      "priority": "P1",
+      "title": "Message endpoint in tenant container validates relay token",
+      "steps": [
+        "Assert docker/tenant-image/message-server.js exists",
+        "Verify file validates X-Relay-Token against RELAY_TOKEN env var",
+        "Assert 401 returned on token mismatch",
+        "Assert response shape: {ok: true, response: '...', blocks: null} on success",
+        "Assert error response shape: {ok: false, error: '...'} on failure"
+      ],
+      "commands": [
+        "pnpm test -- --grep \"TC-039\" --reporter=verbose"
+      ],
+      "passFail": [
+        "Message server enforces relay token authentication"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Message server enforces relay token authentication",
+          "Agent output captured in agent-output.txt"
+        ],
+        "artifacts": []
+      }
+    }
+  ]
+}

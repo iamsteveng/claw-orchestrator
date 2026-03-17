@@ -1,0 +1,14 @@
+{
+  "id": "TC-014",
+  "title": "Provisioning rollback → cleanup on failure",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 11 TC-014 tests passed in 1475ms: - ✓ Provision fails → HTTP 500, status=FAILED, provision_attempts=1 - ✓ data_dir does NOT exist after rollback (cleaned up) - ✓ TENANT_PROVISION_FAILED audit event written (actor=system) - ✓ TENANT_PROVISIONED audit event absent (no success) - ✓ Retry with attempts<3 → 200 FAILED (returns existing record) - ✓ With attempts=3 → HTTP 409 (cap enforced, \"Max provision attempts reached\") - ✓ tenant status permanently FAILED with attempts >= 3 Total suite: 341/341 tests passed across 50 files",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-014/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-014/stderr.log",
+  "executedAt": "2026-03-17T08:03:14Z"
+}

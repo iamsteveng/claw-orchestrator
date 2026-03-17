@@ -1,0 +1,18 @@
+<status>PASS</status>
+<evidence>All 8 TC-022 tests passed in 1561ms (392/392 total tests, 58 test files):
+- ✓ Creates ACTIVE tenant in DB via direct insert
+- ✓ POST /stop returns 200 {status: "stopped"}
+- ✓ Tenant DB status is STOPPED after /stop call
+- ✓ last_stopped_at is set on the tenant row
+- ✓ TENANT_STOPPED audit event written with system actor + containerName metadata
+- ✓ dockerStop called once with correct container name and timeout=10
+- ✓ Second POST /stop is idempotent → returns 200 {status: "already_stopped"}
+- ✓ dockerStop still called only once (idempotent second call does not invoke docker)</evidence>
+<reason>N/A</reason>
+<learnings>
+- **Stop endpoint is fully synchronous**: Unlike `/start`, the `/stop` endpoint awaits `dc.stop()` and the DB update before returning — no background async tasks, no setImmediate flushing needed.
+- **Idempotency check is status=STOPPED**: Returns `{status: 'already_stopped'}` when tenant is already STOPPED; does NOT call docker on the second call.
+- **No directories or containerImage row needed**: Stop endpoint doesn't access the filesystem or look up the default image — minimal DB seeding required.
+- **dc.stop called with (containerName, 10)**: The endpoint hardcodes a 10-second Docker timeout. Assert both arguments.
+- **Pattern for pure stop tests**: Seed ACTIVE tenant directly via `prisma.tenant.create()`, call `app.inject()` twice, verify DB + audit + mock call counts. No relay, no health poll mock, no provisioning needed.
+</learnings>

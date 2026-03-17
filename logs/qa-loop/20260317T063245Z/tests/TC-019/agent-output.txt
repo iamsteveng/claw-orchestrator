@@ -1,0 +1,17 @@
+<status>PASS</status>
+<evidence>All 5 TC-019 tests passed in 135ms (374/374 total tests, 55 files):
+- ✓ valid HMAC signature → HTTP 200
+- ✓ invalid signature → HTTP 403
+- ✓ timestamp 6 minutes old → HTTP 403 (replay protection)
+- ✓ missing X-Slack-Signature → HTTP 403
+- ✓ url_verification type → returns {challenge} synchronously
+
+Signature enforcement prevents unauthorized event injection — confirmed.</evidence>
+<reason>N/A</reason>
+<learnings>
+- **`buildSlackRelayApp` is the cleanest integration point**: Import it from `app-factory.ts`, pass a `SlackRelayConfig` with `SLACK_SIGNING_SECRET`, and use `app.inject()` for zero-network unit tests.
+- **Mock fetch for fire-and-forget paths**: Pass `vi.fn()` as fetchFn to prevent real network calls; the 200 response is returned before the async work starts.
+- **`SlackRelayConfig` requires all 4 fields**: `SLACK_RELAY_PORT`, `SLACK_SIGNING_SECRET`, `SLACK_BOT_TOKEN`, `CONTROL_PLANE_URL` (must be a valid URL).
+- **Stale timestamp test**: `Math.floor(Date.now() / 1000) - 6 * 60` produces a 6-minute-old timestamp — even a correct HMAC is rejected (5-minute window).
+- **Invalid sig must be full-length**: `timingSafeEqual` requires equal buffer lengths, so provide a 64-hex-char fake (`v0=invalid...deadbeef`) to reach the compare path rather than the early-exit.
+</learnings>

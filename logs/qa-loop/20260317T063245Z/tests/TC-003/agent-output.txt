@@ -1,0 +1,18 @@
+<status>PASS</status>
+<evidence>All 7 TC-003 assertions passed (109/109 total e2e tests):
+- ✓ TC-003: tenant is ACTIVE after initial provisioning
+- ✓ TC-003: stop tenant via POST /v1/tenants/:id/stop → status becomes STOPPED
+- ✓ TC-003: relay returns HTTP 200 immediately when sending message to stopped tenant
+- ✓ TC-003: relay calls /v1/tenants/:id/start on the stopped tenant
+- ✓ TC-003: tenant wakes up and becomes ACTIVE
+- ✓ TC-003: first queued message is DELIVERED after wake-up
+- ✓ TC-003: subsequent message delivered; message_queue rows are in FIFO order
+Duration: 4321ms. Agent output captured in agent-output.txt.</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- The relay does NOT queue messages while the tenant is STOPPED. It calls `/start`, polls until ACTIVE, then enqueues in message_queue. "FIFO order" = message_queue rows have monotonically increasing `created_at` (MSG1 sent while stopped, MSG2 sent after wake-up).
+- To assert "relay calls /start": intercept the mockedFetch URL for `/v1/tenants/${tenantId}/start` in the mock handler before the `127.0.0.1:${CP_PORT}` passthrough branch — store matching URLs in an array and poll until populated.
+- Use distinct `mockNow` starting values per test file (TC-001: 3M, TC-002: 4M, TC-003: 5M) to avoid Date.now mock collisions in parallel workers.
+- Use distinct team/user IDs (e.g., `T_TC003_SOLO` not `T_TC003`) when creating a dedicated test file for a scenario already covered in lifecycle.test.ts to avoid principal collisions.
+- Pattern for stop→wake test: bring to ACTIVE in `beforeAll` via initial relay message; stop via `cpApp.inject`; send wake message via `relayApp.inject`; poll DB for ACTIVE and DELIVERED.
+</learnings>

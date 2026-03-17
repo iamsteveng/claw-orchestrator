@@ -1,0 +1,14 @@
+{
+  "id": "TC-027",
+  "title": "Allowlist revocation → existing tenant blocked",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "All 8 TC-027 tests passed in 1640ms (413/413 total suite): - DELETE /v1/admin/allowlist/:id returns {revoked: true} ✓ - allowlist.revoked_at set in DB ✓ - ACCESS_REVOKED audit event written (actor=admin, tenant_id=null, metadata with slack_team_id/slack_user_id) ✓ - POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} for revoked tenant ✓ - No MESSAGE_DELIVERED event written for blocked message ✓",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-027/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-027/stderr.log",
+  "executedAt": "2026-03-17T08:54:28Z"
+}

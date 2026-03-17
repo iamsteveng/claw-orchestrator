@@ -1,0 +1,14 @@
+{
+  "id": "TC-025",
+  "title": "Message queue deduplication → Slack retry is no-op",
+  "level": "e2e",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 4 TC-025 tests passed in 1306ms (121/121 total suite): - ✓ First enqueueMessage creates exactly one PENDING row - ✓ Duplicate enqueueMessage (same event_id=Ev_DUP_001) returns false — no new row - ✓ deliverPendingMessages delivers exactly once to tenant runtime (1 HTTP call to :3100/message) - ✓ Second deliverPendingMessages after delivery makes 0 additional runtime calls; row count stays 1",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-025/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-025/stderr.log",
+  "executedAt": "2026-03-17T08:50:52Z"
+}

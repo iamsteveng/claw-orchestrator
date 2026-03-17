@@ -1,0 +1,29 @@
+{
+  "name": "@claw/control-plane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@claw/docker-client": "workspace:*",
+    "@claw/shared-config": "workspace:*",
+    "@claw/shared-types": "workspace:*",
+    "@prisma/client": "^5.22.0",
+    "fastify": "^5.8.2",
+    "pino": "^10.3.1"
+  },
+  "devDependencies": {
+    "@claw/test-utils": "workspace:*",
+    "@fastify/type-provider-typebox": "^6.1.0",
+    "@types/node": "^22.0.0",
+    "@types/pino": "^7.0.5",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.0"
+  }
+}

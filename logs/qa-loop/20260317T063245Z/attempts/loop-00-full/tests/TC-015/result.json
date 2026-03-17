@@ -1,0 +1,14 @@
+{
+  "id": "TC-015",
+  "title": "Audit log → events recorded for all system actions",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 13 TC-015 tests passed in 1965ms (354/354 total tests across 51 files): - ✓ ACCESS_DENIED — blocked user provision attempt → actor=system, tenant_id=null - ✓ ACCESS_GRANTED — POST /v1/admin/allowlist → actor=admin:tc015 - ✓ TENANT_PROVISIONED — successful provision → actor=system - ✓ TENANT_STARTED — start + pollUntilHealthy mock → actor=system, tenant ACTIVE - ✓ MESSAGE_DELIVERED — POST /message with mocked fetch → slackEventId in metadata - ✓ TENANT_STOPPED — POST /stop → actor=system - ✓ TENANT_DELETED — DELETE /tenant → actor=admin - ✓ ACCESS_REVOKED — DELETE /admin/allowlist/:id → actor=admin - ✓ GET /v1/admin/audit → all 8 event types present, total >= 8 - ✓ GET /v1/admin/audit?tenant_id=X → descending order confirmed - ✓ DELETE /PUT /PATCH /v1/admin/audit → all return 404 (append-only)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-015/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063245Z/attempts/loop-00-full/tests/TC-015/stderr.log",
+  "executedAt": "2026-03-17T08:18:33Z"
+}

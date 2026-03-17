@@ -1,0 +1,18 @@
+<status>PASS</status>
+<evidence>All 7 TC-016 tests passed in 1431ms:
+- ✓ reconcile() runs without error
+- ✓ PROVISIONING tenant → status=FAILED
+- ✓ STARTING tenant → status=FAILED
+- ✓ expired startup_lock → deleted
+- ✓ stale PROCESSING message → status=PENDING
+- ✓ SYSTEM_STARTUP audit log entry written (actor='system', tenant_id=null)
+- ✓ ACTIVE tenant status unchanged
+
+Full suite: 52 test files, 361 tests all passed.</evidence>
+<reason>N/A</reason>
+<learnings>
+- TC-016 uses an isolated per-run SQLite DB (`/tmp/test-tc016-<uuid>.db`), avoiding parallel test interference — good pattern for reconciliation tests.
+- `reconcile()` accepts `(prisma, log)` where `log` is duck-typed `{ info, warn }`, enabling clean testing without a real logger.
+- Stale message threshold is >2 minutes; test used 3 minutes to safely exceed it.
+- `SYSTEM_STARTUP` audit log has `tenant_id: null` and `actor: 'system'` — verify both fields.
+</learnings>

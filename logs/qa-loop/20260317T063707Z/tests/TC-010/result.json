@@ -1,0 +1,14 @@
+{
+  "id": "TC-010",
+  "title": "Idle stop → container stopped after 48h inactivity",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A",
+  "evidence": "✓ tests/integration/tc-010.test.ts (2 tests) 1747ms - TC-010: idle tenant (49h) → stop called, status=STOPPED, TENANT_STOPPED audit with actor=scheduler - TC-010: recent tenant (47h) → NOT stopped, status remains ACTIVE 319/319 total tests passed across 46 test files.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-010/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-010/stderr.log",
+  "executedAt": "2026-03-17T07:48:15Z"
+}

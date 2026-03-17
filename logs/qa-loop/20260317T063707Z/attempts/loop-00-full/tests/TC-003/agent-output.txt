@@ -1,0 +1,17 @@
+<status>PASS</status>
+<evidence>All 7 TC-003 assertions passed in 4317ms (109/109 total e2e tests pass):
+- ✓ Tenant ACTIVE after initial provisioning
+- ✓ POST /stop → status = STOPPED, dc.stop() called
+- ✓ Relay returns 200 immediately for message sent to stopped tenant
+- ✓ Relay calls `/v1/tenants/:id/start` (tracked via fetch interceptor)
+- ✓ Tenant wakes to ACTIVE (dc.start() called, not dc.run())
+- ✓ Ev_TC003_MSG1 (sent while STOPPED) → DELIVERED after wake-up
+- ✓ Ev_TC003_MSG2 (sent after wake) → DELIVERED; MSG1.created_at < MSG2.created_at (FIFO)</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- The relay does NOT buffer messages while STOPPED. It calls `/start`, polls until ACTIVE, then enqueues in message_queue and forwards. "FIFO order" = message_queue rows have monotonically increasing `created_at` by construction (mockNow++ is monotonic).
+- To assert "relay calls /start": intercept the mockedFetch URL for `/v1/tenants/${tenantId}/start` before the `127.0.0.1:${CP_PORT}` passthrough branch — store matching URLs in an array and poll until populated.
+- The control-plane uses `dc.start(containerName)` for STOPPED tenants (not `dc.run()`), which is only used for NEW tenants — important to assert the correct docker method.
+- Use distinct team/user IDs (`T_TC003_SOLO` vs `T_TC003`) when a scenario is also covered in lifecycle.test.ts to avoid principal collisions in the shared DB across parallel workers.
+- Use `mockNow = 5_000_000` for TC-003 (TC-001: 3M, TC-002: 4M) to avoid Date.now mock collisions.
+</learnings>

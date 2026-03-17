@@ -1,0 +1,14 @@
+{
+  "id": "TC-029",
+  "title": "Provision endpoint idempotency → same tenant on duplicate call",
+  "level": "integration",
+  "priority": "P1",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "Skipped — already passed in this run (resume)",
+  "evidence": "(skipped)",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-029/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-029/stderr.log",
+  "executedAt": "2026-03-17T09:23:46Z"
+}

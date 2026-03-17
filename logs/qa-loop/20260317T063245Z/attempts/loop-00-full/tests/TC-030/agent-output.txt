@@ -1,0 +1,14 @@
+<status>PASS</status>
+<evidence>All 4 retention policy assertions passed in 1546ms (422/422 suite):
+- ✓ 8-day-old DELIVERED row deleted
+- ✓ 3-day-old DELIVERED row retained
+- ✓ 31-day-old FAILED row deleted
+- ✓ 15-day-old FAILED row retained</evidence>
+<reason>N/A</reason>
+<learnings>
+- **SQLite INT overflow**: Prisma validates `Int` fields to 32-bit signed range (max 2,147,483,647). Real `Date.now()` (~1.77e12) throws "does not fit in an INT column". Use `vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000)` — this value allows computing 30-day offsets that still fit in INT32 (e.g. `-878_400_000` is valid).
+- **Mock placement matters**: `vi.spyOn(Date, 'now').mockReturnValue(...)` must be declared before the module import of the function under test (reaper) so the mock is active when the function executes.
+- **Negative INT32 timestamps are valid**: `1_800_000_000 - 31 * 86_400_000 = -878_400_000` is a valid INT32 (min = -2,147,483,648). Prisma and SQLite both accept it for `created_at` comparisons.
+- **`principal` field is required on tenant**: The `tenants` table has `principal String @unique` (computed as `T_XXX:U_XXX`) — must include it when creating minimal tenant rows for FK constraints.
+- **Single `it()` block is sufficient for reaper**: All 4 assertions test the outcome of one `reapMessageQueue()` call; no need to split into multiple tests.
+</learnings>

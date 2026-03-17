@@ -1,0 +1,13 @@
+<status>PASS</status>
+<evidence>All 6 TC-037 tests passed in 31ms:
+- ✓ makeTenant() returns fully-populated Tenant fixture with all required fields
+- ✓ makeTenant() applies overrides correctly
+- ✓ makeMessageQueueRow() returns fully-populated MessageQueueRow fixture
+- ✓ makeMessageQueueRow() applies overrides correctly
+- ✓ mockPrismaClient() has vi.fn() mocks for all DB methods (findUnique, findFirst, findMany, create, update, delete, upsert, $transaction, $connect, $disconnect)
+- ✓ mockDockerClient() has vi.fn() mocks for run, start, stop, rm</evidence>
+<reason>N/A</reason>
+<learnings>
+- `@claw/shared-types` is NOT resolvable via package name from root-level test files (not hoisted by pnpm). Import enum/type values using relative source paths: `../../packages/shared-types/src/tenant.js` and `../../packages/shared-types/src/message.js`.
+- test-utils exports are importable via `../../packages/test-utils/src/index.js` from root-level tests without issues — the package resolves cleanly via relative path even though the package name alias doesn't work.
+</learnings>

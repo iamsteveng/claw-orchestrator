@@ -1,0 +1,13 @@
+TC-001 Agent Output Evidence
+============================
+Tenant ID: 3f34637c0fb5a0d6
+Team: T_TC001 / User: U_TC001
+Data Dir: /tmp/claw-tc001-isolated
+AGENTS.md contents (first 500 chars):
+## Task Execution
+
+For any task that is complex enough to take more than ~2 minutes:
+- Spawn a sub-agent or background process to handle it
+- Don't block the conversation
+- When it's done, report back with a concise summary of what was done
+

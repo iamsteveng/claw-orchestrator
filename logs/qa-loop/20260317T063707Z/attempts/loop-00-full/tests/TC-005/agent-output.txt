@@ -1,0 +1,20 @@
+<status>PASS</status>
+<evidence>All 7 TC-005 assertions passed in 1720ms (304/304 total tests pass):
+- ✓ TC-005: provision tenant A (T_TC005/U_TC005_A) succeeds with status=NEW
+- ✓ TC-005: provision tenant B (T_TC005/U_TC005_B) succeeds with status=NEW
+- ✓ TC-005: tenant A and tenant B have different tenant IDs (sha256 of different principals)
+- ✓ TC-005: tenant A and tenant B have different relay_token values
+- ✓ TC-005: tenant A and tenant B have different data_dir paths (each contains own tenantId)
+- ✓ TC-005: tenant A and tenant B have different container_name values
+- ✓ TC-005: marker file written to tenant A workspace is NOT visible in tenant B workspace
+
+Complete filesystem and identity isolation confirmed between T_TC005:U_TC005_A and T_TC005:U_TC005_B.</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- **Provision is synchronous**: The `/v1/tenants/provision` endpoint awaits all directory creation before returning 200. When it returns `status=NEW`, dirs (`home/`, `workspace/`, `config/`, `logs/`, `secrets/`) are already on disk — no polling needed.
+- **Response body is slim**: `/v1/tenants/provision` only returns `{ tenantId, status, relayToken }`. Fields like `data_dir` and `container_name` must be read from the DB via `prisma.tenant.findUnique()`.
+- **No relay needed for isolation tests**: Pure control-plane integration tests don't require Slack events or relay setup — eliminates significant setup complexity.
+- **Filesystem isolation check pattern**: Write a marker file to tenantA's workspace, assert its path in tenantB's workspace doesn't exist. Simple, reliable, no async races.
+- **mockNow = 7_000_000** for TC-005 (sequence: TC-001: 3M, TC-002: 4M, TC-003: 5M, TC-004: 6M, TC-005: 7M).
+- **Port assignment**: TC-005 CP=13315 (no relay port needed for this test).
+</learnings>

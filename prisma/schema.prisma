@@ -1,0 +1,128 @@
+// Claw Orchestrator — Prisma Schema
+// SQLite with WAL mode for concurrent reads (single writer: control-plane)
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+// ─── tenants ──────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id                    String   @id
+  principal             String   @unique
+  slack_team_id         String
+  slack_user_id         String
+  status                String
+  relay_token           String
+  container_name        String?
+  image_tag             String?
+  data_dir              String
+  last_activity_at      Int?
+  last_started_at       Int?
+  last_stopped_at       Int?
+  provisioned_at        Int?
+  provision_attempts    Int      @default(0)
+  resource_overrides    String?
+  disk_quota_exceeded   Int      @default(0)
+  allowlist_entry_id    String?
+  created_at            Int
+  updated_at            Int
+  deleted_at            Int?
+  deletion_requested_at Int?
+  queued_for_start_at   Int?
+  recovery_attempted_at Int?
+  error_message         String?
+
+  allowlist_entry Allowlist?    @relation(fields: [allowlist_entry_id], references: [id])
+  startup_lock    StartupLock?
+  audit_logs      AuditLog[]
+  messages        MessageQueue[]
+
+  @@index([slack_team_id, slack_user_id])
+  @@map("tenants")
+}
+
+// ─── message_queue ────────────────────────────────────────────────────────────
+
+model MessageQueue {
+  id             String @id
+  tenant_id      String
+  slack_event_id String @unique
+  payload        String
+  status         String @default("PENDING")
+  attempts       Int    @default(0)
+  created_at     Int
+  updated_at     Int
+  deliver_after  Int?
+  error          String?
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id])
+
+  @@index([tenant_id, status, created_at])
+  @@map("message_queue")
+}
+
+// ─── startup_locks ────────────────────────────────────────────────────────────
+
+model StartupLock {
+  tenant_id   String @id
+  locked_by   String
+  acquired_at Int
+  expires_at  Int
+
+  tenant Tenant @relation(fields: [tenant_id], references: [id])
+
+  @@map("startup_locks")
+}
+
+// ─── audit_log ────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String  @id
+  tenant_id  String?
+  event_type String
+  actor      String
+  metadata   String?
+  created_at Int
+
+  tenant Tenant? @relation(fields: [tenant_id], references: [id])
+
+  @@map("audit_log")
+}
+
+// ─── allowlist ────────────────────────────────────────────────────────────────
+
+model Allowlist {
+  id            String  @id
+  slack_team_id String
+  slack_user_id String?
+  added_by      String
+  note          String?
+  created_at    Int
+  revoked_at    Int?
+
+  tenants Tenant[]
+
+  @@index([slack_team_id, slack_user_id, revoked_at])
+  @@map("allowlist")
+}
+
+// ─── container_images ─────────────────────────────────────────────────────────
+
+model ContainerImage {
+  id            String  @id
+  tag           String  @unique
+  digest        String?
+  is_default    Int     @default(0)
+  release_notes String?
+  created_at    Int
+  deprecated_at Int?
+
+  @@map("container_images")
+}

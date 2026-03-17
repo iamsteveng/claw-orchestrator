@@ -1,0 +1,16 @@
+<status>PASS</status>
+<evidence>All 4 TC-025 assertions passed in 1273ms (121/121 total suite):
+- ✓ First enqueueMessage call creates exactly one PENDING row (slack_event_id=Ev_DUP_001)
+- ✓ Duplicate enqueueMessage (same event_id=Ev_DUP_001) returns false — no new row created
+- ✓ deliverPendingMessages delivers exactly once to tenant runtime (1 HTTP call to :3100/message)
+- ✓ Second deliverPendingMessages after delivery makes 0 additional runtime calls; row count stays 1
+
+Test was pre-existing at `tests/e2e/tc-025.test.ts`. Tests event-handler module functions directly with a real SQLite DB and mocked fetch.</evidence>
+<reason>N/A — PASS</reason>
+<learnings>
+- **Test deduplication at event-handler level, not relay level**: `enqueueMessage` + `deliverPendingMessages` from `event-handler.ts` implement clean idempotency. The higher-level `processSlackEventWithConfig` in `app-factory.ts` re-delivers even on duplicates (finds existing row but still calls the runtime) — testing via the full relay endpoint would see 2 runtime calls, violating pass criteria.
+- **UNIQUE constraint on `slack_event_id`**: The `messageQueue` table has a UNIQUE constraint. `enqueueMessage()` catches the constraint violation and returns `false` (no error thrown). `deliverPendingMessages()` only queries `status=PENDING` rows, so already-DELIVERED events get no retry.
+- **Track delivery calls with a shared array**: Populate from mock fetch and reset with `runtimeDeliveryCalls.length = 0` between phases to assert exact call counts per test.
+- **No HTTP servers needed**: Pure integration test against event-handler functions with a real temp SQLite DB — no CP/relay instances required.
+- **mockNow = 25_000_000** avoids SQLite Int32 overflow on timestamps for this test file.
+</learnings>

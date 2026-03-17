@@ -1,0 +1,14 @@
+{
+  "id": "TC-005",
+  "title": "Different users → completely isolated (no shared workspace/state)",
+  "level": "integration",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — test passed",
+  "evidence": "All 7 TC-005 assertions passed in 1720ms (304/304 total tests pass): - ✓ TC-005: provision tenant A (T_TC005/U_TC005_A) succeeds with status=NEW - ✓ TC-005: provision tenant B (T_TC005/U_TC005_B) succeeds with status=NEW - ✓ TC-005: tenant A and tenant B have different tenant IDs (sha256 of different principals) - ✓ TC-005: tenant A and tenant B have different relay_token values - ✓ TC-005: tenant A and tenant B have different data_dir paths (each contains own tenantId) - ✓ TC-005: tenant A and tenant B have different container_name values - ✓ TC-005: marker file written to tenant A workspace is NOT visible in tenant B workspace Complete filesystem and identity isolation confirmed between T_TC005:U_TC005_A and T_TC005:U_TC005_B.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-005/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260317T063707Z/attempts/loop-00-full/tests/TC-005/stderr.log",
+  "executedAt": "2026-03-17T07:23:23Z"
+}

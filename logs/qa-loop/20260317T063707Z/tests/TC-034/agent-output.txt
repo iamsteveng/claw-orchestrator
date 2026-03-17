@@ -1,0 +1,9 @@
+<status>PASS</status>
+<evidence>All 5 TC-034 tests passed in 9ms. Full suite: 448/448 tests passed across 68 files. Tests verified: (1) script exists at scripts/tenant-shell.sh, (2) shebang #!/bin/bash present, (3) contains `docker exec -it --user agent`, (4) validates TENANT_ID argument with `if [ -z "${TENANT_ID}" ] → exit 1`, (5) validates container running via `docker inspect` before exec.</evidence>
+<reason>N/A</reason>
+<learnings>
+- **JS regex trap: `[^]]*`** — In JavaScript, `[^]` (empty negated class) means "any character", so `[^]]*` parses as `(any-char + "]")` repeated, NOT "zero or more non-`]` chars". For bash argument checks, use explicit patterns like `/if \[ -z "?\$\{?TENANT_ID/` or `toContain('[ -z ')` instead.
+- **Shell script unit tests**: `toContain()` is more reliable than complex regex for bash idioms. Pattern: `readFileSync(path, 'utf-8')` + `.toContain(...)` assertions covers all required structural checks cleanly.
+- **Script path resolution**: `join(__dirname, '../../scripts/filename.sh')` works reliably from `tests/unit/`.
+- **Linter auto-commits**: The project's linter may auto-fix and auto-commit test files between runs — always re-read before editing.
+</learnings>

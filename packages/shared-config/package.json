@@ -1,0 +1,42 @@
+{
+  "name": "@claw/shared-config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./control-plane": {
+      "import": "./dist/control-plane.js",
+      "require": "./dist/control-plane.js",
+      "types": "./dist/control-plane.d.ts"
+    },
+    "./slack-relay": {
+      "import": "./dist/slack-relay.js",
+      "require": "./dist/slack-relay.js",
+      "types": "./dist/slack-relay.d.ts"
+    },
+    "./scheduler": {
+      "import": "./dist/scheduler.js",
+      "require": "./dist/scheduler.js",
+      "types": "./dist/scheduler.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.0"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

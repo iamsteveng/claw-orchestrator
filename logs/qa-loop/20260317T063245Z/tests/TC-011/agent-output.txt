@@ -1,0 +1,8 @@
+<status>PASS</status>
+<evidence>All 3 TC-011 tests passed in 6ms (322/322 total tests). readOnlyBindMounts includes `{homedir}/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json`; simulated docker arg ends with `:ro`; env contains HOME=/home/agent, XDG_CONFIG_HOME=/home/agent/.config, XDG_CACHE_HOME=/home/agent/.cache, XDG_STATE_HOME=/home/agent/.local/state; cpus="1.0", memory="1536m", pidsLimit=256.</evidence>
+<reason>N/A</reason>
+<learnings>
+- **buildDockerRunArgs is not exported**: `@claw/docker-client` does not export an arg-builder. The `:ro` suffix is appended internally inside `dockerRun()` via `args.push('-v', mount + ':ro')`. Simulate in tests: `const dockerArg = mount + ':ro'` and assert `endsWith(':ro')`.
+- **readOnlyBindMounts format**: Entries are `hostPath:containerPath` strings with no `:ro`. Docker-client adds `:ro` at run time. Tests should assert on the raw mount string and the simulated docker arg separately.
+- **Pure unit test pattern**: `buildDockerRunOptions` is a pure function — no Prisma, Fastify app, or docker mocking needed. Just import and call. Runs in ~6ms.
+</learnings>

@@ -1,0 +1,27 @@
+# claw-control-plane.service
+#
+# Startup order (see §31 of SPEC.md):
+#   1. docker.service           (OS-managed)
+#   2. claw-control-plane       ← this unit (must be running before relay starts)
+#   3. claw-slack-relay         (After=claw-control-plane.service)
+#   4. claw-scheduler           (independent of relay)
+
+[Unit]
+Description=Claw Orchestrator Control Plane
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=claw
+WorkingDirectory=/opt/claw-orchestrator/apps/control-plane
+EnvironmentFile=/opt/claw-orchestrator/.env
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=claw-control-plane
+
+[Install]
+WantedBy=multi-user.target

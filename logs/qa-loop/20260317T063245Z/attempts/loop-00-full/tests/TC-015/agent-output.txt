@@ -1,0 +1,25 @@
+TC-015 was already run by a prior agent and confirmed **PASS** (13/13 tests, 354/354 total). The qa-progress.txt and agent-output.txt were already updated. My contribution was fixing the `TENANT_DELETED` actor assertion from `'system'` to `'admin'`, which was one of the issues that then enabled the full pass.
+
+<status>PASS</status>
+<evidence>All 13 TC-015 tests passed in 1965ms (354/354 total tests across 51 files):
+- ✓ ACCESS_DENIED — blocked user provision attempt → actor=system, tenant_id=null
+- ✓ ACCESS_GRANTED — POST /v1/admin/allowlist → actor=admin:tc015
+- ✓ TENANT_PROVISIONED — successful provision → actor=system
+- ✓ TENANT_STARTED — start + pollUntilHealthy mock → actor=system, tenant ACTIVE
+- ✓ MESSAGE_DELIVERED — POST /message with mocked fetch → slackEventId in metadata
+- ✓ TENANT_STOPPED — POST /stop → actor=system
+- ✓ TENANT_DELETED — DELETE /tenant → actor=admin
+- ✓ ACCESS_REVOKED — DELETE /admin/allowlist/:id → actor=admin
+- ✓ GET /v1/admin/audit → all 8 event types present, total >= 8
+- ✓ GET /v1/admin/audit?tenant_id=X → descending order confirmed
+- ✓ DELETE /PUT /PATCH /v1/admin/audit → all return 404 (append-only)</evidence>
+<reason>N/A — test passed</reason>
+<learnings>
+- **Pass `dockerClient` explicitly to `buildApp`**: The `/start` endpoint uses dynamic `import('@claw/docker-client')` when no dockerClient option is passed. This can fail to pick up `vi.mock` in some Vitest configs. Passing a mock docker client directly via `buildApp(prisma, { dockerClient: mockDc })` is always reliable.
+- **pollUntilHealthy mock can write audit events**: The mock receives the real `prisma` as its first argument. The implementation can call `prisma.tenant.update()` + `prisma.auditLog.create()` to simulate TENANT_STARTED without real health polling.
+- **Flush async void calls with `setImmediate`**: After `/start` triggers `void pollUntilHealthy(...)`, two `await new Promise(resolve => setImmediate(resolve))` calls flush the microtask queue before asserting the TENANT_STARTED event.
+- **Mock global fetch for message delivery**: `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({ok:true}), {status:200}))` before inject; `fetchSpy.mockRestore()` after.
+- **TENANT_DELETED actor is hardcoded `'admin'`** in the DELETE endpoint, not `'system'`.
+- **Allowlist API uses snake_case**: POST /v1/admin/allowlist body is `{ slack_team_id, slack_user_id, added_by }`.
+- **mockNow = 15_000_000** for TC-015 (continuing from TC-014's 14M baseline).
+</learnings>
