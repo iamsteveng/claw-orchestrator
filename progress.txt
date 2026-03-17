@@ -481,6 +481,26 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - entrypoint.sh must be chmod +x both on host AND via RUN chmod in Dockerfile
 ---
 
+## 2026-03-17 - US-039
+- What was implemented: Integration tests for control plane API with real SQLite and mocked Docker
+- Files changed:
+  - apps/control-plane/src/app-factory.ts (new: buildApp(prisma, options) factory function with all routes)
+  - apps/control-plane/src/index.ts (refactored: imports buildApp, main() creates prisma, runs migrations, calls reconcile)
+  - tests/integration/control-plane.test.ts (new: 6 integration tests with real SQLite + mocked docker-client)
+  - vitest.config.ts (added tests/**/*.test.ts include + @prisma/client alias for pnpm symlink fix)
+  - package.json (added test:integration script)
+  - packages/shared-config/src/vitest-setup.ts (added TEMPLATES_DIR pointing to repo templates/workspace, DATA_DIR to /tmp)
+- **Learnings for future iterations:**
+  - For integration tests, extract app creation into buildApp(prisma) factory to enable dependency injection
+  - Prisma schema uses Int (32-bit) for timestamps but Date.now() returns 13-digit ms; mock Date.now() in tests to return small counter values
+  - Use `new PrismaClient({ datasourceUrl: 'file:/tmp/test-uuid.db' })` for test isolation
+  - Run schema setup with `execSync('npx prisma db push --skip-generate', { env: {...process.env, DATABASE_URL: dbUrl} })`
+  - @prisma/client needs resolve.alias in vitest.config.ts to find generated client from pnpm root node_modules
+  - vi.mock('@claw/docker-client', ...) must be at top level and include all methods (run, start, stop, rm, inspect, exec)
+  - TEMPLATES_DIR in vitest-setup.ts should point to `${cwd}/templates/workspace` (not the production path)
+  - 185 total tests passing
+---
+
 ## 2026-03-17 - US-038
 - What was implemented: test-utils package with fixtures/mocks and unit tests for core logic
 - Files changed:
