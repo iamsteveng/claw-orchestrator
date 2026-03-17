@@ -893,3 +893,9 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - For shell script content assertions, simple `toContain()` checks are more reliable than complex regex for bash idioms.
   - Script path resolution via `join(__dirname, '../../scripts/filename.sh')` works reliably from tests/unit/.
 ---
+
+### TC-034 [PASS] tenant-shell script validates container is running
+- **Evidence:** All 5 TC-034 tests passed in 6ms: script exists at scripts/tenant-shell.sh, shebang #!/bin/bash present, contains `docker exec -it --user agent`, validates TENANT_ID argument (exits with code 1 if empty), and validates container is running via `docker inspect` before exec. Full suite: 448/448 tests passed.
+- **Learnings:**
+  - - In JavaScript regex, `[^]]*` is a trap: `[^]]` parses as `[^]` (matches any char — a JS quirk) followed by literal `]`, so `[^]]*` means "(any-char + `]`) repeated". It does NOT mean "not `]`". For bash script argument checks, use explicit patterns like `/if \[ -z "?\$\{?TENANT_ID/` or just `toContain()`. - For shell script unit tests, simple `toContain()` assertions are more robust than complex regex for bash idioms. - `scripts/tenant-shell.sh` already validates: missing TENANT_ID (exits 1), container not found (exits 1), container not running (exits 1), then execs `docker exec -it --user agent`.
+---
