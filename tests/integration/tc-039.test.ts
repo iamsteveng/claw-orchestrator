@@ -83,7 +83,8 @@ beforeAll(async () => {
   mkdirSync(tmpDir, { recursive: true });
 
   const mockOpenclaw = join(tmpDir, 'openclaw');
-  writeFileSync(mockOpenclaw, '#!/bin/sh\necho "Hello from mock openclaw"\n');
+  // Drain stdin before echoing so the server's stdin.write() doesn't EPIPE
+  writeFileSync(mockOpenclaw, '#!/bin/sh\ncat > /dev/null\necho "Hello from mock openclaw"\n');
   chmodSync(mockOpenclaw, 0o755);
 
   const source = readFileSync(MESSAGE_SERVER_PATH, 'utf8');
