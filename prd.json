@@ -771,6 +771,21 @@
       "priority": 5,
       "passes": true,
       "notes": ""
+    },
+    {
+      "id": "US-041",
+      "title": "Bind-mount host Claude Code credentials into tenant containers",
+      "description": "As the system, I want each tenant container to have access to the host Claude Code OAuth credentials so that the claude CLI works inside tenant containers without per-tenant auth setup.",
+      "acceptanceCriteria": [
+        "docker run for provisioning includes -v ~/.claude/.credentials.json:/root/.claude/.credentials.json:ro bind mount alongside auth-profiles.json",
+        "Entrypoint script checks both /root/.openclaw/agents/main/agent/auth-profiles.json AND /root/.claude/.credentials.json exist and are non-empty; exits with clear error if either is missing",
+        "Unit test: provisioning service includes .credentials.json in docker run bind mounts list",
+        "Unit test: entrypoint validation exits non-zero with descriptive error when .credentials.json is absent",
+        "Typecheck passes"
+      ],
+      "priority": 41,
+      "passes": false,
+      "notes": ""
     }
   ]
 }

@@ -264,6 +264,47 @@ This design has the following implications:
 
 ---
 
+**Claude Code Credentials — Bind-Mount Strategy:**
+
+Claude Code (`claude` CLI) stores its OAuth token at:
+
+```
+~/.claude/.credentials.json
+```
+
+This file contains the `claudeAiOauth` key with the host user's Claude.ai OAuth token. To allow `claude` CLI to work inside tenant containers using the host's Claude Max/Pro subscription, this single file is **bind-mounted read-only** into every tenant container at the same path:
+
+```
+/root/.claude/.credentials.json:ro
+```
+
+**Only this file is mounted** — not the entire `~/.claude/` directory. The host's `~/.claude/` directory also contains history, sessions, plugins, plans, and cache data that must not leak to tenants.
+
+This design has the following implications:
+
+- **No per-tenant Claude Code auth.** Tenants share the host's Claude subscription. No per-tenant `ANTHROPIC_API_KEY` or OAuth token is stored in the database or injected via environment variable.
+- **Read-only mount.** Tenants cannot modify the shared credentials file (`:ro`).
+- **Immediate token rotation.** If the host token is refreshed, all running containers see the updated file on next read — no restart required.
+- **Simultaneous revocation risk.** If the host token expires or is revoked, all tenants simultaneously lose `claude` CLI access.
+- **Cost and billing.** All tenant `claude` CLI usage is billed to the host's Claude subscription.
+- **Entrypoint validation.** The tenant container entrypoint script must verify that `/root/.claude/.credentials.json` exists and is non-empty. If missing, it must log a clear error and exit non-zero.
+
+**docker run bind mounts (provisioning) — both files required:**
+
+```
+-v ~/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json:ro
+-v ~/.claude/.credentials.json:/root/.claude/.credentials.json:ro
+```
+
+**Prerequisite check.** Before starting the control plane, operators must verify both files exist on the host:
+
+```bash
+test -f ~/.openclaw/agents/main/agent/auth-profiles.json || echo "ERROR: auth-profiles.json missing"
+test -f ~/.claude/.credentials.json || echo "ERROR: .credentials.json missing"
+```
+
+---
+
 ## 7. Slack Routing Design
 
 ### 7.1 Identity Mapping
@@ -338,7 +379,7 @@ Triggered on first user message (after allowlist check passes):
 3. Generate config from templates
 4. Generate per-tenant relay token and optionally a tenant SSH keypair
 5. Copy workspace template files into the tenant's workspace directory, including `AGENTS.md` (see §8.2.1 below)
-6. Run `docker run` to create and start the tenant container, bind-mounting the host's `auth-profiles.json` read-only (see §6.5); no per-tenant Anthropic credential is injected
+6. Run `docker run` to create and start the tenant container, bind-mounting both the host's `auth-profiles.json` and `~/.claude/.credentials.json` read-only (see §6.5); no per-tenant credentials are injected
 7. Poll health endpoint (see §19) until healthy or timeout
 8. Mark tenant `ACTIVE`
 9. Process message
@@ -1750,7 +1791,7 @@ Tenant table, provision/start/stop/delete APIs, Docker wrapper (`execa`), health
 Slack signature verification, user-to-tenant resolution, allowlist check, immediate-ack pattern, message forwarding, queued wake-up behavior, `chat.postMessage` delivery.
 
 ### Phase 4 — Tenant Image
-Non-root `agent` user, OpenClaw installation, required CLIs, health server on port `3101`, message server on port `3100`, entrypoint script. The image must **not** embed or expect `ANTHROPIC_API_KEY` in the environment. Instead, the entrypoint should verify that `/root/.openclaw/agents/main/agent/auth-profiles.json` is present (bind-mounted read-only by the control plane at start time — see §6.5) and surface a clear error in logs if it is missing.
+Non-root `agent` user, OpenClaw installation, required CLIs, health server on port `3101`, message server on port `3100`, entrypoint script. The image must **not** embed or expect `ANTHROPIC_API_KEY` in the environment. Instead, the entrypoint must verify that both `/root/.openclaw/agents/main/agent/auth-profiles.json` and `/root/.claude/.credentials.json` are present (both bind-mounted read-only by the control plane at start time — see §6.5) and exit non-zero with a clear error message if either is missing.
 
 ### Phase 5 — Scheduler
 Idle-stop logic (48h inactivity checks), disk usage sampling, message queue reaping, stale lock sweep.
