@@ -44,6 +44,14 @@ describe('buildDockerRunOptions', () => {
     );
   });
 
+  it('bind-mounts .credentials.json read-only', () => {
+    const opts = buildDockerRunOptions(BASE);
+    const hostCredentials = `${homedir()}/.claude/.credentials.json`;
+    expect(opts.readOnlyBindMounts).toContain(
+      `${hostCredentials}:/root/.claude/.credentials.json`,
+    );
+  });
+
   it('bind-mounts tenant data directories and sets env vars', () => {
     const opts = buildDockerRunOptions(BASE);
     expect(opts.volumes).toContain('/data/tenants/abc123/home:/home/agent');
