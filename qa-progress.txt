@@ -764,3 +764,39 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - **mockNow = 29_000_000** for TC-029 (continuing from TC-028's 28M baseline, +1M gap)
   - **seedWorkspace mock is still needed**: Even without containerImage seeding, the provision flow calls `seedWorkspace(dataDir, TEMPLATES_DIR)` — mock it to avoid real filesystem/template access.
 ---
+
+### TC-029 [PASS] Provision endpoint idempotency → same tenant on duplicate call
+- **Evidence:** All 3 TC-029 tests passed in 1531ms (421/421 total suite): - ✓ TC-029: POST /v1/admin/allowlist adds U_IDEMPOTENT to allowlist - ✓ TC-029: first POST /v1/tenants/provision creates tenant with NEW status - ✓ TC-029: second POST /v1/tenants/provision returns same tenantId, only 1 DB row, no new audit events Idempotent provisioning confirmed: same tenantId returned, exactly 1 tenant row in DB, audit event count unchanged after duplicate call.
+- **Learnings:**
+  - - **Idempotency via `findUnique({ where: { principal } })`**: `provisionTenant()` computes a deterministic `tenantId = sha256(teamId:userId).slice(0,16)` and checks for an existing row by `principal`. If found, returns immediately with no DB writes (no audit log, no status update). - **Audit event count check pattern**: Count `auditLog` rows for the tenant before the second provision call, then assert the count is unchanged afterward — this cleanly verifies no side effects. - **No containerImage row needed for provision-only tests**: The `/provision` endpoint doesn't look up the default container image (only `/start` does). Minimal seeding required. - **seedWorkspace mock still required**: Even without containerImage seeding, `provisionTenant()` calls `seedWorkspace()` — mock it to avoid real filesystem/template access. - **mockNow = 29_000_000** for TC-029 (continuing the per-file +1M convention from TC-028's 28M).
+---
+
+### TC-028 [PASS] UNHEALTHY auto-recovery → tenant recovers and queued messages processed
+---
+
+### TC-030 [PASS] Queue reaping → DELIVERED rows older than 7 days deleted
+- All 1 TC-030 test passed in 1546ms (422/422 total suite, 64 files all passing)
+- Flow: insert 4 message_queue rows (DELIVERED 8d, DELIVERED 3d, FAILED 31d, FAILED 15d) → call `reapMessageQueue(prisma, noopLog)` → assert correct rows deleted/retained
+- ✓ 8-day-old DELIVERED row deleted
+- ✓ 3-day-old DELIVERED row retained
+- ✓ 31-day-old FAILED row deleted
+- ✓ 15-day-old FAILED row retained
+- **Learnings:**
+  - **SQLite INT overflow with real `Date.now()`**: Prisma validates `Int` fields to 32-bit signed range (max 2_147_483_647). Real `Date.now()` (~1.77e12) exceeds this. Use `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` with `MOCK_NOW = 1_800_000_000` (fits in INT32).
+  - **30-day offset from 1_800_000_000 is negative but valid**: `1_800_000_000 - 31 * 86_400_000 = -878_400_000` is a valid INT32 value (min = -2_147_483_648). Prisma and SQLite both accept it.
+  - **Import reaper after mock**: Place `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` before importing the reaper module so the mocked `Date.now` is in effect when `reapMessageQueue` runs.
+  - **Minimal tenant for FK**: `message_queue` has an FK to `tenants`. Create a minimal tenant row with small timestamps; include required `principal` field (unique, format `T_XXX:U_XXX`).
+  - **Single test is sufficient**: All 4 retention policy assertions can live in one `it()` block since they test a single function call.
+---
+
+### TC-030 [PASS] Queue reaping → DELIVERED rows older than 7 days deleted
+- All 4 assertions pass: 8-day-old DELIVERED deleted, 3-day-old DELIVERED retained, 31-day-old FAILED deleted, 15-day-old FAILED retained
+- 64/64 test files pass (422 tests)
+- **Root issue:** Prisma `Int` columns reject millisecond timestamps (> INT32 max 2_147_483_647) with "does not fit in an INT column". But the reaper uses `Date.now()` (ms) internally for cutoffs.
+- **Fix:** Mock `Date.now()` via `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` where `MOCK_NOW = 1_800_000_000` (fits in INT32). All timestamp offsets (e.g. `MOCK_NOW - 8 * 86400 * 1000`) then also fit in INT32 range.
+- **Learnings:**
+  - Prisma `Int` = 32-bit (max ~2.1B). Real `Date.now()` ms values (~1.77 trillion) overflow. Must use mocked time for integration tests that write timestamps directly via Prisma.
+  - Always include `principal` field when creating Tenant rows (it's `@unique` and required by schema).
+  - `vi.spyOn(Date, 'now').mockReturnValue(MOCK_NOW)` at module top-level (before imports) intercepts `Date.now()` in both test code and the imported `reaper.js` — reaper's cutoff computation then uses MOCK_NOW.
+  - Pattern: pick MOCK_NOW such that `MOCK_NOW - 31 * 86400 * 1000 > -2_147_483_648` (fits negative INT32). MOCK_NOW = 1_800_000_000 works (31 days in ms = 2_678_400_000; 1.8B - 2.68B = -878M which fits).
+---
