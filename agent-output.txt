@@ -12,8 +12,15 @@ For any task that is complex enough to take more than ~2 minutes:
 - When it's done, report back with a concise summary of what was done
 
 
-## TC-031 [PASS] Message forwarding → relay token mismatch → 401
-- Wrong X-Relay-Token → 401 {ok: false, error: 'Unauthorized'}
-- Missing X-Relay-Token → 401 {ok: false, error: 'Unauthorized'}
-- Correct relay token → 200 (message forwarded, MESSAGE_DELIVERED audit written)
-- All 8 tests passed (430/430 suite)
+## TC-032: Message forwarding → disk quota exceeded → 507
+
+**Status:** PASS
+**Run Date:** 2026-03-17
+
+**Test Results:** 9/9 tests passed in 1692ms (439/439 suite)
+
+**Evidence:**
+- disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}`
+- No MESSAGE_DELIVERED audit event written when blocked by quota
+- disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}`
+- MESSAGE_DELIVERED audit event written with correct slackEventId `E_TC032_OK`

@@ -820,3 +820,40 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - To test successful message delivery (200), mock `globalThis.fetch` via `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(...))` — the control-plane forwards to the container via fetch, which fails without a real container. Restore with `fetchSpy.mockRestore()` after the request.
   - The relay token from `POST /v1/tenants/provision` response (`body.relayToken`) matches the `relay_token` stored on the tenant row and must be sent as `x-relay-token` header.
 ---
+
+### TC-031 [PASS] Message forwarding → relay token mismatch → 401
+- **Evidence:** All 8 TC-031 tests passed in 1656ms (430/430 suite total): - Wrong X-Relay-Token → 401 `{ok: false, error: 'Unauthorized'}` - Missing X-Relay-Token → 401 `{ok: false, error: 'Unauthorized'}` - No MESSAGE_DELIVERED audit event for rejected messages - Correct relay token (with mocked fetch) → 200 `{ok: true}` - MESSAGE_DELIVERED audit event written with correct slackEventId
+- **Learnings:**
+  - - Relay token validation fires before allowlist check — wrong/missing `x-relay-token` returns 401 before other guards (403, 507, 503). - To test successful message delivery (200), mock `globalThis.fetch` via `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(...))` — the control-plane forwards to the container via fetch, which would fail without a real container. Always call `fetchSpy.mockRestore()` after the request to avoid polluting other tests. - The relay token returned in the `POST /v1/tenants/provision` response (`body.relayToken`) is the same value that must be sent as the `x-relay-token` header on message requests.
+---
+
+### TC-031 [PASS] Message forwarding → relay token mismatch → 401
+- **Evidence:** TC-031 passed all 8 tests in 1652ms: - Wrong X-Relay-Token → 401 {ok: false, error: 'Unauthorized'} - Missing X-Relay-Token → 401 {ok: false, error: 'Unauthorized'} - No MESSAGE_DELIVERED audit event for rejected messages - Correct relay token (with mocked fetch) → 200 {ok: true} - MESSAGE_DELIVERED audit event written with correct slackEventId Overall suite: 429/430 tests passing (TC-027 failure is pre-existing, unrelated)
+- **Learnings:**
+  - - Relay token validation fires before allowlist/status/quota checks — wrong/missing `x-relay-token` returns 401 immediately - To test successful message delivery (200), mock `globalThis.fetch` via `vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(...))` since the control-plane forwards to the container via fetch; always call `fetchSpy.mockRestore()` after the inject call - The relay token from `POST /v1/tenants/provision` response (`body.relayToken`) equals the `relay_token` stored on the tenant row and is the correct value for the `x-relay-token` header - For the ACTIVE state needed by the 200 path, directly updating the DB (`prisma.tenant.update({ status: 'ACTIVE' })`) is simpler than waiting for the background `pollUntilHealthy` mock to complete via `setImmediate` flushes
+---
+
+### TC-032 [PASS] Message forwarding → disk quota exceeded → 507
+- **Evidence:** All 9 TC-032 tests passed in 1709ms (439/439 suite total): - disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}` - No MESSAGE_DELIVERED audit event written when blocked by quota - disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}` - MESSAGE_DELIVERED audit event written with correct slackEventId after quota cleared
+- **Learnings:**
+  - `disk_quota_exceeded` check fires after relay token auth (401) and allowlist check (403), but before ACTIVE status check (503) — setting it via `prisma.tenant.update({ data: { disk_quota_exceeded: 1 } })` directly is sufficient to trigger 507.
+  - Pattern mirrors TC-031 exactly: provision → start → wait for ACTIVE (via setImmediate flushes) → manipulate DB flag → assert response → clear flag → assert 200 with mocked fetch.
+  - The 507 guard returns `{ ok: false, error: 'Disk quota exceeded' }` regardless of tenant status, so ACTIVE state is not required for the 507 path.
+---
+
+### TC-032 [PASS] Message forwarding → disk quota exceeded → 507
+- **Evidence:** All 9 TC-032 tests passed in 1709ms (439/439 suite total): - disk_quota_exceeded=1 → POST /v1/tenants/:id/message returns 507 `{ok: false, error: 'Disk quota exceeded'}` - No MESSAGE_DELIVERED audit event written when blocked by quota - disk_quota_exceeded=0 (cleared) → POST /v1/tenants/:id/message returns 200 `{ok: true}` with mocked fetch - MESSAGE_DELIVERED audit event written with correct slackEventId after quota cleared
+- **Learnings:**
+  - - The `disk_quota_exceeded` check in the message endpoint fires after relay token auth (401) and allowlist check (403), but before the ACTIVE status check (503). Setting it via `prisma.tenant.update({ data: { disk_quota_exceeded: 1 } })` directly is sufficient to trigger 507 without needing the scheduler. - The test structure mirrors TC-031 exactly: provision → allowlist → start → flush setImmediate queues → manipulate DB flag → assert blocked response → clear flag → assert 200 with `vi.spyOn(globalThis, 'fetch')` mock. - The 507 guard does not require the tenant to be ACTIVE — it fires regardless of tenant status once the relay token is validated.
+---
+
+### TC-032 [PASS] Message forwarding → disk quota exceeded → 507
+- All 9 tests passed in 1692ms (439/439 suite total)
+- disk_quota_exceeded=1 → 507 {ok:false, error:'Disk quota exceeded'}
+- No MESSAGE_DELIVERED audit event when quota blocked
+- disk_quota_exceeded=0 → 200 {ok:true} with mocked fetch + MESSAGE_DELIVERED audit written
+- **Learnings:**
+  - disk_quota_exceeded check fires after relay token auth (401) and allowlist check (403), but before ACTIVE status check (503)
+  - Setting flag via `prisma.tenant.update({ data: { disk_quota_exceeded: 1 } })` directly is sufficient to trigger 507 without the scheduler
+  - Test structure mirrors TC-031: provision → start → flush setImmediate → manipulate DB flag → assert blocked → clear flag → assert 200 with mocked fetch
+---
