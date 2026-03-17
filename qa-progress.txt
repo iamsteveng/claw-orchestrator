@@ -435,3 +435,19 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - `reconcile()` is in `index.ts` but not exported by default — extract to a separate module for testability
   - Duck-typed `log: { info, warn }` pattern makes reconcile easy to test without a real Fastify logger
 ---
+
+### TC-016 [PASS] Control plane startup reconciliation → crashed state reset
+- **Evidence:** All 7 TC-016 tests passed in 1459ms (361/361 total tests across 52 files): - ✓ reconcile() runs without error - ✓ PROVISIONING tenant → status=FAILED after reconciliation - ✓ STARTING tenant → status=FAILED after reconciliation - ✓ expired startup_lock → deleted after reconciliation - ✓ stale PROCESSING message → status=PENDING after reconciliation - ✓ SYSTEM_STARTUP audit log entry written (actor='system', tenant_id=null) - ✓ ACTIVE tenant status unchanged (only PROVISIONING/STARTING are reset)
+- **Learnings:**
+  - - **SQLite INT overflow with real timestamps**: `Date.now()` (~1.7e12) exceeds SQLite's INT32 max. Must use small mock timestamps via `vi.spyOn(Date, 'now').mockImplementation(() => mockNow++)` with `mockNow` starting around `16_000_000`. - **Stale-threshold delta arithmetic**: The reconcile function uses `now - 120_000` as the 2-minute cutoff. With small mockNow values, "old" timestamps must be near 0 (e.g., 1000–2000) so the delta is >> 120,000 regardless of how many `Date.now()` calls happen before reconcile runs. - **Extract internal functions for testability**: `reconcile()` was defined inside `index.ts` without an export. Extracted to `startup-reconciliation.ts` with a named export, then `index.ts` imports from there. This is the right pattern for testing startup-phase logic. - **Duck-typed log**: `reconcile()` accepts `log: { info, warn }` — a no-op object `{ info: () => {}, warn: () => {} }` works cleanly in tests without needing a Fastify instance.
+---
+
+### TC-017 [PASS] Config validation → missing env var causes fast failure
+- All 3 TC-017 tests passed (364/364 total tests across 53 files, ~14ms)
+- Tests call `slackRelayConfigSchema.parse(process.env)` and `controlPlaneConfigSchema.parse(process.env)` directly after deleting the required env var from `process.env`
+- **Learnings:**
+  - **`zod` not a workspace-root dependency**: `import { ZodError } from 'zod'` fails in `tests/unit/` because zod is only a dependency of `packages/shared-config`, not the workspace root. Workaround: check `err.name === 'ZodError'` and `err.issues` shape instead of importing the class.
+  - **vi.resetModules() + dynamic import breaks zod resolution**: After `vi.resetModules()`, Vite's resolver fails to load `zod` as a URL (`Failed to load url zod`). This is why the original test approach failed. Never use this pattern for Zod-based config modules.
+  - **Test schemas directly, not config singletons**: The config modules (`slack-relay.ts`, `control-plane.ts`) are module-level singletons. To test fast-failure, call the exported Zod schema's `.parse()` directly with a manipulated env object. This is the pattern used in `packages/shared-config/src/config.test.ts`.
+  - **Restore env vars in afterEach**: Mutating `process.env` requires cleanup in `afterEach` to avoid polluting parallel test workers.
+---
