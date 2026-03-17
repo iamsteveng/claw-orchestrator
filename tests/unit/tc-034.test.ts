@@ -22,7 +22,7 @@ describe('TC-034 tenant-shell script validates container is running', () => {
   it('TC-034 script validates containerName argument and exits if missing', () => {
     const content = readFileSync(SCRIPT_PATH, 'utf-8');
     expect(content).toContain('TENANT_ID');
-    expect(content).toMatch(/if\s*\[\s*-z\s*[^]]*TENANT_ID/);
+    expect(content).toMatch(/if \[ -z "?\$\{?TENANT_ID/);
     expect(content).toContain('exit 1');
   });
 

@@ -872,3 +872,24 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
   - Path resolution via `join(__dirname, '../../deploy/systemd', filename)` works reliably from tests/unit/
   - All three services have WantedBy=multi-user.target and Requires=docker.service
 ---
+
+### TC-033 [PASS] systemd unit files exist for all three services
+- **Evidence:** All 4 TC-033 tests passed in 5ms: - `claw-control-plane.service` exists + contains `WantedBy=multi-user.target` - `claw-slack-relay.service` exists + contains `WantedBy=multi-user.target` - `claw-scheduler.service` exists + contains `WantedBy=multi-user.target` - `claw-control-plane.service` contains `Requires=docker.service` Suite total: 443/443 tests passed across 67 files.
+- **Learnings:**
+  - - File existence checks with `fs.existsSync` + `readFileSync` work cleanly for unit-level infrastructure tests — no server or DB setup needed. - Path resolution `join(__dirname, '../../deploy/systemd', filename)` is reliable from `tests/unit/`. - All three services already had correct systemd structure (WantedBy=multi-user.target, Requires=docker.service), so this was purely a verification test with no production code changes required.
+---
+
+### TC-033 [PASS] systemd unit files exist for all three services
+- **Evidence:** All 4 TC-033 tests passed in 5ms: claw-control-plane.service, claw-slack-relay.service, and claw-scheduler.service all exist in deploy/systemd/, each contains WantedBy=multi-user.target, and claw-control-plane.service contains Requires=docker.service. Full suite: 443/443 tests passed across 67 files.
+- **Learnings:**
+  - File existence + content checks with fs.existsSync + readFileSync are sufficient for unit-level infrastructure verification — no server/DB setup needed. Path resolution via join(__dirname, '../../deploy/systemd', filename) works reliably from tests/unit/. All three service files were already correctly structured.
+---
+
+### TC-034 [PASS] tenant-shell script validates container is running
+- All 5 tests passed: script exists, shebang present, docker exec -it --user agent present, argument validation (exits if TENANT_ID empty), container running check via docker inspect
+- scripts/tenant-shell.sh was already fully implemented with all required checks
+- **Learnings:**
+  - In JavaScript regex, `[^]]*` does NOT mean "not `]`" — `[^]]` is `[^]` (any char) followed by literal `]`, so `[^]]*` matches `(any-char + "]")` pairs. Use explicit patterns like `/if \[ -z "?\$\{?TENANT_ID/` instead.
+  - For shell script content assertions, simple `toContain()` checks are more reliable than complex regex for bash idioms.
+  - Script path resolution via `join(__dirname, '../../scripts/filename.sh')` works reliably from tests/unit/.
+---
