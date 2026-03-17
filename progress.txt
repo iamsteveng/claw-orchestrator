@@ -410,3 +410,20 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
 [US-027] Scheduler: service scaffold with idle tenant stop
 - Code already existed in apps/scheduler/src/; idle-stop.ts + index.ts
 - 5/5 tests pass, typecheck clean
+
+## 2026-03-17 - US-028
+- What was implemented: Per-tenant disk quota enforcement via du sampling every 5 minutes
+- Files changed:
+  - apps/scheduler/src/disk-quota.ts (new: getDiskUsageBytes, checkDiskQuotas, checkHostDisk, sendSlackDm)
+  - apps/scheduler/src/disk-quota.test.ts (new: 5 unit tests for quota thresholds)
+  - apps/scheduler/src/index.ts (integrated checkDiskQuotas + checkHostDisk with 5-min counter)
+  - apps/control-plane/src/index.ts (added disk_quota_exceeded=1 blocking in message endpoint)
+  - packages/shared-config/src/schemas.ts (added SLACK_BOT_TOKEN + DATA_MOUNT to schedulerConfigSchema)
+  - packages/shared-config/src/vitest-setup.ts (added DATA_MOUNT stub)
+  - packages/shared-config/src/config.test.ts (added SLACK_BOT_TOKEN to required in test)
+- **Learnings for future iterations:**
+  - Use a tickCount counter (tickCount % N === 0) for sub-interval jobs in a single setInterval loop
+  - disk-quota.ts uses ExecFileFn injection pattern (not execa directly) for testability
+  - 507 Insufficient Storage is appropriate HTTP status for disk quota exceeded
+  - schedulerConfigSchema needs SLACK_BOT_TOKEN for disk quota DMs; vitest-setup.ts already had it
+---
