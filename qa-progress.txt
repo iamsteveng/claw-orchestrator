@@ -674,3 +674,27 @@ If provisioning fails (e.g. seedWorkspace throws), rollback deletes dirs and mar
 - **Learnings:**
   - - **Test deduplication at event-handler level, not relay level**: `enqueueMessage` + `deliverPendingMessages` from event-handler.ts implement clean idempotency. The higher-level `processSlackEventWithConfig` in app-factory.ts re-delivers even on duplicates (finds existing row but still calls the runtime). Testing via the full relay endpoint would see 2 runtime calls, violating the pass criteria — test directly against the event-handler functions instead. - **Prisma tenant.create() required fields**: `principal` (unique string) and `data_dir` are required. Field is `provision_attempts` not `provisioning_attempts`. - **mockNow = 25_000_000** avoids SQLite Int32 overflow on timestamps. - **No HTTP servers needed**: TC-025 tests event-handler.ts functions directly with a real SQLite DB and mocked fetch — no CP or relay instances required. - **Track delivery calls with a shared array**: Populate from mock fetch to assert exact call counts per test phase; reset with `runtimeDeliveryCalls.length = 0` between phases.
 ---
+
+### TC-025 [PASS] Message queue deduplication → Slack retry is no-op
+- **Evidence:** All 4 TC-025 assertions passed in 1273ms (121/121 total suite): - ✓ First enqueueMessage call creates exactly one PENDING row (slack_event_id=Ev_DUP_001) - ✓ Duplicate enqueueMessage (same event_id=Ev_DUP_001) returns false — no new row created - ✓ deliverPendingMessages delivers exactly once to tenant runtime (1 HTTP call to :3100/message) - ✓ Second deliverPendingMessages after delivery makes 0 additional runtime calls; row count stays 1 Test was pre-existing at `tests/e2e/tc-025.test.ts`. Tests event-handler module functions directly with a real SQLite DB and mocked fetch.
+- **Learnings:**
+  - - **Test deduplication at event-handler level, not relay level**: `enqueueMessage` + `deliverPendingMessages` from `event-handler.ts` implement clean idempotency. The higher-level `processSlackEventWithConfig` in `app-factory.ts` re-delivers even on duplicates (finds existing row but still calls the runtime) — testing via the full relay endpoint would see 2 runtime calls, violating pass criteria. - **UNIQUE constraint on `slack_event_id`**: The `messageQueue` table has a UNIQUE constraint. `enqueueMessage()` catches the constraint violation and returns `false` (no error thrown). `deliverPendingMessages()` only queries `status=PENDING` rows, so already-DELIVERED events get no retry. - **Track delivery calls with a shared array**: Populate from mock fetch and reset with `runtimeDeliveryCalls.length = 0` between phases to assert exact call counts per test. - **No HTTP servers needed**: Pure integration test against event-handler functions with a real temp SQLite DB — no CP/relay instances required. - **mockNow = 25_000_000** avoids SQLite Int32 overflow on timestamps for this test file.
+---
+
+### TC-027 [PASS] Allowlist revocation → existing tenant blocked
+- **Evidence:** All 8 TC-027 tests passed in 1640ms (413/413 total suite):
+  - ✓ POST /v1/admin/allowlist adds U_REVOKE to allowlist
+  - ✓ POST /v1/tenants/provision succeeds for allowlisted U_REVOKE
+  - ✓ POST /v1/tenants/:id/start activates tenant
+  - ✓ DELETE /v1/admin/allowlist/:id returns {revoked: true}
+  - ✓ allowlist entry has revoked_at set after DELETE
+  - ✓ ACCESS_REVOKED audit event written with correct metadata (actor=admin, tenant_id=null, slack_team_id, slack_user_id)
+  - ✓ POST /v1/tenants/:id/message returns 403 {ok: false, error: 'Access revoked'} after revocation
+  - ✓ no MESSAGE_DELIVERED event written for blocked message
+- **Learnings:**
+  - **isAllowed() checks revoked_at IS NULL**: The control plane checks the allowlist on every message delivery — revoking the entry (setting revoked_at) immediately blocks the already-provisioned tenant.
+  - **Revocation is soft delete**: DELETE /v1/admin/allowlist/:id sets revoked_at=now, does NOT delete the tenant or its data.
+  - **ACCESS_REVOKED audit has tenant_id=null**: The event is not tied to a specific tenant — it records at the allowlist level (slack_team_id + slack_user_id in metadata).
+  - **Standard TC-015 pattern works cleanly**: Add allowlist → provision → start → revoke → attempt message. No special edge cases needed.
+  - **mockNow = 27_000_000** for TC-027 to avoid SQLite Int32 overflow and conflicts with other tests.
+---
