@@ -137,11 +137,90 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now claw-control-plane claw-slack-relay claw-scheduler
 ```
 
-### 10. Configure Slack
+### 10. Open firewall ports
 
-- Set your Slack app's Event Subscriptions URL to: `https://<your-host>/slack/events`
-- Subscribe to bot events: `message.im`, `app_mention`
-- Install the app to your workspace
+Slack requires your host to be publicly reachable over HTTPS. Open these ports in your firewall / AWS security group:
+
+| Port | Protocol | Source | Purpose |
+|------|----------|--------|---------|
+| 443 | HTTPS | 0.0.0.0/0 | Slack webhook events (required) |
+| 80 | HTTP | 0.0.0.0/0 | HTTP→HTTPS redirect (optional) |
+| 22 | TCP | Your IP | SSH access |
+
+> Ports 3000 (relay) and 3200 (control plane) stay **internal only** — never expose them publicly.
+
+**Set up a reverse proxy (Caddy recommended — handles TLS automatically):**
+
+```bash
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install caddy
+```
+
+Edit `/etc/caddy/Caddyfile`:
+
+```
+your-domain.com {
+    reverse_proxy localhost:3000
+}
+```
+
+```bash
+sudo systemctl reload caddy
+```
+
+> **No domain?** Use `<ec2-ip>.nip.io` as your domain — e.g. `1.2.3.4.nip.io` — it resolves to your IP and works with Let's Encrypt.
+
+### 11. Create the Slack app
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**
+2. Select your workspace and paste this manifest:
+
+```json
+{
+  "display_information": {
+    "name": "Claw Orchestrator",
+    "description": "Your personal AI agent — powered by OpenClaw",
+    "background_color": "#1a1a2e"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Claw",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://your-domain.com/slack/events",
+      "bot_events": [
+        "message.im"
+      ]
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
+```
+
+3. Replace `your-domain.com` with your actual domain.
+4. Click **Create App** → **Install to Workspace** → authorize.
+5. Copy credentials into `.env`:
+   - **Bot Token** (`xoxb-...`) → **OAuth & Permissions** → `SLACK_BOT_TOKEN`
+   - **Signing Secret** → **Basic Information** → `SLACK_SIGNING_SECRET`
+6. Restart the relay: `sudo systemctl restart claw-slack-relay`
 
 ---
 
