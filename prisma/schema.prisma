@@ -23,20 +23,20 @@ model Tenant {
   container_name        String?
   image_tag             String?
   data_dir              String
-  last_activity_at      Int?
-  last_started_at       Int?
-  last_stopped_at       Int?
-  provisioned_at        Int?
+  last_activity_at      BigInt?
+  last_started_at       BigInt?
+  last_stopped_at       BigInt?
+  provisioned_at        BigInt?
   provision_attempts    Int      @default(0)
   resource_overrides    String?
   disk_quota_exceeded   Int      @default(0)
   allowlist_entry_id    String?
-  created_at            Int
-  updated_at            Int
-  deleted_at            Int?
-  deletion_requested_at Int?
-  queued_for_start_at   Int?
-  recovery_attempted_at Int?
+  created_at            BigInt
+  updated_at            BigInt
+  deleted_at            BigInt?
+  deletion_requested_at BigInt?
+  queued_for_start_at   BigInt?
+  recovery_attempted_at BigInt?
   error_message         String?
 
   allowlist_entry Allowlist?    @relation(fields: [allowlist_entry_id], references: [id])
@@ -57,9 +57,9 @@ model MessageQueue {
   payload        String
   status         String @default("PENDING")
   attempts       Int    @default(0)
-  created_at     Int
-  updated_at     Int
-  deliver_after  Int?
+  created_at     BigInt
+  updated_at     BigInt
+  deliver_after  BigInt?
   error          String?
 
   tenant Tenant @relation(fields: [tenant_id], references: [id])
@@ -73,8 +73,8 @@ model MessageQueue {
 model StartupLock {
   tenant_id   String @id
   locked_by   String
-  acquired_at Int
-  expires_at  Int
+  acquired_at BigInt
+  expires_at  BigInt
 
   tenant Tenant @relation(fields: [tenant_id], references: [id])
 
@@ -89,7 +89,7 @@ model AuditLog {
   event_type String
   actor      String
   metadata   String?
-  created_at Int
+  created_at BigInt
 
   tenant Tenant? @relation(fields: [tenant_id], references: [id])
 
@@ -104,7 +104,7 @@ model Allowlist {
   slack_user_id String?
   added_by      String
   note          String?
-  created_at    Int
+  created_at    BigInt
   revoked_at    Int?
 
   tenants Tenant[]
@@ -121,7 +121,7 @@ model ContainerImage {
   digest        String?
   is_default    Int     @default(0)
   release_notes String?
-  created_at    Int
+  created_at    BigInt
   deprecated_at Int?
 
   @@map("container_images")
