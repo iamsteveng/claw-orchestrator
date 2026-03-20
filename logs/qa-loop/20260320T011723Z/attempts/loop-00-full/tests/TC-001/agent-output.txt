@@ -1,0 +1,22 @@
+<status>PASS</status>
+<evidence>
+All 3 services running with long uptime (~10-11 hours):
+- **control-plane** (pid 876079): port 3200 bound, `/health` → `{"ok":true,"uptime":35829055}`
+- **slack-relay** (pid 846244): port 3101 bound, `/health` → `{"ok":true,"uptime":38773748}`  
+- **scheduler** (pid 841073): process running, confirmed via `pgrep -f scheduler`
+
+Port binding output:
+```
+LISTEN 0  511  0.0.0.0:3200  0.0.0.0:*  users:(("node",pid=876079,fd=30))
+LISTEN 0  511  0.0.0.0:3101  0.0.0.0:*  users:(("node /home/ubun",pid=846244,fd=23))
+```
+
+Re-check after 60s: same PIDs, same ports, no exits.
+</evidence>
+<learnings>
+- Services run as persistent background processes — always check with `pgrep -a -f` before attempting to start new instances to avoid EADDRINUSE
+- Health endpoints at `/health` return `{"ok":true,"uptime":<ms>}` — useful for liveness verification beyond just port binding
+- `pino-pretty` transport fails when running `node dist/index.js` directly without the transport available; existing running services likely started via a system manager that handles this
+- `ss -tlnp | grep -E '3200|3101'` combined with `pgrep -f scheduler` is the correct check pattern for this test
+- Test file `tests/e2e/tc-001.test.ts` was pre-existing from a prior agent run — Phase 1 was a no-op
+</learnings>

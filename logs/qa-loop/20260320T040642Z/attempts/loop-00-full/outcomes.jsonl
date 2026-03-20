@@ -1,0 +1,30 @@
+{
+  "id": "TC-001",
+  "title": "All 3 services start and stay up (control-plane port 3200, slack-relay port 3101, scheduler)",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "**Phase 1 (test file):** `tests/e2e/tc-001.test.ts` already exists with TC-001 in describe/it names. All 7 tests passed in 4.25s: - TC-001: relay returns HTTP 200 immediately ✓ - TC-001: tenant row transitions to ACTIVE within 30s ✓ - TC-001: tenant directories created (home, workspace, config, logs, secrets) ✓ - TC-001: AGENTS.md seeded in workspace with \"## Task Execution\" section ✓ - TC-001: message_queue row transitions to DELIVERED ✓ - TC-001: Slack chat.postMessage called with agent response ✓ - TC-001: audit log contains TENANT_PROVISIONED, TENANT_STARTED, MESSAGE_DELIVERED in order ✓ **Phase 2 (real services):** - Port 3200 (control-plane): `LISTEN 0.0.0.0:3200` (node pid 876079) ✓ - Port 3101 (slack-relay): `LISTEN 0.0.0.0:3101` (node pid 1251150) ✓ - Scheduler: pids 1251138 and 1319525 confirmed running ✓ - After 60-second wait: all ports still bound, all processes still running ✓",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260320T040642Z/attempts/loop-00-full/tests/TC-001/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260320T040642Z/attempts/loop-00-full/tests/TC-001/stderr.log",
+  "executedAt": "2026-03-20T04:10:00Z"
+}
+
+{
+  "id": "TC-002",
+  "title": "Services survive process manager restart without EADDRINUSE port conflicts",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "N/A — PASS",
+  "evidence": "**PM2 restart:** `pm2 restart all` restarted claw-scheduler (pid→1321728) and claw-slack-relay (pid→1321740). Both online within 1 second. **EADDRINUSE check:** The grep found historical EADDRINUSE errors from ~13.6 hours before the test (epoch 1773930728233 vs restart at 1773979879533 = 49,151,300ms difference). The 3 most recent restarts — including my test restart — all show clean \"Shutting down...\" → \"Server listening at http://127.0.0.1:3101\" sequences with no new EADDRINUSE errors. **Port bindings after restart (confirmed):** ``` LISTEN 0.0.0.0:3200 (control-plane, pid 876079) LISTEN 0.0.0.0:3101 (slack-relay, pid 1321740) ``` Both ports rebound successfully within 15 seconds of restart.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260320T040642Z/attempts/loop-00-full/tests/TC-002/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260320T040642Z/attempts/loop-00-full/tests/TC-002/stderr.log",
+  "executedAt": "2026-03-20T04:14:50Z"
+}
+

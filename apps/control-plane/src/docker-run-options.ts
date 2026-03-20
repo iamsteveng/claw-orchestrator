@@ -43,9 +43,9 @@ export function buildDockerRunOptions(opts: {
 
   const hostHome = homedir();
   const authProfilesHost = `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`;
-  const authProfilesContainer = '/root/.openclaw/agents/main/agent/auth-profiles.json';
+  const authProfilesContainer = '/home/agent/.openclaw/agents/main/agent/auth-profiles.json';
   const credentialsHost = `${hostHome}/.claude/.credentials.json`;
-  const credentialsContainer = '/root/.claude/.credentials.json';
+  const credentialsContainer = '/home/agent/.claude/.credentials.json';
 
   return {
     name: `claw-tenant-${tenantId}`,

@@ -10,7 +10,7 @@
  *
  * Bind mounts:
  *   - auth-profiles.json (read-only): host ~/.openclaw/agents/main/agent/auth-profiles.json
- *     → container /root/.openclaw/agents/main/agent/auth-profiles.json
+ *     → container /home/agent/.openclaw/agents/main/agent/auth-profiles.json
  *   - tenant home dir → /home/agent
  *   - tenant workspace → /workspace
  *   - tenant config dir → /home/agent/.config
@@ -53,7 +53,7 @@ export async function runTenantContainer(opts: RunTenantContainerOptions): Promi
   // Host path for auth-profiles.json
   const homeDir = process.env.HOME ?? '/root';
   const hostAuthProfiles = `${homeDir}/.openclaw/agents/main/agent/auth-profiles.json`;
-  const containerAuthProfiles = '/root/.openclaw/agents/main/agent/auth-profiles.json';
+  const containerAuthProfiles = '/home/agent/.openclaw/agents/main/agent/auth-profiles.json';
 
   const { DockerClient } = await import('@claw/docker-client');
 

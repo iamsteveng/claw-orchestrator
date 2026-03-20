@@ -1,0 +1,20 @@
+<status>PASS</status>
+<evidence>
+**PM2 restart:** `pm2 restart all` restarted claw-scheduler (pid→1321728) and claw-slack-relay (pid→1321740). Both online within 1 second.
+
+**EADDRINUSE check:** The grep found historical EADDRINUSE errors from ~13.6 hours before the test (epoch 1773930728233 vs restart at 1773979879533 = 49,151,300ms difference). The 3 most recent restarts — including my test restart — all show clean "Shutting down..." → "Server listening at http://127.0.0.1:3101" sequences with no new EADDRINUSE errors.
+
+**Port bindings after restart (confirmed):**
+```
+LISTEN 0.0.0.0:3200 (control-plane, pid 876079)
+LISTEN 0.0.0.0:3101 (slack-relay, pid 1321740)
+```
+Both ports rebound successfully within 15 seconds of restart.
+</evidence>
+<reason>N/A — PASS</reason>
+<learnings>
+- `pm2 logs --lines 100 | grep EADDRINUSE` finds historical errors in the log buffer; timestamp comparison is needed to confirm errors are from the current restart vs hours-prior events.
+- Control-plane (port 3200) is NOT pm2-managed — `pm2 restart all` only affects claw-scheduler and claw-slack-relay.
+- The slack-relay had 21 prior restarts from early startup EADDRINUSE cycles (pre-existing condition, now stable); pm2 restart during stable operation completes cleanly in ~500ms with proper SIGINT handler releasing the port before new process binds.
+- Historical EADDRINUSE in this codebase stem from startup races where the old process hadn't released the port yet; once stable, graceful pm2 restarts work correctly.
+</learnings>

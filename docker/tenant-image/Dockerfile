@@ -37,11 +37,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure npm global prefix so skills can be co-located with the openclaw install
-ENV NPM_CONFIG_PREFIX=/root/.npm-global
-ENV PATH=/root/.npm-global/bin:$PATH
-
-# Install global npm CLIs
+# Install global npm CLIs to /usr/local so all users can access them
 RUN npm install -g --no-fund --no-audit \
     openclaw \
     @anthropic-ai/claude-code \
@@ -50,7 +46,9 @@ RUN npm install -g --no-fund --no-audit \
     convex
 
 # Bake Ralph skills into the OpenClaw skills directory
-COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
+RUN SKILLS_DIR=$(node -e "const p=require('path'),r=require('child_process').execSync('npm root -g').toString().trim();console.log(p.join(r,'openclaw/skills'))") && \
+    mkdir -p "$SKILLS_DIR"
+COPY skills/ /usr/local/lib/node_modules/openclaw/skills/
 
 # Ralph scripts — installed to /opt/ralph so skills can reference them via RALPH_PATH
 COPY ralph.sh /opt/ralph/ralph.sh
@@ -60,10 +58,20 @@ RUN chmod +x /opt/ralph/ralph.sh /opt/ralph/qa-codex-loop.sh
 # Set RALPH_PATH so ralph-codex-loop skill works out of the box
 ENV RALPH_PATH=/opt/ralph/ralph.sh
 
-# Create non-root 'agent' user
-RUN useradd --create-home --home-dir /home/agent --shell /bin/bash agent
+# Create non-root 'agent' user with uid/gid 1000 to match host ubuntu user
+# This ensures bind-mounted volumes (created by ubuntu on the host) are writable
+RUN useradd --uid 1000 --gid 1000 --create-home --home-dir /home/agent --shell /bin/bash agent 2>/dev/null || \
+    useradd --create-home --home-dir /home/agent --shell /bin/bash agent
 
 WORKDIR /home/agent
+
+# Pre-create OpenClaw config directory and seed with minimal config
+# This allows the gateway to start without interactive setup.
+# The auth-profiles.json bind-mount lands in a subdirectory so the parent stays writable.
+RUN mkdir -p /home/agent/.openclaw/agents/main/agent && \
+    mkdir -p /home/agent/.openclaw/workspace && \
+    chown -R agent:agent /home/agent/.openclaw
+COPY --chown=agent:agent openclaw.json /home/agent/.openclaw/openclaw.json
 
 # Copy server scripts to /usr/local/lib/
 COPY --chown=root:root health-server.js /usr/local/lib/claw-health-server.js

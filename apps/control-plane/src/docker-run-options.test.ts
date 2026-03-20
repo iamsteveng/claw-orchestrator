@@ -40,7 +40,7 @@ describe('buildDockerRunOptions', () => {
     const opts = buildDockerRunOptions(BASE);
     const hostAuthProfiles = `${homedir()}/.openclaw/agents/main/agent/auth-profiles.json`;
     expect(opts.readOnlyBindMounts).toContain(
-      `${hostAuthProfiles}:/root/.openclaw/agents/main/agent/auth-profiles.json`,
+      `${hostAuthProfiles}:/home/agent/.openclaw/agents/main/agent/auth-profiles.json`,
     );
   });
 
@@ -48,7 +48,7 @@ describe('buildDockerRunOptions', () => {
     const opts = buildDockerRunOptions(BASE);
     const hostCredentials = `${homedir()}/.claude/.credentials.json`;
     expect(opts.readOnlyBindMounts).toContain(
-      `${hostCredentials}:/root/.claude/.credentials.json`,
+      `${hostCredentials}:/home/agent/.claude/.credentials.json`,
     );
   });
 

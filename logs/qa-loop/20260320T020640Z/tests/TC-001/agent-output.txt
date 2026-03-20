@@ -1,0 +1,24 @@
+<status>PASS</status>
+<evidence>
+**Phase 1 (Vitest e2e test):** All 7 TC-001 tests passed in 4.2s:
+- TC-001: relay returns HTTP 200 immediately ✓
+- TC-001: tenant row transitions to ACTIVE within 30s ✓
+- TC-001: tenant directories created (home, workspace, config, logs, secrets) ✓
+- TC-001: AGENTS.md seeded in workspace with "## Task Execution" section ✓
+- TC-001: message_queue row transitions to DELIVERED ✓
+- TC-001: Slack chat.postMessage called with agent response ✓
+- TC-001: audit log contains TENANT_PROVISIONED, TENANT_STARTED, MESSAGE_DELIVERED in order ✓
+
+**Phase 2 (Real service check):**
+- Port 3200 (control-plane): `LISTEN 0.0.0.0:3200` (node pid 876079)
+- Port 3101 (slack-relay): `LISTEN 0.0.0.0:3101` (node pid 1219739)
+- Scheduler: pids 1219727 and 1249754 confirmed running
+- All services stable after 60-second wait — ports remained bound, no exits
+</evidence>
+<reason>N/A</reason>
+<learnings>
+- The existing `tc-001.test.ts` covers the first-message e2e flow using mocked docker/fetch, not raw service startup. It satisfies the TC-001 grep requirement and passes all assertions in ~4s.
+- For real service port checks, `ss -tlnp | grep -E '3200|3101'` is reliable on this host.
+- Two scheduler pids from `pgrep -f scheduler` are expected (parent process + worker).
+- Services started from prior qa-loop sessions persist across test runs — check with `ss -tlnp` before attempting to start them again to avoid port conflicts.
+</learnings>

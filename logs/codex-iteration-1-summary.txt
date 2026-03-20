@@ -1,5 +1,5 @@
-Iteration: 1/13
-Story: US-028 - unknown
+Iteration: 1/2
+Story: US-042 - unknown
 Result: completed
-Commit: e009216
-Summary: US-028 is complete. Here's a summary of what was implemented: **US-028: Scheduler disk quota enforcement** - `disk-quota.ts`: `getDiskUsageBytes` (runs `du -sb`), `checkDiskQuotas` (per-tenant: warning at 90%, block at 1
+Commit: 1dd9cca
+Summary: US-042 is complete. Here's what was done: **Changes made:** 1. **`docker/tenant-image/Dockerfile`** — Added: - `ENV NPM_CONFIG_PREFIX=/root/.npm-global` to configure npm to install globals to that path - `ENV PATH=/roo

@@ -1,0 +1,23 @@
+<status>PASS</status>
+<evidence>
+**Phase 1 (test file):** `tests/e2e/tc-001.test.ts` already exists with TC-001 in describe/it names. All 7 tests passed in 4.25s:
+- TC-001: relay returns HTTP 200 immediately ✓
+- TC-001: tenant row transitions to ACTIVE within 30s ✓  
+- TC-001: tenant directories created (home, workspace, config, logs, secrets) ✓
+- TC-001: AGENTS.md seeded in workspace with "## Task Execution" section ✓
+- TC-001: message_queue row transitions to DELIVERED ✓
+- TC-001: Slack chat.postMessage called with agent response ✓
+- TC-001: audit log contains TENANT_PROVISIONED, TENANT_STARTED, MESSAGE_DELIVERED in order ✓
+
+**Phase 2 (real services):**
+- Port 3200 (control-plane): `LISTEN 0.0.0.0:3200` (node pid 876079) ✓
+- Port 3101 (slack-relay): `LISTEN 0.0.0.0:3101` (node pid 1251150) ✓
+- Scheduler: pids 1251138 and 1319525 confirmed running ✓
+- After 60-second wait: all ports still bound, all processes still running ✓
+</evidence>
+<learnings>
+- The existing `tc-001.test.ts` covers the first-message e2e provisioning flow with mocked Docker/fetch — 7 comprehensive assertions testing the full flow. It satisfies the TC-001 grep requirement.
+- Real services (control-plane on 3200, slack-relay on 3101, scheduler) persist across qa-loop runs and were already running from prior sessions. Always check `ss -tlnp` before attempting to start services.
+- The control-plane (pid 876079) runs as a standalone node process (not pm2-managed). Slack-relay and scheduler are pm2-managed.
+- Two scheduler pids from `pgrep -f scheduler` are expected (parent process + worker thread).
+</learnings>

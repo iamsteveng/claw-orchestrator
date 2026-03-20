@@ -1,0 +1,34 @@
+<status>FAIL</status>
+
+<evidence>
+**PM2 restart executed:** `pm2 restart all` restarted claw-scheduler (id 2) and claw-slack-relay (id 3).
+
+**EADDRINUSE check:**
+```
+3|claw-sla | Fatal startup error: Error: listen EADDRINUSE: address already in use 0.0.0.0:3101
+3|claw-sla |   code: 'EADDRINUSE',
+[36 occurrences total]
+```
+Port 3101 (slack-relay) hit EADDRINUSE — criterion 1 FAILS.
+
+**Port binding after 15 seconds:**
+```
+LISTEN 0 511 0.0.0.0:3200 0.0.0.0:* users:(("node",pid=876079,fd=30))
+LISTEN 0 511 0.0.0.0:3101 0.0.0.0:* users:(("node /home/ubun",pid=1219739,fd=23))
+```
+Both ports re-bound within 15 seconds — criterion 2 PASSES.
+
+**Final PM2 status:** Both services online (restarts: scheduler=1, relay=19), but relay accumulated EADDRINUSE failures before recovering.
+</evidence>
+
+<reason>
+`pm2 restart` sends SIGTERM to the old slack-relay process and immediately forks a new one, creating a race: the new process tries to bind port 3101 before the old one's `app.close()` releases it. The relay has a SIGTERM handler that calls `app.close()` correctly, but PM2's default restart does not wait for the TCP port to be released before starting the replacement process. The control-plane (port 3200) was unaffected because it is NOT managed by PM2. Fix: use `pm2 reload` (graceful) instead of `pm2 restart`, or add `kill_timeout`/`restart_delay` to PM2 config.
+</reason>
+
+<learnings>
+- **`pm2 restart` causes EADDRINUSE on Fastify ports**: PM2 forks the new process before the old one's SIGTERM handler (`app.close()`) releases the TCP port. Even with correct graceful shutdown code, the race exists.
+- **`pm2 reload` is the safe alternative**: Graceful reload waits for the old process to close before starting the new one — avoids port conflicts.
+- **The control-plane is NOT managed by PM2**: `pm2 list` only shows scheduler and slack-relay. The control-plane runs as a standalone process (pid 876079) on port 3200, unaffected by `pm2 restart all`.
+- **EADDRINUSE doesn't cause permanent failure**: PM2's automatic restart loop eventually succeeds once the old process releases the port (one extra restart cycle, ~1-2 seconds). Services recover without manual intervention.
+- **PM2 config gap**: Adding `kill_timeout` (how long PM2 waits before SIGKILL after SIGTERM) and a `restart_delay` (how long PM2 waits before forking the new process) to the ecosystem config would resolve this without changing the restart command.
+</learnings>

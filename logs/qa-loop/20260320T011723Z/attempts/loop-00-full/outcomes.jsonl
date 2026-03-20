@@ -1,0 +1,30 @@
+{
+  "id": "TC-001",
+  "title": "All 3 services start and stay up (control-plane port 3200, slack-relay port 3101, scheduler)",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "PASS",
+  "reason": "",
+  "evidence": "All 3 services running with long uptime (~10-11 hours): - **control-plane** (pid 876079): port 3200 bound, `/health` → `{\"ok\":true,\"uptime\":35829055}` - **slack-relay** (pid 846244): port 3101 bound, `/health` → `{\"ok\":true,\"uptime\":38773748}` - **scheduler** (pid 841073): process running, confirmed via `pgrep -f scheduler` Port binding output: ``` LISTEN 0 511 0.0.0.0:3200 0.0.0.0:* users:((\"node\",pid=876079,fd=30)) LISTEN 0 511 0.0.0.0:3101 0.0.0.0:* users:((\"node /home/ubun\",pid=846244,fd=23)) ``` Re-check after 60s: same PIDs, same ports, no exits.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260320T011723Z/attempts/loop-00-full/tests/TC-001/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260320T011723Z/attempts/loop-00-full/tests/TC-001/stderr.log",
+  "executedAt": "2026-03-20T01:18:51Z"
+}
+
+{
+  "id": "TC-002",
+  "title": "Services survive process manager restart without EADDRINUSE port conflicts",
+  "level": "e2e",
+  "priority": "P0",
+  "tool": "claude-code",
+  "status": "FAIL",
+  "reason": "`pm2 restart` sends SIGTERM to the old slack-relay process and immediately forks a new one, creating a race: the new process tries to bind port 3101 before the old one's `app.close()` releases it. The relay has a SIGTERM handler that calls `app.close()` correctly, but PM2's default restart does not wait for the TCP port to be released before starting the replacement process. The control-plane (port 3200) was unaffected because it is NOT managed by PM2. Fix: use `pm2 reload` (graceful) instead of `pm2 restart`, or add `kill_timeout`/`restart_delay` to PM2 config.",
+  "evidence": "**PM2 restart executed:** `pm2 restart all` restarted claw-scheduler (id 2) and claw-slack-relay (id 3). **EADDRINUSE check:** ``` 3|claw-sla | Fatal startup error: Error: listen EADDRINUSE: address already in use 0.0.0.0:3101 3|claw-sla | code: 'EADDRINUSE', [36 occurrences total] ``` Port 3101 (slack-relay) hit EADDRINUSE — criterion 1 FAILS. **Port binding after 15 seconds:** ``` LISTEN 0 511 0.0.0.0:3200 0.0.0.0:* users:((\"node\",pid=876079,fd=30)) LISTEN 0 511 0.0.0.0:3101 0.0.0.0:* users:((\"node /home/ubun\",pid=1219739,fd=23)) ``` Both ports re-bound within 15 seconds — criterion 2 PASSES. **Final PM2 status:** Both services online (restarts: scheduler=1, relay=19), but relay accumulated EADDRINUSE failures before recovering.",
+  "toolExitCode": 0,
+  "outputFile": "logs/qa-loop/20260320T011723Z/attempts/loop-00-full/tests/TC-002/agent-output.txt",
+  "stderrFile": "logs/qa-loop/20260320T011723Z/attempts/loop-00-full/tests/TC-002/stderr.log",
+  "executedAt": "2026-03-20T01:21:56Z"
+}
+

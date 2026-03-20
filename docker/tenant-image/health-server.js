@@ -14,8 +14,15 @@ const START_TIME = Date.now();
 
 function checkOpenclaw() {
   try {
-    execSync('pgrep -x openclaw', { stdio: 'ignore' });
-    return true;
+    // Check /proc for any node process with openclaw in cmdline (pgrep not available in slim image)
+    const dirs = fs.readdirSync('/proc').filter(d => /^\d+$/.test(d));
+    for (const pid of dirs) {
+      try {
+        const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8');
+        if (cmdline.includes('openclaw')) return true;
+      } catch {}
+    }
+    return false;
   } catch {
     return false;
   }
@@ -41,6 +48,7 @@ const server = http.createServer((req, res) => {
     openclaw: checkOpenclaw(),
     workspace_mounted: checkWritable('/workspace'),
     home_mounted: checkWritable('/home/agent'),
+    auth_profiles: fs.existsSync('/run/secrets/auth-profiles.json'),
   };
 
   const allOk = checks.openclaw && checks.workspace_mounted && checks.home_mounted;
