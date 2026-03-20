@@ -8,7 +8,10 @@
   "execution": {
     "defaultRetryRule": {
       "maxRetries": 0,
-      "retryOn": ["flake", "timeout"]
+      "retryOn": [
+        "flake",
+        "timeout"
+      ]
     }
   },
   "tests": [
@@ -36,7 +39,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -74,7 +80,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -91,7 +100,7 @@
       "source": "OBJ-ACCEPT",
       "level": "e2e",
       "priority": "P0",
-      "title": "Services load .env config — Zod validation passes, no 'Invalid input: expected string' errors",
+      "title": "Services load .env config \u2014 Zod validation passes, no 'Invalid input: expected string' errors",
       "steps": [
         "Start all services fresh from clean state",
         "Wait 5 seconds for startup to complete",
@@ -110,7 +119,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -145,7 +157,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -184,7 +199,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -222,7 +240,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -257,7 +278,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -276,16 +300,19 @@
       "priority": "P0",
       "title": "Incoming DM from allowlisted Slack user triggers provisioning and bot replies",
       "steps": [
-        "Send simulated Slack DM event to relay endpoint",
-        "Check relay response HTTP code",
-        "Poll DB for tenant creation: sqlite3 /data/claw.db query",
+        "Build a signed Slack event_callback payload for allowlisted user (team_id=T0ABHS0G3, user_id=U08M34UT0FL)",
+        "Generate HMAC-SHA256 signature using signing secret",
+        "POST to relay endpoint https://13.212.162.85.nip.io/slack/events with X-Slack-Request-Timestamp and X-Slack-Signature headers",
+        "Check relay response HTTP code (expect 200)",
+        "Poll DB for tenant creation: sqlite3 query for team+user",
         "Check relay outbound log for bot reply event"
       ],
       "commands": [
-        "curl -s -o /tmp/relay-response.txt -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "TIMESTAMP=$(date +%s); BODY=$(printf '{\"type\":\"event_callback\",\"team_id\":\"T0ABHS0G3\",\"event\":{\"type\":\"message\",\"user\":\"U08M34UT0FL\",\"text\":\"hello\",\"channel\":\"D_TEST_CHANNEL\",\"ts\":\"%s.000001\"}}' \"$TIMESTAMP\"); SIG_BASE=\"v0:${TIMESTAMP}:${BODY}\"; SIGNATURE=\"v0=$(echo -n \"$SIG_BASE\" | openssl dgst -sha256 -hmac '785bea69b0df0ec4ad8b4bc5d35b409f' | awk '{print $2}')\"; curl -s -o /tmp/tc008-response.txt -w '%{http_code}' -X POST https://13.212.162.85.nip.io/slack/events -H 'Content-Type: application/json' -H \"X-Slack-Request-Timestamp: $TIMESTAMP\" -H \"X-Slack-Signature: $SIGNATURE\" -d \"$BODY\"",
         "sleep 5",
-        "sqlite3 /data/claw.db \"SELECT id, status, slack_user_id FROM tenants ORDER BY created_at DESC LIMIT 1;\"",
-        "grep -i 'reply\\|response\\|message_sent' /var/log/claw/relay.log | tail -5"
+        "sqlite3 /data/claw-orchestrator/db.sqlite \"SELECT id, status, slack_user_id FROM tenants WHERE slack_team_id='T0ABHS0G3' AND slack_user_id='U08M34UT0FL' ORDER BY created_at DESC LIMIT 1;\"",
+        "grep -i 'reply\\|response\\|message_sent' /var/log/claw/relay.log | tail -5",
+        "cat /tmp/tc008-response.txt"
       ],
       "passFail": [
         "Relay returns HTTP 200",
@@ -295,7 +322,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -314,15 +344,16 @@
       "priority": "P0",
       "title": "Message delivered to container and response returned to Slack user",
       "steps": [
-        "After TC-008, send a follow-up message payload to relay",
+        "After TC-008 provisions tenant, send a signed follow-up message payload for same allowlisted user",
+        "Generate HMAC-SHA256 signature and POST to relay endpoint",
         "Wait for processing",
-        "Check container received message via workspace log",
+        "Check container received message via workspace log or docker logs",
         "Check relay outbound log for response sent back to user"
       ],
       "commands": [
-        "curl -s -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-message.json",
+        "TIMESTAMP=$(date +%s); BODY=$(printf '{\"type\":\"event_callback\",\"team_id\":\"T0ABHS0G3\",\"event\":{\"type\":\"message\",\"user\":\"U08M34UT0FL\",\"text\":\"what can you help me with\",\"channel\":\"D_TEST_CHANNEL\",\"ts\":\"%s.000001\"}}' \"$TIMESTAMP\"); SIG_BASE=\"v0:${TIMESTAMP}:${BODY}\"; SIGNATURE=\"v0=$(echo -n \"$SIG_BASE\" | openssl dgst -sha256 -hmac '785bea69b0df0ec4ad8b4bc5d35b409f' | awk '{print $2}')\"; curl -s -o /tmp/tc009-response.txt -w '%{http_code}' -X POST https://13.212.162.85.nip.io/slack/events -H 'Content-Type: application/json' -H \"X-Slack-Request-Timestamp: $TIMESTAMP\" -H \"X-Slack-Signature: $SIGNATURE\" -d \"$BODY\"",
         "sleep 5",
-        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
+        "CONTAINER_ID=$(sqlite3 /data/claw-orchestrator/db.sqlite \"SELECT container_id FROM tenants WHERE slack_team_id='T0ABHS0G3' AND slack_user_id='U08M34UT0FL' AND status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
         "docker exec ${CONTAINER_ID} tail -5 /workspace/.message-log 2>/dev/null || docker logs ${CONTAINER_ID} --tail 10",
         "grep -i 'outbound\\|send_message\\|chat.postMessage' /var/log/claw/relay.log | tail -5"
       ],
@@ -333,7 +364,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -370,7 +404,10 @@
       "retryRules": [
         {
           "maxRetries": 0,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -389,17 +426,20 @@
       "priority": "P1",
       "title": "Second message from same user reuses tenant (no re-provisioning)",
       "steps": [
-        "After TC-008 establishes tenant, record original tenant ID from DB",
-        "Send second DM payload for same user",
-        "Query DB for tenant count for that user",
-        "Verify same tenant ID and no new container spawned"
+        "After TC-008 establishes tenant, record original tenant ID: query DB for team_id=T0ABHS0G3, user_id=U08M34UT0FL",
+        "Build a second signed Slack event_callback payload for the same allowlisted user",
+        "POST signed request to relay endpoint",
+        "Wait 3 seconds for processing",
+        "Query DB for tenant count for that team+user pair",
+        "Verify count = 1 and original tenant ID unchanged"
       ],
       "commands": [
-        "ORIGINAL_ID=$(sqlite3 /data/claw.db \"SELECT id FROM tenants WHERE slack_user_id='TEST_USER_ID' ORDER BY created_at ASC LIMIT 1;\")",
-        "curl -s -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "ORIGINAL_ID=$(sqlite3 /data/claw-orchestrator/db.sqlite \"SELECT id FROM tenants WHERE slack_team_id='T0ABHS0G3' AND slack_user_id='U08M34UT0FL' ORDER BY created_at ASC LIMIT 1;\")",
+        "TIMESTAMP=$(date +%s); BODY=$(printf '{\"type\":\"event_callback\",\"team_id\":\"T0ABHS0G3\",\"event\":{\"type\":\"message\",\"user\":\"U08M34UT0FL\",\"text\":\"second message\",\"channel\":\"D_TEST_CHANNEL\",\"ts\":\"%s.000001\"}}' \"$TIMESTAMP\"); SIG_BASE=\"v0:${TIMESTAMP}:${BODY}\"; SIGNATURE=\"v0=$(echo -n \"$SIG_BASE\" | openssl dgst -sha256 -hmac '785bea69b0df0ec4ad8b4bc5d35b409f' | awk '{print $2}')\"; curl -s -o /tmp/tc011-response.txt -w '%{http_code}' -X POST https://13.212.162.85.nip.io/slack/events -H 'Content-Type: application/json' -H \"X-Slack-Request-Timestamp: $TIMESTAMP\" -H \"X-Slack-Signature: $SIGNATURE\" -d \"$BODY\"",
         "sleep 3",
-        "sqlite3 /data/claw.db \"SELECT COUNT(*) FROM tenants WHERE slack_user_id='TEST_USER_ID';\"",
-        "sqlite3 /data/claw.db \"SELECT id FROM tenants WHERE slack_user_id='TEST_USER_ID' ORDER BY created_at ASC LIMIT 1;\""
+        "sqlite3 /data/claw-orchestrator/db.sqlite \"SELECT COUNT(*) FROM tenants WHERE slack_team_id='T0ABHS0G3' AND slack_user_id='U08M34UT0FL';\"",
+        "sqlite3 /data/claw-orchestrator/db.sqlite \"SELECT id FROM tenants WHERE slack_team_id='T0ABHS0G3' AND slack_user_id='U08M34UT0FL' ORDER BY created_at ASC LIMIT 1;\"",
+        "echo \"Original ID was: $ORIGINAL_ID\""
       ],
       "passFail": [
         "Tenant count for user = 1 (no duplicate rows)",
@@ -409,7 +449,10 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -428,15 +471,18 @@
       "priority": "P1",
       "title": "Unauthorized user receives rejection message",
       "steps": [
-        "Send DM event from non-allowlisted user to relay",
-        "Check relay logs for rejection response",
-        "Confirm no tenant row created for unauthorized user in DB"
+        "Build a signed Slack event_callback payload for a non-allowlisted user (team_id=T_UNKNOWN, user_id=U_UNKNOWN)",
+        "Generate HMAC-SHA256 signature and POST to relay endpoint",
+        "Wait 3 seconds",
+        "Check relay logs for rejection/unauthorized response",
+        "Confirm no tenant row created for T_UNKNOWN/U_UNKNOWN in DB"
       ],
       "commands": [
-        "curl -s -o /tmp/unauth-response.txt -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-unauthorized.json",
+        "TIMESTAMP=$(date +%s); BODY=$(printf '{\"type\":\"event_callback\",\"team_id\":\"T_UNKNOWN\",\"event\":{\"type\":\"message\",\"user\":\"U_UNKNOWN\",\"text\":\"hello\",\"channel\":\"D_TEST_CHANNEL\",\"ts\":\"%s.000001\"}}' \"$TIMESTAMP\"); SIG_BASE=\"v0:${TIMESTAMP}:${BODY}\"; SIGNATURE=\"v0=$(echo -n \"$SIG_BASE\" | openssl dgst -sha256 -hmac '785bea69b0df0ec4ad8b4bc5d35b409f' | awk '{print $2}')\"; curl -s -o /tmp/tc012-response.txt -w '%{http_code}' -X POST https://13.212.162.85.nip.io/slack/events -H 'Content-Type: application/json' -H \"X-Slack-Request-Timestamp: $TIMESTAMP\" -H \"X-Slack-Signature: $SIGNATURE\" -d \"$BODY\"",
         "sleep 3",
         "grep -i 'unauthorized\\|rejected\\|not allowed\\|forbidden' /var/log/claw/relay.log | tail -5",
-        "sqlite3 /data/claw.db \"SELECT COUNT(*) FROM tenants WHERE slack_user_id='UNAUTHORIZED_USER_ID';\""
+        "sqlite3 /data/claw-orchestrator/db.sqlite \"SELECT COUNT(*) FROM tenants WHERE slack_team_id='T_UNKNOWN' AND slack_user_id='U_UNKNOWN';\"",
+        "cat /tmp/tc012-response.txt"
       ],
       "passFail": [
         "Relay logs show rejection/unauthorized message dispatched to user",
@@ -445,7 +491,10 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -480,7 +529,10 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -498,15 +550,16 @@
       "priority": "P1",
       "title": "Bot sends 'working on it' interim message after 15 seconds",
       "steps": [
-        "Send a message expected to take >15 seconds to process",
         "Record send timestamp",
+        "Build a signed Slack event_callback payload for allowlisted user with a slow-response prompt",
+        "Generate HMAC-SHA256 signature and POST to relay endpoint",
         "Wait 20 seconds",
-        "Check relay outbound log for interim message containing expected text",
-        "Verify timestamp of interim message is 15-30 seconds after send"
+        "Check relay outbound log for interim 'working on it' message",
+        "Verify interim message timestamp is 15-30 seconds after send"
       ],
       "commands": [
         "START_TS=$(date +%s)",
-        "curl -s -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "TIMESTAMP=$(date +%s); BODY=$(printf '{\"type\":\"event_callback\",\"team_id\":\"T0ABHS0G3\",\"event\":{\"type\":\"message\",\"user\":\"U08M34UT0FL\",\"text\":\"analyze and summarize the entire codebase in detail\",\"channel\":\"D_TEST_CHANNEL\",\"ts\":\"%s.000001\"}}' \"$TIMESTAMP\"); SIG_BASE=\"v0:${TIMESTAMP}:${BODY}\"; SIGNATURE=\"v0=$(echo -n \"$SIG_BASE\" | openssl dgst -sha256 -hmac '785bea69b0df0ec4ad8b4bc5d35b409f' | awk '{print $2}')\"; curl -s -o /tmp/tc014-response.txt -w '%{http_code}' -X POST https://13.212.162.85.nip.io/slack/events -H 'Content-Type: application/json' -H \"X-Slack-Request-Timestamp: $TIMESTAMP\" -H \"X-Slack-Signature: $SIGNATURE\" -d \"$BODY\"",
         "sleep 20",
         "grep -i 'working on it' /var/log/claw/relay.log | tail -3",
         "INTERIM_TS=$(grep -i 'working on it' /var/log/claw/relay.log | tail -1 | grep -oP '\\d{10}' | head -1); echo \"delay: $((INTERIM_TS - START_TS)) seconds\""
@@ -518,7 +571,10 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -557,7 +613,10 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout"]
+          "retryOn": [
+            "flake",
+            "timeout"
+          ]
         }
       ],
       "evidence": {
@@ -595,7 +654,11 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout", "infra"]
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
         }
       ],
       "evidence": {
@@ -634,7 +697,11 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout", "infra"]
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
         }
       ],
       "evidence": {
@@ -673,7 +740,11 @@
       "retryRules": [
         {
           "maxRetries": 1,
-          "retryOn": ["flake", "timeout", "infra"]
+          "retryOn": [
+            "flake",
+            "timeout",
+            "infra"
+          ]
         }
       ],
       "evidence": {
