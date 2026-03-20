@@ -1,0 +1,689 @@
+{
+  "qaPlanSchemaVersion": "1.0.0",
+  "planId": "test-plan-deployment",
+  "source": {
+    "path": "tasks/test-plan-deployment.md",
+    "generatedAt": "2026-03-20T00:48:00Z"
+  },
+  "execution": {
+    "defaultRetryRule": {
+      "maxRetries": 0,
+      "retryOn": ["flake", "timeout"]
+    }
+  },
+  "tests": [
+    {
+      "id": "TC-001",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "All 3 services start and stay up (control-plane port 3200, slack-relay port 3101, scheduler)",
+      "steps": [
+        "Run start command for control-plane, slack-relay, and scheduler via process manager",
+        "Wait 10 seconds",
+        "Check port bindings: ss -tlnp | grep -E '3200|3101'",
+        "Check scheduler process: pgrep -f scheduler",
+        "Wait 60 seconds, then re-check all three"
+      ],
+      "commands": [
+        "ss -tlnp | grep -E '3200|3101'",
+        "pgrep -f scheduler",
+        "sleep 60 && ss -tlnp | grep -E '3200|3101' && pgrep -f scheduler"
+      ],
+      "passFail": [
+        "All processes running; ports 3200 and 3101 bound; no unexpected exits in logs after 60 seconds"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Process list output showing all 3 services",
+          "Port binding output showing 3200 and 3101 bound",
+          "Service logs with no ERROR or exit lines"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-002",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Services survive process manager restart without EADDRINUSE port conflicts",
+      "steps": [
+        "Confirm all services running (TC-001 must pass first)",
+        "Run process manager restart: pm2 restart all",
+        "Wait 15 seconds",
+        "Scan logs for EADDRINUSE: pm2 logs --lines 100 | grep -i EADDRINUSE",
+        "Confirm ports re-bound: ss -tlnp | grep -E '3200|3101'"
+      ],
+      "commands": [
+        "pm2 restart all",
+        "sleep 15",
+        "pm2 logs --lines 100 | grep -i EADDRINUSE || echo 'PASS: no EADDRINUSE'",
+        "ss -tlnp | grep -E '3200|3101'"
+      ],
+      "passFail": [
+        "No EADDRINUSE errors in logs after restart",
+        "Ports 3200 and 3101 re-bound successfully within 15 seconds"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "PM restart log output",
+          "grep EADDRINUSE output (empty = pass)",
+          "Port check output showing bindings restored"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-003",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Services load .env config — Zod validation passes, no 'Invalid input: expected string' errors",
+      "steps": [
+        "Start all services fresh from clean state",
+        "Wait 5 seconds for startup to complete",
+        "Grep service logs for Zod validation error string",
+        "Confirm each service log shows 'started' or 'config loaded' without validation errors"
+      ],
+      "commands": [
+        "sleep 5",
+        "pm2 logs --lines 200 | grep 'Invalid input: expected string' || echo 'PASS: no Zod errors'",
+        "grep -r 'Invalid input: expected string' /var/log/claw/ 2>/dev/null || echo 'PASS: no Zod errors in log dir'"
+      ],
+      "passFail": [
+        "No 'Invalid input: expected string' lines in any service log",
+        "Each service log contains startup confirmation line"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Log grep output (empty = pass)",
+          "Startup confirmation lines from each service log"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-004",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Provisioning creates /data/tenants/<id>/ directories with correct permissions (writable by UID 1001)",
+      "steps": [
+        "Trigger provisioning for test user via control-plane API or relay DM event",
+        "Capture tenant ID from DB: sqlite3 /data/claw.db \"SELECT id FROM tenants ORDER BY created_at DESC LIMIT 1;\"",
+        "Check directory existence and permissions: ls -la /data/tenants/<id>/",
+        "Test write access as UID 1001: docker run --rm -u 1001 -v /data/tenants/<id>:/t alpine sh -c 'touch /t/probe && rm /t/probe'"
+      ],
+      "commands": [
+        "TENANT_ID=$(sqlite3 /data/claw.db \"SELECT id FROM tenants ORDER BY created_at DESC LIMIT 1;\")",
+        "ls -la /data/tenants/${TENANT_ID}/",
+        "docker run --rm -u 1001 -v /data/tenants/${TENANT_ID}:/t alpine sh -c 'touch /t/probe && rm /t/probe && echo PASS: writable by uid 1001'"
+      ],
+      "passFail": [
+        "Directory exists at /data/tenants/<id>/",
+        "Docker write probe exits 0 (writable by UID 1001)"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "ls -la output showing directory with owner and permissions",
+          "Docker write probe exit code = 0 and PASS message"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-005",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Docker run succeeds: all bind mounts correct, container starts and stays running (not OOM, not permission errors)",
+      "steps": [
+        "Run docker container for a test tenant with required bind mounts",
+        "Wait 10 seconds for container to stabilize",
+        "Check container status: docker inspect <id> --format '{{.State.Status}}'",
+        "Check OOM killed flag: docker inspect <id> --format '{{.State.OOMKilled}}'",
+        "Check for permission errors: docker logs <id> 2>&1 | grep -i 'permission denied'"
+      ],
+      "commands": [
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants ORDER BY created_at DESC LIMIT 1;\")",
+        "sleep 10",
+        "docker inspect ${CONTAINER_ID} --format '{{.State.Status}}'",
+        "docker inspect ${CONTAINER_ID} --format '{{.State.OOMKilled}}'",
+        "docker logs ${CONTAINER_ID} 2>&1 | grep -i 'permission denied' || echo 'PASS: no permission errors'"
+      ],
+      "passFail": [
+        "Container status = 'running'",
+        "OOMKilled = false",
+        "No 'permission denied' lines in container logs"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "docker inspect status output (running)",
+          "docker inspect OOMKilled output (false)",
+          "docker logs grep output (empty = pass)"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-006",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "OpenClaw gateway starts inside container (openclaw gateway start runs without crashing)",
+      "steps": [
+        "Identify running tenant container ID from DB",
+        "Check gateway status inside container: docker exec <id> openclaw gateway status",
+        "If not running, start it: docker exec <id> openclaw gateway start",
+        "Check exit code: echo $?",
+        "Re-verify status: docker exec <id> openclaw gateway status"
+      ],
+      "commands": [
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' LIMIT 1;\")",
+        "docker exec ${CONTAINER_ID} openclaw gateway status || true",
+        "docker exec ${CONTAINER_ID} openclaw gateway start; echo \"exit:$?\"",
+        "docker exec ${CONTAINER_ID} openclaw gateway status"
+      ],
+      "passFail": [
+        "openclaw gateway start exits with code 0",
+        "Subsequent status check shows gateway active/running"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "gateway start command exit code = 0",
+          "gateway status output showing active/running state"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-007",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Health server responds at container's port 3101",
+      "steps": [
+        "Identify host port mapped to container port 3101: docker inspect <id> --format '{{json .NetworkSettings.Ports}}'",
+        "Send health check request: curl -sf http://localhost:<host-port>/health",
+        "Check HTTP status code: curl -o /dev/null -w '%{http_code}' http://localhost:<host-port>/health"
+      ],
+      "commands": [
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' LIMIT 1;\")",
+        "HOST_PORT=$(docker inspect ${CONTAINER_ID} --format '{{(index (index .NetworkSettings.Ports \"3101/tcp\") 0).HostPort}}')",
+        "curl -o /dev/null -w '%{http_code}' http://localhost:${HOST_PORT}/health",
+        "curl -sf http://localhost:${HOST_PORT}/health"
+      ],
+      "passFail": [
+        "HTTP status code = 200",
+        "Response body is non-empty"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "curl HTTP status code output (200)",
+          "curl response body (non-empty)",
+          "docker inspect port mapping output"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-008",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Incoming DM from allowlisted Slack user triggers provisioning and bot replies",
+      "steps": [
+        "Send simulated Slack DM event to relay endpoint",
+        "Check relay response HTTP code",
+        "Poll DB for tenant creation: sqlite3 /data/claw.db query",
+        "Check relay outbound log for bot reply event"
+      ],
+      "commands": [
+        "curl -s -o /tmp/relay-response.txt -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "sleep 5",
+        "sqlite3 /data/claw.db \"SELECT id, status, slack_user_id FROM tenants ORDER BY created_at DESC LIMIT 1;\"",
+        "grep -i 'reply\\|response\\|message_sent' /var/log/claw/relay.log | tail -5"
+      ],
+      "passFail": [
+        "Relay returns HTTP 200",
+        "Tenant row created in DB with status ACTIVE for allowlisted user",
+        "Relay log shows bot reply event dispatched"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "curl HTTP response code = 200 and response body",
+          "sqlite3 query result showing new tenant row with ACTIVE status",
+          "relay log grep output showing reply event"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-009",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "Message delivered to container and response returned to Slack user",
+      "steps": [
+        "After TC-008, send a follow-up message payload to relay",
+        "Wait for processing",
+        "Check container received message via workspace log",
+        "Check relay outbound log for response sent back to user"
+      ],
+      "commands": [
+        "curl -s -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-message.json",
+        "sleep 5",
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
+        "docker exec ${CONTAINER_ID} tail -5 /workspace/.message-log 2>/dev/null || docker logs ${CONTAINER_ID} --tail 10",
+        "grep -i 'outbound\\|send_message\\|chat.postMessage' /var/log/claw/relay.log | tail -5"
+      ],
+      "passFail": [
+        "Message content appears in container workspace log or container stdout",
+        "Relay log shows outbound message dispatched to correct Slack user ID"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "Container message log or docker logs showing received message",
+          "Relay outbound log grep showing response dispatched to user"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-010",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P0",
+      "title": "auth-profiles.json and .credentials.json readable inside container at /home/agent/ paths",
+      "steps": [
+        "Identify running tenant container ID",
+        "Check file existence and permissions: docker exec <id> ls -la /home/agent/auth-profiles.json /home/agent/.credentials.json",
+        "Verify readability: docker exec <id> cat /home/agent/auth-profiles.json | head -5",
+        "Verify .credentials.json: docker exec <id> cat /home/agent/.credentials.json | head -5"
+      ],
+      "commands": [
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
+        "docker exec ${CONTAINER_ID} ls -la /home/agent/auth-profiles.json /home/agent/.credentials.json",
+        "docker exec ${CONTAINER_ID} cat /home/agent/auth-profiles.json | head -5",
+        "docker exec ${CONTAINER_ID} cat /home/agent/.credentials.json | head -5"
+      ],
+      "passFail": [
+        "Both files listed at /home/agent/ paths with readable permissions",
+        "cat exits 0 for both files",
+        "Content is non-empty (first 5 lines non-blank)"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 0,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "ls -la output showing both files with readable permissions",
+          "cat output for auth-profiles.json (first 5 lines)",
+          "cat output for .credentials.json (first 5 lines)"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-011",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P1",
+      "title": "Second message from same user reuses tenant (no re-provisioning)",
+      "steps": [
+        "After TC-008 establishes tenant, record original tenant ID from DB",
+        "Send second DM payload for same user",
+        "Query DB for tenant count for that user",
+        "Verify same tenant ID and no new container spawned"
+      ],
+      "commands": [
+        "ORIGINAL_ID=$(sqlite3 /data/claw.db \"SELECT id FROM tenants WHERE slack_user_id='TEST_USER_ID' ORDER BY created_at ASC LIMIT 1;\")",
+        "curl -s -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "sleep 3",
+        "sqlite3 /data/claw.db \"SELECT COUNT(*) FROM tenants WHERE slack_user_id='TEST_USER_ID';\"",
+        "sqlite3 /data/claw.db \"SELECT id FROM tenants WHERE slack_user_id='TEST_USER_ID' ORDER BY created_at ASC LIMIT 1;\""
+      ],
+      "passFail": [
+        "Tenant count for user = 1 (no duplicate rows)",
+        "Tenant ID after second message matches original tenant ID",
+        "No new container started for this user"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "sqlite3 count result = 1",
+          "sqlite3 ID comparison showing same tenant ID",
+          "docker ps output showing no duplicate container for user"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-012",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P1",
+      "title": "Unauthorized user receives rejection message",
+      "steps": [
+        "Send DM event from non-allowlisted user to relay",
+        "Check relay logs for rejection response",
+        "Confirm no tenant row created for unauthorized user in DB"
+      ],
+      "commands": [
+        "curl -s -o /tmp/unauth-response.txt -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-unauthorized.json",
+        "sleep 3",
+        "grep -i 'unauthorized\\|rejected\\|not allowed\\|forbidden' /var/log/claw/relay.log | tail -5",
+        "sqlite3 /data/claw.db \"SELECT COUNT(*) FROM tenants WHERE slack_user_id='UNAUTHORIZED_USER_ID';\""
+      ],
+      "passFail": [
+        "Relay logs show rejection/unauthorized message dispatched to user",
+        "DB tenant count for unauthorized user = 0"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "curl response body and status code",
+          "relay log grep showing rejection message sent",
+          "sqlite3 count result = 0 for unauthorized user"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-013",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P1",
+      "title": "AGENTS.md pre-seeded in /workspace with Task Execution section",
+      "steps": [
+        "Trigger provisioning for a fresh tenant (or use existing active tenant)",
+        "Check AGENTS.md file exists inside container: docker exec <id> ls -la /workspace/AGENTS.md",
+        "Verify Task Execution section present: docker exec <id> grep -n 'Task Execution' /workspace/AGENTS.md"
+      ],
+      "commands": [
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
+        "docker exec ${CONTAINER_ID} ls -la /workspace/AGENTS.md",
+        "docker exec ${CONTAINER_ID} grep -n 'Task Execution' /workspace/AGENTS.md"
+      ],
+      "passFail": [
+        "/workspace/AGENTS.md exists inside container",
+        "grep returns at least one line matching 'Task Execution'"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "ls -la output confirming AGENTS.md at /workspace/",
+          "grep output with line number and 'Task Execution' match"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-014",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P1",
+      "title": "Bot sends 'working on it' interim message after 15 seconds",
+      "steps": [
+        "Send a message expected to take >15 seconds to process",
+        "Record send timestamp",
+        "Wait 20 seconds",
+        "Check relay outbound log for interim message containing expected text",
+        "Verify timestamp of interim message is 15-30 seconds after send"
+      ],
+      "commands": [
+        "START_TS=$(date +%s)",
+        "curl -s -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "sleep 20",
+        "grep -i 'working on it' /var/log/claw/relay.log | tail -3",
+        "INTERIM_TS=$(grep -i 'working on it' /var/log/claw/relay.log | tail -1 | grep -oP '\\d{10}' | head -1); echo \"delay: $((INTERIM_TS - START_TS)) seconds\""
+      ],
+      "passFail": [
+        "Relay log contains 'working on it' (or equivalent interim message) entry",
+        "Interim message timestamp is between 15 and 30 seconds after initial send"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "grep output showing 'working on it' log entry with timestamp",
+          "Calculated delay in seconds (must be 15-30)"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-015",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P1",
+      "title": "Tenant state persists across control plane restart",
+      "steps": [
+        "Confirm tenant active in DB (from TC-008)",
+        "Record tenant ID and status before restart",
+        "Restart control-plane only: pm2 restart control-plane",
+        "Wait 10 seconds for restart to complete",
+        "Query tenant state from DB post-restart",
+        "Send another message and confirm routing works"
+      ],
+      "commands": [
+        "sqlite3 /data/claw.db \"SELECT id, status FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\"",
+        "pm2 restart control-plane",
+        "sleep 10",
+        "sqlite3 /data/claw.db \"SELECT id, status FROM tenants ORDER BY created_at DESC LIMIT 1;\"",
+        "curl -s -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-message.json"
+      ],
+      "passFail": [
+        "Tenant row exists in DB post-restart with same ID and status",
+        "Message routing still functional after control-plane restart (HTTP 200 from relay)"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "sqlite3 query before restart showing tenant ID and status",
+          "sqlite3 query after restart showing same tenant ID and status",
+          "curl response code = 200 confirming routing works post-restart"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-016",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P2",
+      "title": "Services survive server reboot",
+      "steps": [
+        "Reboot host or simulate via process manager: sudo reboot",
+        "Wait for system to come back online (poll SSH availability)",
+        "Check all 3 services running: pm2 list or systemctl status",
+        "Confirm ports rebound: ss -tlnp | grep -E '3200|3101'"
+      ],
+      "commands": [
+        "sudo reboot",
+        "sleep 120",
+        "pm2 list | grep -E 'control-plane|slack-relay|scheduler'",
+        "ss -tlnp | grep -E '3200|3101'",
+        "pgrep -f scheduler"
+      ],
+      "passFail": [
+        "All 3 services appear in pm2 list or systemctl status as running after reboot",
+        "Ports 3200 and 3101 re-bound without manual intervention"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout", "infra"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "pm2 list or systemctl status output post-reboot showing all 3 services running",
+          "Port binding output showing 3200 and 3101 bound"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-017",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P2",
+      "title": "Container OOM is detected and tenant marked UNHEALTHY",
+      "steps": [
+        "Identify active tenant container",
+        "Trigger OOM by running memory exhaustion inside container or lowering memory limit",
+        "Wait for OOM kill event",
+        "Check OOM flag: docker inspect <id> --format '{{.State.OOMKilled}}'",
+        "Poll tenant DB for status update: sqlite3 query for UNHEALTHY"
+      ],
+      "commands": [
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
+        "TENANT_ID=$(sqlite3 /data/claw.db \"SELECT id FROM tenants WHERE status='ACTIVE' ORDER BY created_at DESC LIMIT 1;\")",
+        "docker update --memory 50m --memory-swap 50m ${CONTAINER_ID} || docker exec ${CONTAINER_ID} bash -c 'stress --vm 1 --vm-bytes 512M --timeout 10s' &",
+        "sleep 15",
+        "docker inspect ${CONTAINER_ID} --format '{{.State.OOMKilled}}'",
+        "sqlite3 /data/claw.db \"SELECT status FROM tenants WHERE id='${TENANT_ID}';\""
+      ],
+      "passFail": [
+        "docker inspect OOMKilled = true",
+        "Tenant status in DB = UNHEALTHY within 30 seconds of OOM event"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout", "infra"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "docker inspect OOMKilled = true output",
+          "sqlite3 tenant status = UNHEALTHY output"
+        ],
+        "artifacts": []
+      }
+    },
+    {
+      "id": "TC-018",
+      "source": "OBJ-ACCEPT",
+      "level": "e2e",
+      "priority": "P2",
+      "title": "Stopped tenant wakes on next message",
+      "steps": [
+        "Confirm a tenant exists in STOPPED state, or manually stop: docker stop <id> and update DB",
+        "Send DM for that tenant's user",
+        "Poll container status: docker inspect <tenant-container-id> --format '{{.State.Status}}'",
+        "Confirm message delivered after wake"
+      ],
+      "commands": [
+        "TENANT_ID=$(sqlite3 /data/claw.db \"SELECT id FROM tenants WHERE status='STOPPED' LIMIT 1;\")",
+        "CONTAINER_ID=$(sqlite3 /data/claw.db \"SELECT container_id FROM tenants WHERE id='${TENANT_ID}';\")",
+        "curl -s -w '%{http_code}' -X POST http://localhost:3101/slack/events -H 'Content-Type: application/json' -d @fixtures/slack-dm-allowlisted.json",
+        "sleep 10",
+        "docker inspect ${CONTAINER_ID} --format '{{.State.Status}}'",
+        "sqlite3 /data/claw.db \"SELECT status FROM tenants WHERE id='${TENANT_ID}';\""
+      ],
+      "passFail": [
+        "Container transitions from stopped to running within 10 seconds of message",
+        "Tenant status in DB updated to ACTIVE",
+        "Message delivery confirmed in relay logs"
+      ],
+      "retryRules": [
+        {
+          "maxRetries": 1,
+          "retryOn": ["flake", "timeout", "infra"]
+        }
+      ],
+      "evidence": {
+        "required": [
+          "docker inspect status = running post-wake",
+          "sqlite3 tenant status = ACTIVE",
+          "relay log showing message delivered after wake"
+        ],
+        "artifacts": []
+      }
+    }
+  ]
+}
