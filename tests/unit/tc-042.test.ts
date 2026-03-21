@@ -32,16 +32,17 @@ describe('TC-042 Ralph skills baked into tenant Docker image', () => {
     }
   });
 
-  it('TC-042: Dockerfile contains COPY skills/ step targeting npm-global openclaw skills', () => {
+  it('TC-042: Dockerfile contains COPY skills/ step targeting openclaw skills dir', () => {
     const dockerfile = readFileSync(DOCKERFILE_PATH, 'utf-8');
     expect(dockerfile).toContain(
-      'COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/',
+      'COPY skills/ /usr/local/lib/node_modules/openclaw/skills/',
     );
   });
 
-  it('TC-042: Dockerfile sets NPM_CONFIG_PREFIX to /root/.npm-global', () => {
+  it('TC-042: Dockerfile installs openclaw globally via npm install -g', () => {
     const dockerfile = readFileSync(DOCKERFILE_PATH, 'utf-8');
-    expect(dockerfile).toContain('ENV NPM_CONFIG_PREFIX=/root/.npm-global');
+    expect(dockerfile).toContain('npm install -g');
+    expect(dockerfile).toContain('openclaw');
   });
 
   it('TC-042: update-ralph-skills.sh exists and is executable', () => {

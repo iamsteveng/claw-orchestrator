@@ -57,8 +57,11 @@ check "Control plane (port 3200)" "$([ "$CP_OK" -ge 1 ] && echo PASS || echo FAI
 RELAY_OK=$(curl -s --max-time 5 http://localhost:3101/health 2>/dev/null | grep -c '"ok":true' || true)
 check "Slack relay (port 3101)" "$([ "$RELAY_OK" -ge 1 ] && echo PASS || echo FAIL)" "http://localhost:3101/health"
 
-SCHED_OK=$(pgrep -f "apps/scheduler" > /dev/null 2>&1 && echo 1 || (pm2 list 2>/dev/null | grep -c "claw-scheduler.*online" || echo 0))
-check "Scheduler process" "$([ "${SCHED_OK:-0}" -ge 1 ] && echo PASS || echo FAIL)"
+SCHED_OK=0
+if pgrep -f "apps/scheduler" > /dev/null 2>&1 || pm2 list 2>/dev/null | grep -q "claw-scheduler.*online"; then
+  SCHED_OK=1
+fi
+check "Scheduler process" "$([ "$SCHED_OK" -ge 1 ] && echo PASS || echo FAIL)"
 
 HTTPS_OK=$(curl -sk --max-time 10 "$RELAY_URL" -X GET 2>/dev/null | head -c 10 | wc -c || true)
 check "HTTPS endpoint reachable" "$([ "$HTTPS_OK" -gt 0 ] && echo PASS || echo FAIL)" "$RELAY_URL"

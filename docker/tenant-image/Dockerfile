@@ -38,8 +38,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Configure npm global prefix to /root/.npm-global so all global packages land in one place
-ENV NPM_CONFIG_PREFIX=/root/.npm-global
-ENV PATH=/root/.npm-global/bin:$PATH
+# npm global packages install to /usr/local so all users (including agent) can access them
 
 # Install global npm CLIs
 RUN npm install -g --no-fund --no-audit \
@@ -50,8 +49,7 @@ RUN npm install -g --no-fund --no-audit \
     convex
 
 # Bake Ralph skills into the OpenClaw skills directory
-RUN mkdir -p /root/.npm-global/lib/node_modules/openclaw/skills
-COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
+COPY skills/ /usr/local/lib/node_modules/openclaw/skills/
 
 # Ralph scripts — installed to /opt/ralph so skills can reference them via RALPH_PATH
 COPY ralph.sh /opt/ralph/ralph.sh

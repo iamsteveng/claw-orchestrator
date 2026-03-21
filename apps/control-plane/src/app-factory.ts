@@ -369,7 +369,7 @@ export async function buildApp(
       const duration_ms = Date.now() - startedAt;
       responseBody = await res.json() as import('@claw/shared-types').RelayMessageResponse;
 
-      if (res.ok && responseBody.ok) {
+      if (res.ok) {
         success = true;
         const now = Date.now();
 

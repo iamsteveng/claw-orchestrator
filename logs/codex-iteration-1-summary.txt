@@ -1,5 +1,5 @@
-Iteration: 1/2
-Story: US-042 - unknown
+Iteration: 1/1
+Story: US-043 - unknown
 Result: completed
-Commit: 1dd9cca
-Summary: US-042 is complete. Here's what was done: **Changes made:** 1. **`docker/tenant-image/Dockerfile`** — Added: - `ENV NPM_CONFIG_PREFIX=/root/.npm-global` to configure npm to install globals to that path - `ENV PATH=/roo
+Commit: 2a1a830
+Summary: US-043 is complete. All changes committed on `fix/deployment-issues`: - **Commit 1** (`288bd56`): All source + test changes for US-043 - **Commit 2** (`2a1a830`): PRD marked `passes: true`, progress notes appended
