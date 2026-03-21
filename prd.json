@@ -23,7 +23,7 @@
         "bash scripts/validate-deployment.sh passes sections 1-3 (services, config, Docker container smoke test)"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Fix TypeScript SOURCE files only (not dist/). Rebuild with pnpm build after changes."
     }
   ]
