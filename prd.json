@@ -1,30 +1,25 @@
 {
   "project": "claw-orchestrator",
   "branchName": "fix/deployment-issues",
-  "description": "Fix 3 deployment issues preventing tenant provisioning from working",
+  "description": "Fix remaining 2 deployment validation failures",
   "userStories": [
     {
-      "id": "US-043",
-      "title": "Fix deployment issues: bind-mount paths, container IP resolution, reconciliation, entrypoint, and provisioning flow",
-      "description": "As the system, I want tenant provisioning to work end-to-end so containers start, become ACTIVE, and receive messages.",
+      "id": "US-044",
+      "title": "Fix validate-deployment.sh scheduler check and investigate message delivery",
+      "description": "As the operator, I want validate-deployment.sh to pass all 19 checks so I know the system is fully operational.",
       "acceptanceCriteria": [
-        "docker-run-options.ts: container bind-mount paths are /home/agent/.openclaw/agents/main/agent/auth-profiles.json and /home/agent/.claude/.credentials.json (not /root/ or /run/secrets/)",
-        "docker-run-options.ts: memory is 3072m (not 1536m)",
-        "app-factory.ts provisioning: after creating tenant dirs, chmod 777 them so agent user (uid 1001) can write",
-        "app-factory.ts provisioning: seeds openclaw.json config into dataDir/home/.openclaw/openclaw.json with gateway.mode=local, gateway.bind=any",
-        "app-factory.ts provisioning: creates dataDir/home/.openclaw/agents/main/agent/ and dataDir/home/.claude/ directories",
-        "health-poll.ts: resolves container IP via docker inspect instead of using container name as hostname (host cannot resolve Docker container names)",
-        "app-factory.ts message forwarding: resolves container IP via docker inspect instead of using container name",
-        "startup-reconciliation.ts: before marking STARTING tenants FAILED, checks if their container is running via docker inspect; if running, leaves status as STARTING",
-        "index.ts: after reconciliation, resumes health polling for any tenants still in STARTING status",
-        "entrypoint.sh: auth check paths are /home/agent/.openclaw/... and /home/agent/.claude/... (not /root/ or /run/secrets/)",
-        "entrypoint.sh: gateway command is exec openclaw gateway (foreground mode, not openclaw gateway start)",
-        "pnpm build succeeds after all source changes",
-        "bash scripts/validate-deployment.sh passes sections 1-3 (services, config, Docker container smoke test)"
+        "scripts/validate-deployment.sh: fix scheduler process check \u2014 pgrep returns multiple PIDs causing integer expression error. Use pgrep -c or pipe to wc -l",
+        "Investigate message delivery failure: after tenant becomes ACTIVE, a second signed Slack event is sent but message_queue never shows DELIVERED status after 30s",
+        "Check apps/control-plane/src/app-factory.ts message forwarding: verify the container IP resolution via docker inspect works and POST to container port 3100 succeeds",
+        "Check the message-server.js inside docker/tenant-image/ \u2014 verify it responds to POST /message and what it returns",
+        "If the message-server.js is a stub that always returns 200 without processing, that explains DELIVERED never being set \u2014 fix the relay/control-plane to mark DELIVERED on 200 response from container",
+        "After fixes: pnpm build succeeds",
+        "After fixes: run bash scripts/validate-deployment.sh and all 19 checks pass",
+        "Typecheck passes"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "Fix TypeScript SOURCE files only (not dist/). Rebuild with pnpm build after changes."
+      "passes": false,
+      "notes": "Fix TypeScript SOURCE files only (not dist/). The control plane is at apps/control-plane/. The validation script is at scripts/validate-deployment.sh. The tenant container message server is at docker/tenant-image/message-server.js."
     }
   ]
 }
