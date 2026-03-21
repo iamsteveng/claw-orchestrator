@@ -51,16 +51,17 @@ model Tenant {
 // ─── message_queue ────────────────────────────────────────────────────────────
 
 model MessageQueue {
-  id             String @id
-  tenant_id      String
-  slack_event_id String @unique
-  payload        String
-  status         String @default("PENDING")
-  attempts       Int    @default(0)
-  created_at     BigInt
-  updated_at     BigInt
-  deliver_after  BigInt?
-  error          String?
+  id               String  @id
+  tenant_id        String
+  slack_event_id   String  @unique
+  slack_channel_id String?
+  payload          String
+  status           String  @default("PENDING")
+  attempts         Int     @default(0)
+  created_at       BigInt
+  updated_at       BigInt
+  deliver_after    BigInt?
+  error            String?
 
   tenant Tenant @relation(fields: [tenant_id], references: [id])
 

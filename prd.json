@@ -19,7 +19,7 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "The SLACK_BOT_TOKEN is available in the relay env vars. The relay already has the Slack SDK or can use fetch to call chat.postMessage. The container message-server.js uses openclaw agent --local --agent main --message TEXT --json --timeout 120. Store the slack_channel_id on the tenant record or message_queue so responses can be routed back."
     }
   ]

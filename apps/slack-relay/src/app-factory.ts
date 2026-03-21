@@ -134,7 +134,8 @@ export async function processSlackEventWithConfig(
   }
 
   // Step 3: Poll until tenant becomes ACTIVE (up to 3 minutes)
-  if (currentStatus !== 'ACTIVE') {
+  const wasAlreadyActive = currentStatus === 'ACTIVE';
+  if (!wasAlreadyActive) {
     const deadline = Date.now() + ACTIVE_WAIT_TIMEOUT_MS;
     while (Date.now() < deadline) {
       await sleep(Math.min(ACTIVE_POLL_INTERVAL_MS, deadline - Date.now()));
@@ -155,6 +156,9 @@ export async function processSlackEventWithConfig(
       await postSlackDm(slackUserId, 'Your workspace is starting, please wait a moment and try again.', config.SLACK_BOT_TOKEN, fetchFn);
       return;
     }
+
+    // Send welcome DM now that workspace is ready for the first time
+    await postSlackDm(slackUserId, 'Your workspace is ready! You can start chatting now.', config.SLACK_BOT_TOKEN, fetchFn);
   }
 
   // Step 4: Enqueue the message (PENDING) if prisma is available
@@ -175,6 +179,7 @@ export async function processSlackEventWithConfig(
           id: randomUUID(),
           tenant_id: tenantId,
           slack_event_id: slackEventId,
+          slack_channel_id: channel,
           payload,
           status: 'PENDING',
           attempts: 0,
