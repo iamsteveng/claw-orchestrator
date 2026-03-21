@@ -24,6 +24,7 @@ export function buildDockerRunOptions(opts: {
   image: string;
   dataDir: string;
   resourceOverrides?: string | null;
+  relayToken?: string;
 }): DockerRunOptions {
   const { tenantId, image, dataDir, resourceOverrides } = opts;
 
@@ -69,6 +70,7 @@ export function buildDockerRunOptions(opts: {
       'XDG_CONFIG_HOME=/home/agent/.config',
       'XDG_CACHE_HOME=/home/agent/.cache',
       'XDG_STATE_HOME=/home/agent/.local/state',
+      ...(opts.relayToken ? [`RELAY_TOKEN=${opts.relayToken}`] : []),
     ],
   };
 }

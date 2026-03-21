@@ -15,7 +15,7 @@
   "gateway": {
     "port": 19001,
     "mode": "local",
-    "bind": "any"
+    "bind": "auto"
   },
   "agent": {
     "model": {
