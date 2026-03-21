@@ -7,6 +7,13 @@ export type ReconcileLog = {
   warn: (obj: unknown, msg: string) => void;
 };
 
+/** Minimal docker client interface needed for reconciliation */
+type ReconcileDockerClient = {
+  inspect: (containerName: string) => Promise<{
+    State?: { Running?: boolean };
+  } | null>;
+};
+
 /**
  * Startup reconciliation — runs once at control-plane boot.
  *
@@ -20,6 +27,7 @@ export type ReconcileLog = {
 export async function reconcile(
   prisma: PrismaClient,
   log: ReconcileLog,
+  dockerClient?: ReconcileDockerClient,
 ): Promise<void> {
   const now = Date.now();
   const twoMinutesAgo = now - 2 * 60 * 1000;
@@ -38,17 +46,50 @@ export async function reconcile(
     data: { status: 'PENDING', updated_at: now },
   });
 
-  // Mark in-flight tenant starts as FAILED
+  // Always fail PROVISIONING tenants (no container was started for them)
   await prisma.tenant.updateMany({
-    where: {
-      status: { in: [TenantStatus.STARTING, TenantStatus.PROVISIONING] },
-    },
+    where: { status: TenantStatus.PROVISIONING },
     data: {
       status: TenantStatus.FAILED,
       error_message: 'Process crashed during startup',
       updated_at: now,
     },
   });
+
+  // For STARTING tenants: check if their container is still running.
+  // If running, leave them as STARTING so the caller can resume health polling.
+  // If not running (or no docker client provided), mark them FAILED.
+  const startingTenants = await prisma.tenant.findMany({
+    where: { status: TenantStatus.STARTING },
+    select: { id: true, container_name: true },
+  });
+
+  const tenantsToFail: string[] = [];
+  for (const tenant of startingTenants) {
+    let isRunning = false;
+    if (dockerClient && tenant.container_name) {
+      try {
+        const result = await dockerClient.inspect(tenant.container_name);
+        isRunning = result?.State?.Running === true;
+      } catch {
+        // Inspect failed — treat as not running
+      }
+    }
+    if (!isRunning) {
+      tenantsToFail.push(tenant.id);
+    }
+  }
+
+  if (tenantsToFail.length > 0) {
+    await prisma.tenant.updateMany({
+      where: { id: { in: tenantsToFail } },
+      data: {
+        status: TenantStatus.FAILED,
+        error_message: 'Process crashed during startup',
+        updated_at: now,
+      },
+    });
+  }
 
   // Write SYSTEM_STARTUP audit event
   await prisma.auditLog.create({

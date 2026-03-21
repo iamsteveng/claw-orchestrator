@@ -244,17 +244,18 @@ export async function processSlackEventWithConfig(
 
     if (msgRes.ok) {
       const msgBody = await msgRes.json() as { ok?: boolean; response?: string; blocks?: unknown[] | null };
-      if (msgBody.ok) {
-        // Mark message as DELIVERED
-        if (prisma && messageQueueId) {
-          try {
-            await prisma.messageQueue.update({
-              where: { id: messageQueueId },
-              data: { status: 'DELIVERED', updated_at: Date.now() },
-            });
-          } catch { /* best-effort */ }
-        }
 
+      // Mark DELIVERED: CP returned 200 = message was forwarded to the container runtime
+      if (prisma && messageQueueId) {
+        try {
+          await prisma.messageQueue.update({
+            where: { id: messageQueueId },
+            data: { status: 'DELIVERED', updated_at: Date.now() },
+          });
+        } catch { /* best-effort */ }
+      }
+
+      if (msgBody.ok) {
         if (msgBody.blocks != null && Array.isArray(msgBody.blocks)) {
           await fetchFn('https://slack.com/api/chat.postMessage', {
             method: 'POST',

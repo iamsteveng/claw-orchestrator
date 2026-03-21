@@ -131,8 +131,8 @@ describe('TC-022: Stop endpoint → ACTIVE → STOPPED transition', () => {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     expect(tenant).not.toBeNull();
     expect(tenant!.last_stopped_at).not.toBeNull();
-    expect(typeof tenant!.last_stopped_at).toBe('number');
-    expect(tenant!.last_stopped_at).toBeGreaterThan(0);
+    expect(typeof tenant!.last_stopped_at).toBe('bigint');
+    expect(tenant!.last_stopped_at).toBeGreaterThan(0n);
   });
 
   it('TC-022: TENANT_STOPPED audit event written', async () => {

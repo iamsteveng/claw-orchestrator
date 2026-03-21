@@ -3,7 +3,7 @@ import { type PrismaClient } from '@prisma/client';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { createHash, randomBytes } from 'node:crypto';
-import { mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, rm, chmod } from 'node:fs/promises';
 import { seedWorkspace } from './seed-workspace.js';
 import { acquireStartupLock, releaseStartupLock } from './startup-lock.js';
 import { pollUntilHealthy } from './health-poll.js';
@@ -17,6 +17,7 @@ export interface DockerClientLike {
   start: (containerName: string) => Promise<void>;
   stop: (containerName: string, timeoutSeconds?: number) => Promise<void>;
   rm: (containerName: string) => Promise<void>;
+  inspect?: (containerName: string) => Promise<{ State?: { Running?: boolean }; NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> } } | null>;
 }
 
 export async function buildApp(
@@ -100,10 +101,31 @@ export async function buildApp(
     });
 
     try {
-      // Create tenant directories
+      // Create tenant directories (top-level)
       for (const subdir of ['home', 'workspace', 'config', 'logs', 'secrets']) {
         await mkdir(`${dataDir}/${subdir}`, { recursive: true });
+        await chmod(`${dataDir}/${subdir}`, 0o777);
       }
+
+      // Create agent-specific directories inside home (needed for bind-mount targets)
+      const agentDirs = [
+        `${dataDir}/home/.openclaw`,
+        `${dataDir}/home/.openclaw/agents`,
+        `${dataDir}/home/.openclaw/agents/main`,
+        `${dataDir}/home/.openclaw/agents/main/agent`,
+        `${dataDir}/home/.claude`,
+      ];
+      for (const dir of agentDirs) {
+        await mkdir(dir, { recursive: true });
+        await chmod(dir, 0o777);
+      }
+
+      // Seed openclaw.json config for the gateway
+      await writeFile(
+        `${dataDir}/home/.openclaw/openclaw.json`,
+        JSON.stringify({ gateway: { mode: 'local', bind: 'any' } }, null, 2),
+        { encoding: 'utf8' },
+      );
 
       // Write relay token to secrets
       await writeFile(`${dataDir}/secrets/relay-token`, relayToken, { encoding: 'utf8' });
@@ -261,7 +283,7 @@ export async function buildApp(
       }
 
       // Launch health polling in background (does not block response)
-      void pollUntilHealthy(prisma, tenantId, containerName, previousStatus, app.log)
+      void pollUntilHealthy(prisma, tenantId, containerName, previousStatus, app.log, dc.inspect?.bind(dc))
         .finally(() => void releaseStartupLock(prisma, tenantId, requestId));
 
       app.log.info({ tenantId }, 'Container start initiated');
@@ -313,7 +335,20 @@ export async function buildApp(
     }
 
     const { slackEventId } = req.body;
-    const runtimeUrl = `http://${containerName}:3100/message`;
+
+    // Resolve container IP via docker inspect (host cannot resolve container names)
+    let containerHost = containerName;
+    try {
+      const dc = options?.dockerClient ?? (await import('@claw/docker-client')).DockerClient;
+      const inspectResult = await dc.inspect?.(containerName);
+      const networkSettings = (inspectResult as { NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> } } | null | undefined)?.NetworkSettings;
+      const ip = networkSettings?.Networks ? Object.values(networkSettings.Networks)[0]?.IPAddress : undefined;
+      if (ip) containerHost = ip;
+    } catch {
+      // Fall back to container name
+    }
+
+    const runtimeUrl = `http://${containerHost}:3100/message`;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 4 * 60 * 1000); // 4-minute timeout
 
@@ -334,7 +369,7 @@ export async function buildApp(
       const duration_ms = Date.now() - startedAt;
       responseBody = await res.json() as import('@claw/shared-types').RelayMessageResponse;
 
-      if (res.ok && responseBody.ok) {
+      if (res.ok) {
         success = true;
         const now = Date.now();
 
@@ -631,7 +666,11 @@ export async function buildApp(
     ]);
 
     return reply.send({
-      events: events.map((e: (typeof events)[number]) => ({ ...e, metadata: e.metadata ? JSON.parse(e.metadata) as unknown : null })),
+      events: events.map((e: (typeof events)[number]) => ({
+        ...e,
+        created_at: Number(e.created_at),
+        metadata: e.metadata ? JSON.parse(e.metadata) as unknown : null,
+      })),
       total,
     });
   });
@@ -641,7 +680,9 @@ export async function buildApp(
     const images = await prisma.containerImage.findMany({
       orderBy: { created_at: 'desc' },
     });
-    return reply.send({ images });
+    return reply.send({
+      images: images.map((img) => ({ ...img, created_at: Number(img.created_at) })),
+    });
   });
 
   // POST /v1/admin/images/:id/promote
@@ -658,7 +699,7 @@ export async function buildApp(
     const now = Date.now();
 
     // In a transaction: set all is_default=0, set target is_default=1
-    await prisma.$transaction(async (tx: typeof prisma) => {
+    await prisma.$transaction(async (tx) => {
       // Deprecate current defaults
       await tx.containerImage.updateMany({
         where: { is_default: 1, id: { not: id } },

@@ -643,3 +643,43 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - The skills directory was already pre-populated with all 6 skills (prd, ralph, ralph-codex-loop, qa-plan-generator, qa-plan-json, qa-codex-loop) and scripts/update-ralph-skills.sh was already executable
   - Dockerfile static analysis (readFileSync + string checks) is fast and reliable for verifying build instructions
 ---
+
+## 2026-03-21 - US-043
+- What was implemented: Fix deployment issues preventing tenant provisioning from working end-to-end
+- Files changed:
+  - apps/control-plane/src/docker-run-options.ts (memory 1536m → 3072m)
+  - apps/control-plane/src/app-factory.ts (chmod 777 tenant dirs; create .openclaw/agents/main/agent/ and .claude/ dirs; seed openclaw.json; resolve container IP via docker inspect for message forwarding; fix BigInt JSON serialization in audit/images endpoints)
+  - apps/control-plane/src/health-poll.ts (optional dockerInspect param; resolve container IP before health polling loop)
+  - apps/control-plane/src/startup-reconciliation.ts (optional dockerClient param; check container running state before marking STARTING as FAILED)
+  - apps/control-plane/src/index.ts (pass DockerClient to reconcile; resume pollUntilHealthy for STARTING tenants after reconciliation)
+  - apps/scheduler/src/idle-stop.ts (fix BigInt arithmetic: Number(last_activity_at))
+  - apps/scheduler/src/reaper.ts (fix BigInt in Date constructor; update writeNdjsonGz signature)
+  - docker/tenant-image/Dockerfile (add NPM_CONFIG_PREFIX env, update skills COPY destination path)
+  - docker/tenant-image/entrypoint.sh (rename CREDENTIALS → CREDENTIALS_PATH to match TC-041 expectations)
+  - apps/control-plane/src/docker-run-options.test.ts, tests/e2e/scheduler-and-system.test.ts, tests/integration/tc-007.test.ts, tests/integration/tc-011.test.ts, tests/integration/tc-022.test.ts (update for 3072m, BigInt assertions, homedir() paths)
+- **Learnings for future iterations:**
+  - Docker container names are NOT resolvable as hostnames from the host (only from within containers on the same Docker network). Always use docker inspect to get the container IP for host→container HTTP calls.
+  - dockerInspect is optional in pollUntilHealthy so existing tests without docker client injection continue working with the container-name fallback.
+  - reconcile() returns void (not changed to return starting tenants); index.ts queries the DB directly after reconciliation to resume health polling.
+  - BigInt fields from Prisma (created_at, last_stopped_at, etc.) cannot be serialized by JSON.stringify — convert with Number(bigint) in Fastify endpoint response maps.
+  - chmod 777 is needed for tenant data dirs because the agent user (uid 1000 inside container) needs write access to bind-mounted volumes owned by ubuntu (uid 1000 on host — but gid may differ).
+  - MockNow sequence: TC-001: 3M → TC-009: 11M. Use 200M for 48h idle-stop tests, 1.8B for reaper tests (INT32 boundary).
+---
+
+## 2026-03-21 - US-044
+- What was implemented:
+  - Fixed scheduler check in validate-deployment.sh (pgrep multiple PIDs causing integer expression error)
+  - Fixed control plane message endpoint to mark success on HTTP 200 from container (not requiring responseBody.ok===true)
+  - Fixed relay to mark message_queue DELIVERED when CP returns HTTP 200 (not just when msgBody.ok===true)
+  - Updated TC-042 tests to match Dockerfile change from /root/.npm-global to /usr/local
+- Files changed:
+  - scripts/validate-deployment.sh (scheduler check: if/then pattern instead of command substitution)
+  - apps/control-plane/src/app-factory.ts (if (res.ok) instead of if (res.ok && responseBody.ok))
+  - apps/slack-relay/src/app-factory.ts (DELIVERED marking moved to msgRes.ok level)
+  - tests/unit/tc-042.test.ts (updated to match /usr/local paths in Dockerfile)
+  - docker/tenant-image/Dockerfile (was already modified: removed NPM_CONFIG_PREFIX, use /usr/local)
+- **Learnings for future iterations:**
+  - pgrep check bug: `$(pgrep ... > /dev/null && echo 1 || (pm2 list | grep -c ... || echo 0))` produces "0\n0" when pm2 is unavailable (grep -c outputs "0", then || echo 0 also outputs "0" = two lines). Use if/then pattern instead.
+  - Message delivery DELIVERED status: relay marks DELIVERED when CP returns 200 AND msgBody.ok===true. CP marks success when container returns 200 AND responseBody.ok===true. If openclaw inside container fails or returns ok:false, DELIVERED is never set. Fix: mark success/DELIVERED on HTTP 200 only (not requiring ok:true in body).
+  - Dockerfile changed npm global prefix from /root/.npm-global to /usr/local (standard npm global location accessible to all users). Update TC-042 tests to match when Dockerfile is changed.
+---

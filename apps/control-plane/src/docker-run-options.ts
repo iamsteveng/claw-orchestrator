@@ -9,8 +9,8 @@ export interface ResourceOverrides {
 
 const DEFAULTS = {
   cpus: '1.0',
-  memory: '1536m',
-  memorySwap: '1536m',
+  memory: '3072m',
+  memorySwap: '3072m',
   pidsLimit: 256,
   ulimitNofile: '1024:1024',
 };

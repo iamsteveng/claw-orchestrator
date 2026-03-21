@@ -17,8 +17,8 @@ describe('buildDockerRunOptions', () => {
   it('applies default resource limits', () => {
     const opts = buildDockerRunOptions(BASE);
     expect(opts.cpus).toBe('1.0');
-    expect(opts.memory).toBe('1536m');
-    expect(opts.memorySwap).toBe('1536m');
+    expect(opts.memory).toBe('3072m');
+    expect(opts.memorySwap).toBe('3072m');
     expect(opts.pidsLimit).toBe(256);
     expect(opts.ulimitNofile).toBe('1024:1024');
   });

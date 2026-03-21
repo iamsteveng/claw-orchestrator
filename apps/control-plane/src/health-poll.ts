@@ -15,6 +15,12 @@ export type Log = {
   error: (ctx: object, msg: string) => void;
 };
 
+/** Minimal docker inspect function signature needed by health-poll */
+export type DockerInspectFn = (containerName: string) => Promise<{
+  State?: { Running?: boolean };
+  NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
+} | null>;
+
 /**
  * Polls GET http://<containerName>:3101/health every 2 seconds for up to 90 seconds.
  *
@@ -37,8 +43,21 @@ export async function pollUntilHealthy(
   containerName: string,
   previousStatus: string,
   log: Log,
+  dockerInspect?: DockerInspectFn,
 ): Promise<PollResult> {
-  const url = `http://${containerName}:3101/health`;
+  // Resolve container IP via docker inspect (host cannot resolve container names)
+  let containerHost = containerName;
+  if (dockerInspect) {
+    try {
+      const inspectResult = await dockerInspect(containerName);
+      const networks = inspectResult?.NetworkSettings?.Networks;
+      const ip = networks ? Object.values(networks)[0]?.IPAddress : undefined;
+      if (ip) containerHost = ip;
+    } catch {
+      log.warn({ tenantId, containerName }, 'docker inspect failed; falling back to container name for health URL');
+    }
+  }
+  const url = `http://${containerHost}:3101/health`;
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   let consecutiveFailures = 0;
 

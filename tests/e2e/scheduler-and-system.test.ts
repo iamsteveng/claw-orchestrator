@@ -17,6 +17,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { mkdir, rm, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { homedir } from 'node:os';
 
 // Use a small incrementing counter for mockNow (same pattern as other test files).
 // DB timestamps must fit in 32-bit INT range (< 2,147,483,647).
@@ -102,8 +103,8 @@ describe('TC-011: auth-profiles.json bind-mount → included in docker run optio
     const authMount = opts.readOnlyBindMounts!.find((m: string) => m.includes('auth-profiles.json'));
     expect(authMount).toBeDefined();
     expect(authMount).toContain('auth-profiles.json');
-    // The source path should be a host path
-    expect(authMount).toContain('/root/.openclaw/agents/main/agent/auth-profiles.json');
+    // The source path should be the host user's home dir path
+    expect(authMount).toContain(`${homedir()}/.openclaw/agents/main/agent/auth-profiles.json`);
   });
 
   it('container env includes HOME and XDG vars', () => {
@@ -127,7 +128,7 @@ describe('TC-011: auth-profiles.json bind-mount → included in docker run optio
     });
 
     expect(opts.cpus).toBe('1.0');
-    expect(opts.memory).toBe('1536m');
+    expect(opts.memory).toBe('3072m');
     expect(opts.pidsLimit).toBe(256);
     expect(opts.ulimitNofile).toBe('1024:1024');
   });
