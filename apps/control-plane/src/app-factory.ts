@@ -123,7 +123,7 @@ export async function buildApp(
       // Seed openclaw.json config for the gateway
       await writeFile(
         `${dataDir}/home/.openclaw/openclaw.json`,
-        JSON.stringify({ gateway: { mode: 'local', bind: 'any' } }, null, 2),
+        JSON.stringify({ gateway: { mode: 'local', bind: 'auto' } }, null, 2),
         { encoding: 'utf8' },
       );
 
@@ -275,6 +275,7 @@ export async function buildApp(
           image: imageTag,
           dataDir: tenant.data_dir,
           resourceOverrides: tenant.resource_overrides,
+          relayToken: tenant.relay_token,
         });
         await dc.run(runOpts);
       } else {
