@@ -1,5 +1,5 @@
 Iteration: 1/1
-Story: US-043 - unknown
+Story: US-044 - unknown
 Result: completed
-Commit: 2a1a830
-Summary: US-043 is complete. All changes committed on `fix/deployment-issues`: - **Commit 1** (`288bd56`): All source + test changes for US-043 - **Commit 2** (`2a1a830`): PRD marked `passes: true`, progress notes appended
+Commit: d2b19c9
+Summary: All stories are now complete. Here's a summary of what was done for US-044: **Scheduler check fix** (`scripts/validate-deployment.sh`): The `pgrep | grep -c ... || echo 0` pattern produced `"0\n0"` (two lines) when pm2 w

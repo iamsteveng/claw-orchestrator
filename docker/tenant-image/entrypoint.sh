@@ -1,26 +1,27 @@
 #!/usr/bin/env bash
 # entrypoint.sh — Tenant container startup for Claw Orchestrator
-# Runs as non-root 'agent' user
+# Runs as root initially to fix file ownership, then drops to agent user
 
 set -euo pipefail
+
+# Fix ownership of home directory (files copied by host ubuntu user have wrong uid)
+chown -R agent:agent /home/agent 2>/dev/null || true
 
 export HOME=/home/agent
 export XDG_CONFIG_HOME=/home/agent/.config
 export XDG_CACHE_HOME=/home/agent/.cache
 export XDG_STATE_HOME=/home/agent/.local/state
 
-# ── Auth-profiles check (bind-mounted by control plane) ──────────────────────
+# ── Auth-profiles check (copied by control plane during provisioning) ────────
 AUTH_PROFILES="/home/agent/.openclaw/agents/main/agent/auth-profiles.json"
 if [ ! -f "${AUTH_PROFILES}" ] || [ ! -s "${AUTH_PROFILES}" ]; then
-  echo "ERROR: auth-profiles.json missing at ${AUTH_PROFILES}. Check host bind-mount." >&2
-  exit 1
+  echo "WARNING: auth-profiles.json not found at ${AUTH_PROFILES}. Model calls may fail." >&2
 fi
 
 # ── Claude Code credentials check ────────────────────────────────────────────
 CREDENTIALS_PATH="/home/agent/.claude/.credentials.json"
 if [ ! -f "${CREDENTIALS_PATH}" ] || [ ! -s "${CREDENTIALS_PATH}" ]; then
-  echo "ERROR: .credentials.json missing at ${CREDENTIALS_PATH}. Check host bind-mount." >&2
-  exit 1
+  echo "WARNING: .credentials.json not found at ${CREDENTIALS_PATH}. Claude CLI may not work." >&2
 fi
 
 # ── Required directories ──────────────────────────────────────────────────────
@@ -34,13 +35,13 @@ chmod 700 /home/agent/.ssh 2>/dev/null || true
 
 # ── Health server (port 3101) ─────────────────────────────────────────────────
 if [ -f /usr/local/lib/claw-health-server.js ]; then
-  node /usr/local/lib/claw-health-server.js &
+  su -s /bin/bash agent -c "node /usr/local/lib/claw-health-server.js" &
 fi
 
 # ── Message server (port 3100) ────────────────────────────────────────────────
 if [ -f /usr/local/lib/claw-message-server.js ]; then
-  node /usr/local/lib/claw-message-server.js &
+  su -s /bin/bash agent -c "RELAY_TOKEN=$RELAY_TOKEN node /usr/local/lib/claw-message-server.js" &
 fi
 
-# ── Start OpenClaw gateway in foreground ─────────────────────────────────────
-exec openclaw gateway
+# ── Drop to agent user and start OpenClaw gateway in foreground ──────────────
+exec su -s /bin/bash agent -c "exec openclaw gateway"

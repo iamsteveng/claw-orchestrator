@@ -12,13 +12,13 @@ const PORT = 3100;
 const RELAY_TOKEN = process.env.RELAY_TOKEN || '';
 
 /**
- * Forward a message to the openclaw CLI via stdin and collect stdout response.
+ * Forward a message to the openclaw agent via the gateway CLI.
  * @param {string} text - The message text to send
  * @returns {Promise<{response: string, blocks: null}>}
  */
 function forwardToOpenclaw(text) {
   return new Promise((resolve, reject) => {
-    const child = spawn('openclaw', ['--message-mode'], {
+    const child = spawn('openclaw', ['agent', '--message', text, '--local', '--json', '--timeout', '120'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
     });
@@ -46,8 +46,7 @@ function forwardToOpenclaw(text) {
       }
     });
 
-    // Write message text to stdin and close
-    child.stdin.write(text);
+    // No stdin needed — message passed as CLI arg
     child.stdin.end();
   });
 }
