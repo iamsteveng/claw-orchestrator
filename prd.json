@@ -18,7 +18,7 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Fix TypeScript SOURCE files only (not dist/). The control plane is at apps/control-plane/. The validation script is at scripts/validate-deployment.sh. The tenant container message server is at docker/tenant-image/message-server.js."
     }
   ]
