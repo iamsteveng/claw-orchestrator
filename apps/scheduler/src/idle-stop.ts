@@ -31,7 +31,7 @@ export async function stopIdleTenants(
   });
 
   for (const tenant of idleTenants) {
-    const idleDurationMs = Date.now() - (tenant.last_activity_at ?? 0);
+    const idleDurationMs = Date.now() - Number(tenant.last_activity_at ?? 0);
 
     try {
       const res = await fetchFn(`${controlPlaneUrl}/v1/tenants/${tenant.id}/stop`, {

@@ -37,7 +37,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install global npm CLIs to /usr/local so all users can access them
+# Configure npm global prefix to /root/.npm-global so all global packages land in one place
+ENV NPM_CONFIG_PREFIX=/root/.npm-global
+ENV PATH=/root/.npm-global/bin:$PATH
+
+# Install global npm CLIs
 RUN npm install -g --no-fund --no-audit \
     openclaw \
     @anthropic-ai/claude-code \
@@ -46,9 +50,8 @@ RUN npm install -g --no-fund --no-audit \
     convex
 
 # Bake Ralph skills into the OpenClaw skills directory
-RUN SKILLS_DIR=$(node -e "const p=require('path'),r=require('child_process').execSync('npm root -g').toString().trim();console.log(p.join(r,'openclaw/skills'))") && \
-    mkdir -p "$SKILLS_DIR"
-COPY skills/ /usr/local/lib/node_modules/openclaw/skills/
+RUN mkdir -p /root/.npm-global/lib/node_modules/openclaw/skills
+COPY skills/ /root/.npm-global/lib/node_modules/openclaw/skills/
 
 # Ralph scripts — installed to /opt/ralph so skills can reference them via RALPH_PATH
 COPY ralph.sh /opt/ralph/ralph.sh

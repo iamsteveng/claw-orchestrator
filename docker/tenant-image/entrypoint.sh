@@ -17,9 +17,9 @@ if [ ! -f "${AUTH_PROFILES}" ] || [ ! -s "${AUTH_PROFILES}" ]; then
 fi
 
 # ── Claude Code credentials check ────────────────────────────────────────────
-CREDENTIALS="/home/agent/.claude/.credentials.json"
-if [ ! -f "${CREDENTIALS}" ] || [ ! -s "${CREDENTIALS}" ]; then
-  echo "ERROR: .credentials.json missing at ${CREDENTIALS}. Check host bind-mount." >&2
+CREDENTIALS_PATH="/home/agent/.claude/.credentials.json"
+if [ ! -f "${CREDENTIALS_PATH}" ] || [ ! -s "${CREDENTIALS_PATH}" ]; then
+  echo "ERROR: .credentials.json missing at ${CREDENTIALS_PATH}. Check host bind-mount." >&2
   exit 1
 fi
 

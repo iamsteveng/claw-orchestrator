@@ -128,7 +128,7 @@ export async function archiveAuditLog(
   // Group rows by YYYY-MM based on created_at
   const byMonth = new Map<string, typeof rows>();
   for (const row of rows) {
-    const d = new Date(row.created_at);
+    const d = new Date(Number(row.created_at));
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
     if (!byMonth.has(key)) byMonth.set(key, []);
     byMonth.get(key)!.push(row);
@@ -154,7 +154,7 @@ export async function archiveAuditLog(
 
 async function writeNdjsonGz(
   filePath: string,
-  rows: Array<{ id: string; tenant_id: string | null; event_type: string; actor: string; metadata: string | null; created_at: number }>,
+  rows: Array<{ id: string; tenant_id: string | null; event_type: string; actor: string; metadata: string | null; created_at: number | bigint }>,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const output = createWriteStream(filePath, { flags: 'a' });

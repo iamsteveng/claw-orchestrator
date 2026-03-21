@@ -49,11 +49,11 @@ describe('TC-011: auth-profiles.json bind-mount → included in docker run optio
     expect(result.env).toContain('XDG_STATE_HOME=/home/agent/.local/state');
   });
 
-  it('TC-011: resource flags — cpus=1.0, memory=1536m, pidsLimit=256', () => {
+  it('TC-011: resource flags — cpus=1.0, memory=3072m, pidsLimit=256', () => {
     const result = buildDockerRunOptions(TEST_OPTS);
 
     expect(result.cpus).toBe('1.0');
-    expect(result.memory).toBe('1536m');
+    expect(result.memory).toBe('3072m');
     expect(result.pidsLimit).toBe(256);
   });
 });

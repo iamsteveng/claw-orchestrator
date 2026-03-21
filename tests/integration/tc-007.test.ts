@@ -185,7 +185,7 @@ describe('TC-007: Tenant deletion → data cleaned up', () => {
     const deletedTenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     expect(deletedTenant).not.toBeNull();
     expect(deletedTenant!.deleted_at).not.toBeNull();
-    expect(typeof deletedTenant!.deleted_at).toBe('number');
+    expect(typeof deletedTenant!.deleted_at).toBe('bigint');
 
     // ── Step 7: Assert message_queue rows purged ──────────────────────────────
     const queueAfter = await prisma.messageQueue.count({ where: { tenant_id: tenantId } });
