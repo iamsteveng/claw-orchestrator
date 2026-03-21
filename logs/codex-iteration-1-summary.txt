@@ -1,5 +1,5 @@
 Iteration: 1/1
-Story: US-044 - unknown
+Story: US-006 - Align QA skills with Ralph architecture pattern
 Result: completed
-Commit: d2b19c9
-Summary: All stories are now complete. Here's a summary of what was done for US-044: **Scheduler check fix** (`scripts/validate-deployment.sh`): The `pgrep | grep -c ... || echo 0` pattern produced `"0\n0"` (two lines) when pm2 w
+Commit: 09d98d5
+Summary: All acceptance criteria are now satisfied: 1. ✅ **Welcome DM** - After polling shows tenant is ACTIVE (when it wasn't already), the relay sends "Your workspace is ready! You can start chatting now." via `postSlackDm` 2
