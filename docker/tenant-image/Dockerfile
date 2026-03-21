@@ -82,7 +82,8 @@ COPY --chown=root:root message-server.js /usr/local/lib/claw-message-server.js
 COPY --chown=root:root entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-USER agent
+# Entrypoint runs as root to fix file ownership, then drops to agent via gosu/exec
+# USER agent  -- not set here; entrypoint handles privilege drop
 
 # Expose agent runtime ports
 EXPOSE 3100 3101

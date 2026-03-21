@@ -1,5 +1,5 @@
 Iteration: 1/1
-Story: US-043 - unknown
+Story: US-006 - Align QA skills with Ralph architecture pattern
 Result: completed
-Commit: 2a1a830
-Summary: US-043 is complete. All changes committed on `fix/deployment-issues`: - **Commit 1** (`288bd56`): All source + test changes for US-043 - **Commit 2** (`2a1a830`): PRD marked `passes: true`, progress notes appended
+Commit: 09d98d5
+Summary: All acceptance criteria are now satisfied: 1. ✅ **Welcome DM** - After polling shows tenant is ACTIVE (when it wasn't already), the relay sends "Your workspace is ready! You can start chatting now." via `postSlackDm` 2

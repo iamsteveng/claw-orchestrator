@@ -123,9 +123,39 @@ export async function buildApp(
       // Seed openclaw.json config for the gateway
       await writeFile(
         `${dataDir}/home/.openclaw/openclaw.json`,
-        JSON.stringify({ gateway: { mode: 'local', bind: 'auto' } }, null, 2),
+        JSON.stringify({
+          wizard: { lastRunAt: '2026-01-01T00:00:00.000Z', lastRunVersion: '2026.3.13', lastRunMode: 'local' },
+          auth: { profiles: { 'anthropic:default': { provider: 'anthropic', mode: 'token' } } },
+          gateway: { port: 19001, mode: 'local', bind: 'auto' },
+          agents: { defaults: { model: { primary: 'anthropic/claude-sonnet-4-6' }, workspace: '/workspace' } },
+        }, null, 2),
         { encoding: 'utf8' },
       );
+
+      // Copy auth files into tenant home (not bind-mounted — OpenClaw needs write access)
+      const { copyFile } = await import('node:fs/promises');
+      const { homedir } = await import('node:os');
+      const hostHome = homedir();
+      const authSrc = `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`;
+      const credsSrc = `${hostHome}/.claude/.credentials.json`;
+      await copyFile(authSrc, `${dataDir}/home/.openclaw/agents/main/agent/auth-profiles.json`);
+      await copyFile(credsSrc, `${dataDir}/home/.claude/.credentials.json`);
+
+      // Create additional OpenClaw dirs the agent needs
+      const extraDirs = [
+        `${dataDir}/home/.openclaw/agents/main/sessions`,
+        `${dataDir}/home/.openclaw/logs`,
+        `${dataDir}/home/.openclaw/credentials`,
+        `${dataDir}/home/.openclaw/canvas`,
+        `${dataDir}/home/.openclaw/subagents`,
+      ];
+      for (const dir of extraDirs) {
+        await mkdir(dir, { recursive: true });
+        await chmod(dir, 0o777);
+      }
+
+      // Auth files need to be owned by agent user (uid 1001) inside the container.
+      // Since we can't chown as non-root, the entrypoint will handle ownership.
 
       // Write relay token to secrets
       await writeFile(`${dataDir}/secrets/relay-token`, relayToken, { encoding: 'utf8' });

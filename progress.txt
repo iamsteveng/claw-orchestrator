@@ -683,3 +683,16 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - Message delivery DELIVERED status: relay marks DELIVERED when CP returns 200 AND msgBody.ok===true. CP marks success when container returns 200 AND responseBody.ok===true. If openclaw inside container fails or returns ok:false, DELIVERED is never set. Fix: mark success/DELIVERED on HTTP 200 only (not requiring ok:true in body).
   - Dockerfile changed npm global prefix from /root/.npm-global to /usr/local (standard npm global location accessible to all users). Update TC-042 tests to match when Dockerfile is changed.
 ---
+
+## 2026-03-21 - US-045
+- What was implemented: Welcome DM when tenant becomes ACTIVE + slack_channel_id stored in message_queue
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (added welcome DM after tenant becomes ACTIVE, added slack_channel_id to messageQueue.create)
+  - prisma/schema.prisma (added slack_channel_id column to MessageQueue model)
+  - prisma/migrations/20260321143637_add_slack_channel_id_to_message_queue/migration.sql (new migration)
+  - prd.json (set passes: true for US-045)
+- **Learnings for future iterations:**
+  - The welcome DM "Your workspace is ready! You can start chatting now." should only be sent when the tenant was NOT already ACTIVE (i.e., we had to poll for it). Track wasAlreadyActive before the poll loop.
+  - The channel extracted from envelope.event?.channel ?? slackUserId is now stored as slack_channel_id in message_queue for proper routing of responses.
+  - Most of the message delivery infrastructure was already implemented; only the welcome message and channel_id storage were missing.
+---
