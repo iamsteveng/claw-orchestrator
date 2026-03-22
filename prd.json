@@ -1,26 +1,31 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "fix/deployment-issues",
-  "description": "Welcome message + message delivery after tenant ACTIVE",
+  "branchName": "feat/systemd-services",
+  "description": "Set up systemd user services for reliable process management",
   "userStories": [
     {
-      "id": "US-045",
-      "title": "Send welcome Slack DM when tenant becomes ACTIVE and deliver subsequent messages to container",
-      "description": "As a Slack user, I want to receive a welcome message when my workspace is ready, and have my subsequent messages forwarded to the agent and responses sent back to me.",
+      "id": "US-046",
+      "title": "Set up systemd user services for control-plane, slack-relay, and scheduler",
+      "description": "As the operator, I want claw-orchestrator services managed by systemd so there are no zombie processes, port conflicts, or restart loops.",
       "acceptanceCriteria": [
-        "After health poll marks tenant ACTIVE, control plane (or relay) sends a Slack DM to the user: \"Your workspace is ready! You can start chatting now.\" using the SLACK_BOT_TOKEN via Slack chat.postMessage API",
-        "The welcome message is sent to the correct Slack channel (the DM channel from the original event)",
-        "Subsequent messages from the same user are forwarded to the tenant container via POST http://<container-ip>:3100/message with x-relay-token header",
-        "The container IP is resolved via docker inspect (not container name) since the host cannot resolve Docker container names",
-        "When the container message-server returns a response, the relay sends it back to the user via Slack chat.postMessage",
-        "The message_queue row is updated to status=DELIVERED after successful forwarding",
-        "The Slack channel_id from the original event must be stored in the message_queue or tenant record so the response can be sent to the correct DM",
-        "pnpm build succeeds",
+        "Create 3 systemd user service files in deploy/systemd/ (or ~/.config/systemd/user/): claw-control-plane.service, claw-slack-relay.service, claw-scheduler.service",
+        "Control plane service: ExecStart=node apps/control-plane/dist/index.js, WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator, EnvironmentFile pointing to .env, Restart=on-failure, RestartSec=5",
+        "Slack relay service: same pattern, After=claw-control-plane.service so it starts after control plane",
+        "Scheduler service: same pattern, independent ordering",
+        "Environment file at deploy/systemd/claw-orchestrator.env with all required env vars in systemd-compatible format (KEY=value, no export, no inline comments). Include: CONTROL_PLANE_PORT=3200, SLACK_RELAY_PORT=3101, DATABASE_URL, DATA_DIR, TENANT_IMAGE, TEMPLATES_DIR, SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, CONTROL_PLANE_URL, SCHEDULER_INTERVAL_MS, IDLE_STOP_HOURS, LOG_LEVEL, NODE_ENV=production",
+        "Create scripts/install-systemd.sh that: copies service files to ~/.config/systemd/user/, copies env file, runs loginctl enable-linger ubuntu, runs systemctl --user daemon-reload, enables and starts all 3 services",
+        "Create scripts/stop-services.sh that stops all 3 via systemctl --user stop",
+        "Update scripts/start-services.sh to use systemctl --user start (not nohup node)",
+        "After install: systemctl --user status claw-control-plane shows active (running)",
+        "After install: systemctl --user status claw-slack-relay shows active (running)",
+        "After install: curl http://localhost:3200/health returns ok",
+        "After install: curl http://localhost:3101/health returns ok",
+        "Kill any existing zombie/orphan node dist/index.js processes before installing",
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": true,
-      "notes": "The SLACK_BOT_TOKEN is available in the relay env vars. The relay already has the Slack SDK or can use fetch to call chat.postMessage. The container message-server.js uses openclaw agent --local --agent main --message TEXT --json --timeout 120. Store the slack_channel_id on the tenant record or message_queue so responses can be routed back."
+      "passes": false,
+      "notes": "Use systemd USER services (not system-level) to match OpenClaw gateway pattern. The working directory is /home/ubuntu/.openclaw/workspace/claw-orchestrator. Node binary is at /usr/bin/node or use the full path from which node. SLACK_SIGNING_SECRET=<from .env> and SLACK_BOT_TOKEN=<from .env>."
     }
   ]
 }
