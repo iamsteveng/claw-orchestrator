@@ -24,7 +24,7 @@
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Use systemd USER services (not system-level) to match OpenClaw gateway pattern. The working directory is /home/ubuntu/.openclaw/workspace/claw-orchestrator. Node binary is at /usr/bin/node or use the full path from which node. SLACK_SIGNING_SECRET=<from .env> and SLACK_BOT_TOKEN=<from .env>."
     }
   ]
