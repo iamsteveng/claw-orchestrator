@@ -102,9 +102,9 @@ beforeAll(async () => {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
     shell: false,
-    cwd: '/home/ubuntu/.openclaw/workspace/claw-orchestrator',
+    cwd: process.cwd(),
   });
-  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + String(result.stderr ?? result.stdout ?? 'unknown error'));
 
   prisma = new PrismaClient({ datasourceUrl: dbUrl });
   await prisma.$connect();
@@ -194,6 +194,11 @@ describe('TC-032: Message forwarding → disk quota exceeded → 507', () => {
     ).toSatisfy((s: number) => s === 200 || s === 202);
 
     // Flush microtask queue so pollUntilHealthy mock completes
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
     await new Promise<void>((resolve) => setImmediate(resolve));
     await new Promise<void>((resolve) => setImmediate(resolve));
     await new Promise<void>((resolve) => setImmediate(resolve));
