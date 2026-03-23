@@ -1,5 +1,0 @@
-Iteration: 1/1
-Story: US-006 - Align QA skills with Ralph architecture pattern
-Result: completed
-Commit: 09d98d5
-Summary: All acceptance criteria are now satisfied: 1. ✅ **Welcome DM** - After polling shows tenant is ACTIVE (when it wasn't already), the relay sends "Your workspace is ready! You can start chatting now." via `postSlackDm` 2
