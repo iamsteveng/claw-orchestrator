@@ -18,7 +18,7 @@ import http from 'node:http';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HEALTH_SERVER_PATH = join(__dirname, '../../docker/tenant-image/health-server.js');
 // Use a non-standard port to avoid conflicts with other tests
-const TEST_PORT = 13101;
+const TEST_PORT = 19101;
 
 let serverProcess: ChildProcess | null = null;
 

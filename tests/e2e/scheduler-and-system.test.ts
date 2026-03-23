@@ -30,7 +30,7 @@ import { reapMessageQueue, sweepStaleLocks } from '../../apps/scheduler/src/reap
 import { buildDockerRunOptions } from '../../apps/control-plane/src/docker-run-options.js';
 
 const TEST_DATA_DIR = process.env.DATA_DIR ?? '/tmp/claw-test-tenants';
-const REPO_ROOT = '/home/ubuntu/.openclaw/workspace/claw-orchestrator';
+const REPO_ROOT = process.cwd();
 
 let prisma: PrismaClient;
 let tempDbPath: string;
@@ -50,7 +50,7 @@ beforeAll(async () => {
     shell: false,
     cwd: REPO_ROOT,
   });
-  if (result.status !== 0) throw new Error('prisma db push failed: ' + String(result.stderr ?? result.stdout ?? 'unknown error'));
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + String(result.stderr?.toString() ?? result.stdout?.toString() ?? 'unknown error') + ' status=' + result.status);
 
   prisma = new PrismaClient({ datasourceUrl: dbUrl });
   await prisma.$connect();
