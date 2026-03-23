@@ -11,12 +11,13 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, existsSync, writeFileSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
 import { spawn, ChildProcess } from 'node:child_process';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import os from 'node:os';
 
-const REPO_ROOT = '/home/ubuntu/.openclaw/workspace/claw-orchestrator';
-const MESSAGE_SERVER_PATH = join(REPO_ROOT, 'docker/tenant-image/message-server.js');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MESSAGE_SERVER_PATH = join(__dirname, '../../docker/tenant-image/message-server.js');
 const TEST_PORT = 13100;
 const TEST_RELAY_TOKEN = 'test-relay-token-tc039';
 

@@ -1,54 +1,54 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/docker-compose-verified",
-  "description": "Verify and fix the Docker Compose test stack until all services start healthy and the full unit+integration test suite passes",
+  "branchName": "ralph/fix-test-portability",
+  "description": "Fix test suite portability so all tests pass on any host, not just the dev machine",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Docker Compose stack starts healthy",
-      "description": "As a developer, I want `docker compose -f docker/docker-compose.test.yml up --build -d` to result in all three services (control-plane, slack-relay, scheduler) running healthy with no crashes.",
+      "title": "Fix npx PATH issue in vitest worker threads",
+      "description": "As a developer, I want `pnpm test` to pass on any Linux host without npx PATH issues in vitest workers.",
       "acceptanceCriteria": [
-        "`docker compose -f docker/docker-compose.test.yml up --build -d` exits code 0",
-        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-cp-test as healthy",
-        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-relay-test as healthy",
-        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-scheduler-test as running (no exit/restart)",
-        "`curl -s http://localhost:13200/health` returns `{\"ok\":true,...}`",
-        "`curl -s http://localhost:13101/health` returns `{\"ok\":true,...}`",
-        "docker logs claw-cp-test shows no Fatal/Error lines",
-        "docker logs claw-relay-test shows no Fatal/Error lines",
-        "Tear down with `docker compose -f docker/docker-compose.test.yml down -v` exits code 0",
-        "Typecheck passes"
+        "All tests that currently fail with `spawnSync /bin/sh ENOENT` or `npx: not found` pass cleanly",
+        "The fix applies to all test files that call `execSync('npx prisma db push ...')` — replace with the full prisma binary path or use the `PATH` env from `process.env.PATH`",
+        "The pattern to use: `execSync('npx prisma db push --skip-generate', { env: { ...process.env }, ... })` already passes `process.env` — the issue is that `npx` resolves via PATH but vitest workers may not inherit it. Fix: replace `npx prisma` with `node_modules/.bin/prisma` (relative to the repo root) which is always present regardless of PATH. Use `path.join(process.cwd(), 'node_modules/.bin/prisma')` or the pattern `$(npm root)/.bin/prisma`.",
+        "All previously-passing tests still pass",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "The stack is nearly working. The last known state: control-plane and slack-relay were marked healthy, scheduler was running. The Dockerfile uses node:22-bookworm-slim as base with openssl installed. Prisma client copy-all strategy (`find /app/node_modules/.pnpm -path '*/@prisma+client@*/node_modules/.prisma/client' -type d -exec sh -c 'cp -r ...' ...`) is the current approach in docker/Dockerfile. The compose file uses ports 13200:3200 and 13101:3101 to avoid conflicts with the live host services on 3200/3101. DATABASE_URL is file:/data/tenants/orchestrator.db inside containers. The DATABASE_URL in the project .env must NOT override this in compose — the compose file sets DATABASE_URL in the environment block explicitly. Run `docker compose -f docker/docker-compose.test.yml down -v` before each test attempt to ensure a clean state."
+      "notes": "Failing tests all call `execSync('npx prisma db push --skip-generate', { env: { ...process.env }, stdio: 'pipe' })`. The fix is to replace `npx prisma` with the direct binary: `path.join(process.cwd(), 'node_modules/.bin/prisma')` which works regardless of PATH. Files to fix: tests/e2e/*.test.ts, tests/integration/tc-005.test.ts, tests/integration/tc-008.test.ts, tests/integration/tc-009.test.ts, tests/integration/tc-010.test.ts, tests/integration/tc-014.test.ts, tests/integration/tc-016.test.ts, tests/integration/tc-021.test.ts, tests/integration/tc-022.test.ts, tests/integration/tc-029.test.ts and any others with the same pattern. Use `grep -rn 'npx prisma' tests/` to find all occurrences."
     },
     {
       "id": "US-002",
-      "title": "Full test suite passes on host",
-      "description": "As a developer, I want `pnpm test` (the full vitest test suite) to pass with no failures after all Dockerfile and source changes are committed.",
+      "title": "Fix hardcoded absolute paths in tc-038 and tc-039",
+      "description": "As a developer, I want tc-038 and tc-039 to work on any host, not just the dev machine at /home/ubuntu/.openclaw/workspace/claw-orchestrator/.",
       "acceptanceCriteria": [
-        "`pnpm test` exits code 0",
-        "No test files report failures",
-        "Typecheck passes"
+        "tc-038 and tc-039 pass on any host where the repo is checked out",
+        "Hardcoded path `/home/ubuntu/.openclaw/workspace/claw-orchestrator/docker/tenant-image/` replaced with a dynamic path using `path.resolve(__dirname, '../../docker/tenant-image/')` or equivalent `import.meta.url`-based resolution",
+        "All previously-passing tests still pass",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "The test suite runs on the host (not inside Docker). Run from /home/ubuntu/.openclaw/workspace/claw-orchestrator. Tests use SQLite in /tmp and mock Docker — they do not need the Docker Compose stack to be up. If tests were passing before this branch, they should still pass. Fix any regressions introduced by the type annotation changes to app-factory.ts."
+      "notes": "tc-038 reads `health-server.js` and tc-039 reads `message-server.js` from `docker/tenant-image/`. The current HEALTH_SERVER_PATH and MESSAGE_SERVER_PATH constants are hardcoded to `/home/ubuntu/.openclaw/workspace/claw-orchestrator/docker/tenant-image/...`. Fix: use `path.resolve(__dirname, '../../../docker/tenant-image/health-server.js')` (adjust relative levels based on file location in tests/integration/)."
     },
     {
       "id": "US-003",
-      "title": "Dockerfile and compose changes committed and pushed",
-      "description": "As a developer, I want all working Dockerfile and docker-compose.test.yml changes committed to the branch and pushed to the PR.",
+      "title": "Verify full test suite passes and push",
+      "description": "As a developer, I want `pnpm test` to exit 0 with all tests passing, committed and pushed.",
       "acceptanceCriteria": [
-        "git status shows clean working tree",
-        "git log shows commits for all Dockerfile and compose fixes",
-        "git push origin ralph/docker-compose-and-contract-tests succeeds",
-        "Typecheck passes"
+        "`pnpm test` exits code 0",
+        "No test files report failures",
+        "All changes committed with descriptive message",
+        "Branch pushed to origin",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Branch is ralph/docker-compose-and-contract-tests. Remote is origin (https://github.com/iamsteveng/claw-orchestrator.git). PR #7 already exists for this branch."
+      "notes": "Target branch: ralph/fix-test-portability. After fixing, run `pnpm test` to confirm. Then commit and push."
     }
   ]
 }

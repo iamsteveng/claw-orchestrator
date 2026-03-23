@@ -126,7 +126,7 @@ beforeAll(async () => {
 
   await mkdir(TEST_DATA_DIR, { recursive: true });
 
-  execSync('npx prisma db push --skip-generate', {
+  execSync(`${process.cwd()}/node_modules/.bin/prisma db push --skip-generate`, {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
     cwd: '/home/ubuntu/.openclaw/workspace/claw-orchestrator',

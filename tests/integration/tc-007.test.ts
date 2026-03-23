@@ -56,7 +56,7 @@ beforeAll(async () => {
   await mkdir(TEST_DATA_DIR, { recursive: true });
 
   // Apply Prisma schema to temp DB
-  execSync('npx prisma db push --skip-generate', {
+  execSync(`${process.cwd()}/node_modules/.bin/prisma db push --skip-generate`, {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
   });
