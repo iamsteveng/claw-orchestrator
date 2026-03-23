@@ -50,7 +50,7 @@ beforeAll(async () => {
     shell: false,
     cwd: REPO_ROOT,
   });
-  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + String(result.stderr ?? result.stdout ?? 'unknown error'));
 
   prisma = new PrismaClient({ datasourceUrl: dbUrl });
   await prisma.$connect();

@@ -61,7 +61,7 @@ beforeAll(async () => {
     stdio: 'pipe',
     shell: false,
   });
-  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + String(result.stderr ?? result.stdout ?? 'unknown error'));
 
   // Create PrismaClient pointing at test DB
   prisma = new PrismaClient({ datasourceUrl: dbUrl });

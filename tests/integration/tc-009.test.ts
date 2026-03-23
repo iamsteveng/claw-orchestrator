@@ -101,9 +101,9 @@ beforeAll(async () => {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
     shell: false,
-    cwd: '/home/ubuntu/.openclaw/workspace/claw-orchestrator',
+    cwd: process.cwd(),
   });
-  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + String(result.stderr ?? result.stdout ?? 'unknown error'));
 
   prisma = new PrismaClient({ datasourceUrl: dbUrl });
   await prisma.$connect();
