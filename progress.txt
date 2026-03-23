@@ -799,3 +799,11 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - Three variants existed: with cwd option (most), without cwd, and with REPO_ROOT constant for cwd
   - All 78 test files pass after the change (507 tests total)
 ---
+
+## 2026-03-23 - US-002
+- What was implemented: Verified 78/78 tests pass and pushed branch to origin
+- Files changed: prd.json (marked US-002 passes: true)
+- **Learnings for future iterations:**
+  - `pnpm test` exits 0 with 507 tests passing across 78 test files after spawnSync fix
+  - Branch successfully pushed to origin/ralph/fix-test-portability-ec2
+---
