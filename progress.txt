@@ -715,3 +715,14 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - For user services, omit User= directive (they run as the installing user)
   - Restart=on-failure is the spec-required value (not Restart=always)
 ---
+
+## 2026-03-23 - US-001 (ralph/docker-compose-and-contract-tests)
+- What was implemented: Fixed silent errors in postSlackDm by adding error logging for conversations.open and chat.postMessage failures
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (added Logger type, log? parameter to postSlackDm, log errors on failure, updated all call sites)
+  - apps/slack-relay/src/post-slack-dm.test.ts (new: 5 unit tests covering open failure, postMessage failure, success, no logger)
+- **Learnings for future iterations:**
+  - postSlackDm now accepts optional `log?: { error: (ctx: object, msg: string) => void }` as 5th argument
+  - All call sites inside processSlackEventWithConfig pass the existing `log` object
+  - chat.postMessage response body must be awaited and checked for ok:false to surface Slack API errors
+---

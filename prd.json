@@ -1,31 +1,79 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "feat/systemd-services",
-  "description": "Set up systemd user services for reliable process management",
+  "branchName": "ralph/docker-compose-and-contract-tests",
+  "description": "Docker Compose test environment + module contract tests + silent error fixes",
   "userStories": [
     {
-      "id": "US-046",
-      "title": "Set up systemd user services for control-plane, slack-relay, and scheduler",
-      "description": "As the operator, I want claw-orchestrator services managed by systemd so there are no zombie processes, port conflicts, or restart loops.",
+      "id": "US-001",
+      "title": "Fix silent error in postSlackDm",
+      "description": "As an operator, I want postSlackDm failures to be logged so I can diagnose delivery issues.",
       "acceptanceCriteria": [
-        "Create 3 systemd user service files in deploy/systemd/ (or ~/.config/systemd/user/): claw-control-plane.service, claw-slack-relay.service, claw-scheduler.service",
-        "Control plane service: ExecStart=node apps/control-plane/dist/index.js, WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator, EnvironmentFile pointing to .env, Restart=on-failure, RestartSec=5",
-        "Slack relay service: same pattern, After=claw-control-plane.service so it starts after control plane",
-        "Scheduler service: same pattern, independent ordering",
-        "Environment file at deploy/systemd/claw-orchestrator.env with all required env vars in systemd-compatible format (KEY=value, no export, no inline comments). Include: CONTROL_PLANE_PORT=3200, SLACK_RELAY_PORT=3101, DATABASE_URL, DATA_DIR, TENANT_IMAGE, TEMPLATES_DIR, SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, CONTROL_PLANE_URL, SCHEDULER_INTERVAL_MS, IDLE_STOP_HOURS, LOG_LEVEL, NODE_ENV=production",
-        "Create scripts/install-systemd.sh that: copies service files to ~/.config/systemd/user/, copies env file, runs loginctl enable-linger ubuntu, runs systemctl --user daemon-reload, enables and starts all 3 services",
-        "Create scripts/stop-services.sh that stops all 3 via systemctl --user stop",
-        "Update scripts/start-services.sh to use systemctl --user start (not nohup node)",
-        "After install: systemctl --user status claw-control-plane shows active (running)",
-        "After install: systemctl --user status claw-slack-relay shows active (running)",
-        "After install: curl http://localhost:3200/health returns ok",
-        "After install: curl http://localhost:3101/health returns ok",
-        "Kill any existing zombie/orphan node dist/index.js processes before installing",
-        "Typecheck passes"
+        "postSlackDm catches errors and calls log.error({ err }, 'Failed to send Slack DM') instead of swallowing them",
+        "postSlackDm accepts an optional logger argument (or uses a module-level logger fallback) so tests can verify the log call",
+        "Unit test added: postSlackDm logs error when conversations.open fails",
+        "Unit test added: postSlackDm logs error when chat.postMessage fails",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Use systemd USER services (not system-level) to match OpenClaw gateway pattern. The working directory is /home/ubuntu/.openclaw/workspace/claw-orchestrator. Node binary is at /usr/bin/node or use the full path from which node. SLACK_SIGNING_SECRET=<from .env> and SLACK_BOT_TOKEN=<from .env>."
+      "notes": "postSlackDm is in apps/slack-relay/src/app-factory.ts. Currently returns silently when openBody.ok is false — no log emitted."
+    },
+    {
+      "id": "US-002",
+      "title": "Add error logging throughout relay message forwarding flow",
+      "description": "As an operator, I want all silent failures in the relay's message processing (Steps 4 and 5) to emit log.error so I can trace broken delivery chains.",
+      "acceptanceCriteria": [
+        "Step 4 (Prisma enqueue): wrap in try/catch, log.error on failure with { err, tenantId, slackEventId }",
+        "Step 5 (forward to control plane): existing catch block already has log.warn — upgrade to log.error and include response status + body when available",
+        "Any fetch to the CP message endpoint that returns non-2xx logs the status code and response body",
+        "Unit test added: relay logs error when Prisma enqueue throws",
+        "Unit test added: relay logs error when CP message endpoint returns 500",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "processSlackEventWithConfig is in apps/slack-relay/src/app-factory.ts. Steps 4 and 5 are around lines 164-283."
+    },
+    {
+      "id": "US-003",
+      "title": "Add contract test for relay → control plane message endpoint",
+      "description": "As a developer, I want an integration test that verifies the relay correctly calls POST /v1/tenants/:tenantId/message with the expected payload and headers.",
+      "acceptanceCriteria": [
+        "Test spins up a real buildSlackRelayApp instance + an in-process HTTP mock server (not a real control plane)",
+        "Mock CP server verifies: correct path /v1/tenants/<tenantId>/message, method POST, header x-relay-token present",
+        "Test sends a Slack event via POST /slack/events and asserts the mock CP received the forwarded message",
+        "Test covers the case where CP returns 200 (success path)",
+        "Test covers the case where CP returns 500 (error is logged, relay does not crash)",
+        "Test file: tests/integration/relay-to-cp-contract.test.ts",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "Use existing pattern from tests/integration/control-plane.test.ts for building the app. Mock fetch or spin a real HTTP server for the CP side."
+    },
+    {
+      "id": "US-004",
+      "title": "Create docker-compose.test.yml for full stack local testing",
+      "description": "As a developer, I want a docker-compose.test.yml that brings up control-plane, slack-relay, and scheduler in isolated containers so I can test the full message delivery chain without host interference.",
+      "acceptanceCriteria": [
+        "File created at docker/docker-compose.test.yml",
+        "Services: control-plane (port 3200), slack-relay (port 3101), scheduler — all built from the monorepo Dockerfile or a new multi-stage Dockerfile at docker/Dockerfile",
+        "control-plane mounts /var/run/docker.sock so it can start tenant containers",
+        "slack-relay depends_on control-plane with condition: service_healthy",
+        "control-plane has a healthcheck: curl -f http://localhost:3200/health",
+        "slack-relay has a healthcheck: curl -f http://localhost:3101/health",
+        "All services use env_file: ../../.env (relative to docker/ dir) or accept env vars via environment block with sensible defaults",
+        "A volume named tenant-data is defined and mounted at /data/tenants in control-plane",
+        "A README section or comment block in the compose file documents: how to build, how to run (docker compose -f docker/docker-compose.test.yml up --build), how to tear down",
+        "docker compose -f docker/docker-compose.test.yml config passes (valid YAML, no schema errors)",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "The monorepo has no root Dockerfile yet. You may need to create docker/Dockerfile as a multi-stage build (build stage: pnpm install + tsc; runtime stage: copy dist). Reference docker/tenant-image/Dockerfile for patterns. The compose file should NOT embed secrets — use env_file or runtime env vars."
     }
   ]
 }
