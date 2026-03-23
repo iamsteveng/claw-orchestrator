@@ -40,6 +40,7 @@ services:
       - DATA_DIR=/data/tenants
       - CONTROL_PLANE_PORT=3200
       - LOG_LEVEL=info
+      - NODE_ENV=production
     env_file:
       - ../.env
     volumes:
@@ -47,6 +48,11 @@ services:
       - tenant-data:/data/tenants
       # Bind-mount Docker socket so control-plane can manage tenant containers
       - /var/run/docker.sock:/var/run/docker.sock
+      # Auth files for tenant provisioning (read-only)
+      - /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json:ro
+      - /home/ubuntu/.claude/.credentials.json:/root/.claude/.credentials.json:ro
+      # Workspace templates (read-only)
+      - /opt/claw-orchestrator/templates:/opt/claw-orchestrator/templates:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3200/health"]
       interval: 10s
@@ -69,6 +75,7 @@ services:
       - SLACK_RELAY_PORT=3101
       - CONTROL_PLANE_URL=http://control-plane:3200
       - LOG_LEVEL=info
+      - NODE_ENV=production
     env_file:
       - ../.env
     depends_on:
@@ -95,6 +102,7 @@ services:
       - DATA_DIR=/data/tenants
       - CONTROL_PLANE_URL=http://control-plane:3200
       - LOG_LEVEL=info
+      - NODE_ENV=production
     env_file:
       - ../.env
     volumes:
