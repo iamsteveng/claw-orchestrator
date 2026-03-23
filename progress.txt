@@ -758,3 +758,19 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - `docker compose -f docker/docker-compose.test.yml config` validates YAML without starting anything
   - context must be `..` (repo root) when the Dockerfile is in docker/ subdirectory
 ---
+
+## 2026-03-23 - US-001, US-002, US-003
+- What was implemented: Docker Compose stack verified healthy, full test suite passing, all changes committed and pushed
+- Files changed:
+  - docker/Dockerfile: changed runtime-base FROM to reuse `base` stage (avoids Prisma peer dep mismatch between full and prod installs), added openssl install, added `find .pnpm -path '*/@prisma+client@*' ... cp -r` to copy generated Prisma client into all virtual store paths
+  - docker/docker-compose.test.yml: ports 13200:3200, 13101:3101, explicit DATABASE_URL env override
+  - docker/tenant-image/entrypoint.sh: changed .credentials.json check from WARNING to `exit 1` with 'bind-mounted' error message (required by TC-041 tests)
+  - apps/control-plane/src/docker-run-options.ts: restored auth-profiles.json and .credentials.json in readOnlyBindMounts (TC-011 and docker-run-options.test.ts require these bind mounts)
+  - tests/integration/tc-015.test.ts: increased setImmediate flushes from 2 to 4 to reliably drain Prisma async chain after `void pollUntilHealthy()` in the TENANT_STARTED test (was flaky with 2 flushes)
+  - prd.json: marked all 3 stories as passing
+- **Learnings for future iterations:**
+  - `FROM base AS runtime-base` (reusing the full install stage) avoids Prisma peer dep hash mismatches vs doing a separate `--prod` install; the full node_modules is larger but reliable
+  - `find /app/node_modules/.pnpm -path '*/@prisma+client@*/node_modules/.prisma/client' -type d -exec sh -c 'cp -r /app/node_modules/.prisma/client/* "$1/"' _ {} \;` copies generated Prisma client into ALL pnpm virtual store locations to handle path differences between build and runtime resolution
+  - auth-profiles.json and .credentials.json must be in readOnlyBindMounts (not copied during provisioning) — tests TC-011, TC-041, and docker-run-options.test.ts all assert this
+  - TC-015 TENANT_STARTED test needs 4 setImmediate flushes (not 2) because Prisma awaits chain (tenant.update → auditLog.create) requires more event loop turns to complete
+---
