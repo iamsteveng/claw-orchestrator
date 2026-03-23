@@ -199,12 +199,16 @@ export async function processSlackEventWithConfig(
         },
       });
       messageQueueId = row.id;
-    } catch {
-      // Duplicate slackEventId — ignore (idempotency)
+    } catch (err) {
+      // Check if this is a duplicate slackEventId (idempotency) or a real error
       const existing = await prisma.messageQueue.findUnique({
         where: { slack_event_id: slackEventId },
       });
-      if (existing) messageQueueId = existing.id;
+      if (existing) {
+        messageQueueId = existing.id;
+      } else {
+        log.error({ err, tenantId, slackEventId }, 'Failed to enqueue message in Prisma');
+      }
     }
   }
 
@@ -258,7 +262,11 @@ export async function processSlackEventWithConfig(
     clearTimeout(interimTimer);
     clearTimeout(deliveryTimerId);
 
-    if (msgRes.ok) {
+    if (!msgRes.ok) {
+      let errBody: unknown;
+      try { errBody = await msgRes.json(); } catch { /* ignore parse error */ }
+      log.error({ tenantId, slackEventId, status: msgRes.status, body: errBody }, 'CP message endpoint returned non-2xx');
+    } else if (msgRes.ok) {
       const msgBody = await msgRes.json() as { ok?: boolean; response?: string; blocks?: unknown[] | null };
 
       // Mark DELIVERED: CP returned 200 = message was forwarded to the container runtime
@@ -291,7 +299,7 @@ export async function processSlackEventWithConfig(
     clearTimeout(interimTimer);
     clearTimeout(deliveryTimerId);
     await postSlackDm(slackUserId, "I'm still working on this. I'll follow up when complete.", config.SLACK_BOT_TOKEN, fetchFn, log);
-    log.warn({ err, tenantId, slackEventId }, 'Failed to forward message to tenant');
+    log.error({ err, tenantId, slackEventId }, 'Failed to forward message to tenant');
   }
 
   log.info({ tenantId, slackEventId }, 'Slack event processed');
