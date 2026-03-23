@@ -41,11 +41,14 @@ export interface SlackEventEnvelope {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
+type Logger = { error: (ctx: object, msg: string) => void };
+
 export async function postSlackDm(
   userId: string,
   text: string,
   token: string,
   fetchFn: typeof fetch = fetch,
+  log?: Logger,
 ): Promise<void> {
   const openRes = await fetchFn('https://slack.com/api/conversations.open', {
     method: 'POST',
@@ -55,10 +58,13 @@ export async function postSlackDm(
     },
     body: JSON.stringify({ users: userId }),
   });
-  const openBody = await openRes.json() as { ok: boolean; channel?: { id: string } };
-  if (!openBody.ok || !openBody.channel?.id) return;
+  const openBody = await openRes.json() as { ok: boolean; channel?: { id: string }; error?: string };
+  if (!openBody.ok || !openBody.channel?.id) {
+    log?.error({ userId, slackError: openBody.error }, 'Failed to send Slack DM: conversations.open failed');
+    return;
+  }
 
-  await fetchFn('https://slack.com/api/chat.postMessage', {
+  const postRes = await fetchFn('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -66,6 +72,10 @@ export async function postSlackDm(
     },
     body: JSON.stringify({ channel: openBody.channel.id, text }),
   });
+  const postBody = await postRes.json() as { ok: boolean; error?: string };
+  if (!postBody.ok) {
+    log?.error({ userId, slackError: postBody.error }, 'Failed to send Slack DM: chat.postMessage failed');
+  }
 }
 
 const ACTIVE_POLL_INTERVAL_MS = 2000;
@@ -106,6 +116,7 @@ export async function processSlackEventWithConfig(
       'Thanks for your interest! This system is currently invite-only. Contact [admin contact] to request access.',
       config.SLACK_BOT_TOKEN,
       fetchFn,
+      log,
     );
     return;
   }
@@ -153,12 +164,12 @@ export async function processSlackEventWithConfig(
 
     if (currentStatus !== 'ACTIVE') {
       log.warn({ tenantId }, 'Tenant did not become ACTIVE within 3 minutes');
-      await postSlackDm(slackUserId, 'Your workspace is starting, please wait a moment and try again.', config.SLACK_BOT_TOKEN, fetchFn);
+      await postSlackDm(slackUserId, 'Your workspace is starting, please wait a moment and try again.', config.SLACK_BOT_TOKEN, fetchFn, log);
       return;
     }
 
     // Send welcome DM now that workspace is ready for the first time
-    await postSlackDm(slackUserId, 'Your workspace is ready! You can start chatting now.', config.SLACK_BOT_TOKEN, fetchFn);
+    await postSlackDm(slackUserId, 'Your workspace is ready! You can start chatting now.', config.SLACK_BOT_TOKEN, fetchFn, log);
   }
 
   // Step 4: Enqueue the message (PENDING) if prisma is available
@@ -212,7 +223,7 @@ export async function processSlackEventWithConfig(
 
   // 15-second interim timer: notify user we're working on it
   const interimTimer = setTimeout(() => {
-    void postSlackDm(slackUserId, '⏳ Working on it...', config.SLACK_BOT_TOKEN, fetchFn);
+    void postSlackDm(slackUserId, '⏳ Working on it...', config.SLACK_BOT_TOKEN, fetchFn, log);
   }, INTERIM_DELAY_MS);
 
   // Mark message as PROCESSING before forwarding
@@ -279,7 +290,7 @@ export async function processSlackEventWithConfig(
   } catch (err) {
     clearTimeout(interimTimer);
     clearTimeout(deliveryTimerId);
-    await postSlackDm(slackUserId, "I'm still working on this. I'll follow up when complete.", config.SLACK_BOT_TOKEN, fetchFn);
+    await postSlackDm(slackUserId, "I'm still working on this. I'll follow up when complete.", config.SLACK_BOT_TOKEN, fetchFn, log);
     log.warn({ err, tenantId, slackEventId }, 'Failed to forward message to tenant');
   }
 
