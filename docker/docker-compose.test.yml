@@ -1,0 +1,110 @@
+# docker-compose.test.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Full-stack test environment for Claw Orchestrator.
+# Brings up control-plane, slack-relay, and scheduler in isolated containers.
+#
+# Usage:
+#   Build and start all services:
+#     docker compose -f docker/docker-compose.test.yml up --build
+#
+#   Start in detached mode:
+#     docker compose -f docker/docker-compose.test.yml up --build -d
+#
+#   Tear down (removes containers, network):
+#     docker compose -f docker/docker-compose.test.yml down
+#
+#   Tear down and remove the named volume:
+#     docker compose -f docker/docker-compose.test.yml down -v
+#
+# Prerequisites:
+#   - Copy .env.example to .env at the repo root and fill in secrets
+#   - Ensure Docker is running and /var/run/docker.sock is accessible
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: claw-orchestrator-test
+
+services:
+
+  # ── Control Plane ────────────────────────────────────────────────────────────
+  control-plane:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: control-plane
+    image: claw-control-plane:test
+    container_name: claw-cp-test
+    ports:
+      - "13200:3200"
+    environment:
+      - DATABASE_URL=file:/data/tenants/orchestrator.db
+      - DATA_DIR=/data/tenants
+      - CONTROL_PLANE_PORT=3200
+      - LOG_LEVEL=info
+    env_file:
+      - ../.env
+    volumes:
+      # Named volume for tenant data (containers, workspaces, etc.)
+      - tenant-data:/data/tenants
+      # Bind-mount Docker socket so control-plane can manage tenant containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Slack Relay ──────────────────────────────────────────────────────────────
+  slack-relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: slack-relay
+    image: claw-slack-relay:test
+    container_name: claw-relay-test
+    ports:
+      - "13101:3101"
+    environment:
+      - SLACK_RELAY_PORT=3101
+      - CONTROL_PLANE_URL=http://control-plane:3200
+      - LOG_LEVEL=info
+    env_file:
+      - ../.env
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3101/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Scheduler ────────────────────────────────────────────────────────────────
+  scheduler:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: scheduler
+    image: claw-scheduler:test
+    container_name: claw-scheduler-test
+    environment:
+      - DATABASE_URL=file:/data/tenants/orchestrator.db
+      - DATA_DIR=/data/tenants
+      - CONTROL_PLANE_URL=http://control-plane:3200
+      - LOG_LEVEL=info
+    env_file:
+      - ../.env
+    volumes:
+      - tenant-data:/data/tenants
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    restart: unless-stopped
+
+# ── Volumes ──────────────────────────────────────────────────────────────────
+volumes:
+  tenant-data:
+    name: claw-tenant-data-test

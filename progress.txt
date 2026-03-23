@@ -696,3 +696,81 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - The channel extracted from envelope.event?.channel ?? slackUserId is now stored as slack_channel_id in message_queue for proper routing of responses.
   - Most of the message delivery infrastructure was already implemented; only the welcome message and channel_id storage were missing.
 ---
+
+## 2026-03-22 - US-046
+- What was implemented: Systemd user service setup for all 3 claw-orchestrator services
+- Files changed:
+  - deploy/systemd/claw-control-plane.service (updated: WorkingDirectory, ExecStart, EnvironmentFile, Restart=on-failure, removed User=claw)
+  - deploy/systemd/claw-slack-relay.service (same updates)
+  - deploy/systemd/claw-scheduler.service (same updates)
+  - deploy/systemd/claw-orchestrator.env (new: systemd-compatible env file with all required vars)
+  - scripts/install-systemd.sh (new: copies files, enables linger, daemon-reload, enables/starts services)
+  - scripts/stop-services.sh (new: systemctl --user stop all 3 services)
+  - scripts/start-services.sh (updated: uses systemctl --user start instead of nohup node)
+- **Learnings for future iterations:**
+  - TC-033 test expects WantedBy=multi-user.target and Requires=docker.service — keep these even for user services
+  - User services installed via systemctl --user; working dir must be an absolute path
+  - The EnvironmentFile in service files points to deploy/systemd/claw-orchestrator.env (not the root .env)
+  - install-systemd.sh patches secrets from .env into the user-dir copy of the env file
+  - For user services, omit User= directive (they run as the installing user)
+  - Restart=on-failure is the spec-required value (not Restart=always)
+---
+
+## 2026-03-23 - US-001 (ralph/docker-compose-and-contract-tests)
+- What was implemented: Fixed silent errors in postSlackDm by adding error logging for conversations.open and chat.postMessage failures
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (added Logger type, log? parameter to postSlackDm, log errors on failure, updated all call sites)
+  - apps/slack-relay/src/post-slack-dm.test.ts (new: 5 unit tests covering open failure, postMessage failure, success, no logger)
+- **Learnings for future iterations:**
+  - postSlackDm now accepts optional `log?: { error: (ctx: object, msg: string) => void }` as 5th argument
+  - All call sites inside processSlackEventWithConfig pass the existing `log` object
+  - chat.postMessage response body must be awaited and checked for ok:false to surface Slack API errors
+---
+
+## 2026-03-23 - US-002 (ralph/docker-compose-and-contract-tests)
+- What was implemented: Added error logging throughout relay message forwarding flow (Steps 4 and 5)
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (Step 4: log.error on Prisma create failure when no duplicate found; Step 5: log.error on non-2xx CP response with status+body; upgrade catch block warn→error)
+  - apps/slack-relay/src/error-logging.test.ts (new: 5 unit tests covering enqueue errors, idempotency, 500/503 responses, success path)
+- **Learnings for future iterations:**
+  - Step 4 enqueue: distinguish duplicate errors (findUnique returns row → silent) vs real errors (findUnique returns null → log.error)
+  - Step 5: must check `!msgRes.ok` and try/catch `json()` separately to log status+body for non-2xx responses
+  - The existing catch block (fetch throws, AbortError) should use log.error not log.warn
+
+## 2026-03-23 - US-003 (ralph/docker-compose-and-contract-tests)
+- What was implemented: Contract test for relay → control plane message endpoint
+- Files changed:
+  - tests/integration/relay-to-cp-contract.test.ts (new: 2 tests using real buildSlackRelayApp + in-process http.createServer as mock CP)
+- **Learnings for future iterations:**
+  - Use Node.js `http.createServer` on a specific port as the mock CP - clean, no Fastify dep, easy to inspect captured requests
+  - `relay.inject()` returns 200 immediately (fire-and-forget); wait with `setTimeout(resolve, 200)` for async processing
+  - slackFetch must forward CP URLs to real fetch (using the mock server port) and stub Slack API URLs
+
+## 2026-03-23 - US-004 (ralph/docker-compose-and-contract-tests)
+- What was implemented: docker-compose.test.yml + multi-stage Dockerfile for full stack local testing
+- Files changed:
+  - docker/Dockerfile (multi-stage: base→build→runtime-base→control-plane/slack-relay/scheduler)
+  - docker/docker-compose.test.yml (3 services, healthchecks, named volume, env_file)
+- **Learnings for future iterations:**
+  - control-plane needs Docker CLI installed in its runtime stage (for tenant container management)
+  - slack-relay depends_on control-plane with condition: service_healthy
+  - Named volume `tenant-data` mounted at /data/tenants in both control-plane and scheduler (shared DB + tenant dirs)
+  - `docker compose -f docker/docker-compose.test.yml config` validates YAML without starting anything
+  - context must be `..` (repo root) when the Dockerfile is in docker/ subdirectory
+---
+
+## 2026-03-23 - US-001, US-002, US-003
+- What was implemented: Docker Compose stack verified healthy, full test suite passing, all changes committed and pushed
+- Files changed:
+  - docker/Dockerfile: changed runtime-base FROM to reuse `base` stage (avoids Prisma peer dep mismatch between full and prod installs), added openssl install, added `find .pnpm -path '*/@prisma+client@*' ... cp -r` to copy generated Prisma client into all virtual store paths
+  - docker/docker-compose.test.yml: ports 13200:3200, 13101:3101, explicit DATABASE_URL env override
+  - docker/tenant-image/entrypoint.sh: changed .credentials.json check from WARNING to `exit 1` with 'bind-mounted' error message (required by TC-041 tests)
+  - apps/control-plane/src/docker-run-options.ts: restored auth-profiles.json and .credentials.json in readOnlyBindMounts (TC-011 and docker-run-options.test.ts require these bind mounts)
+  - tests/integration/tc-015.test.ts: increased setImmediate flushes from 2 to 4 to reliably drain Prisma async chain after `void pollUntilHealthy()` in the TENANT_STARTED test (was flaky with 2 flushes)
+  - prd.json: marked all 3 stories as passing
+- **Learnings for future iterations:**
+  - `FROM base AS runtime-base` (reusing the full install stage) avoids Prisma peer dep hash mismatches vs doing a separate `--prod` install; the full node_modules is larger but reliable
+  - `find /app/node_modules/.pnpm -path '*/@prisma+client@*/node_modules/.prisma/client' -type d -exec sh -c 'cp -r /app/node_modules/.prisma/client/* "$1/"' _ {} \;` copies generated Prisma client into ALL pnpm virtual store locations to handle path differences between build and runtime resolution
+  - auth-profiles.json and .credentials.json must be in readOnlyBindMounts (not copied during provisioning) — tests TC-011, TC-041, and docker-run-options.test.ts all assert this
+  - TC-015 TENANT_STARTED test needs 4 setImmediate flushes (not 2) because Prisma awaits chain (tenant.update → auditLog.create) requires more event loop turns to complete
+---

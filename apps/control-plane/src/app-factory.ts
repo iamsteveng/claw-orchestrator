@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { type PrismaClient } from '@prisma/client';
+import { type PrismaClient, type Prisma } from '@prisma/client';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { createHash, randomBytes } from 'node:crypto';
@@ -712,7 +712,7 @@ export async function buildApp(
       orderBy: { created_at: 'desc' },
     });
     return reply.send({
-      images: images.map((img) => ({ ...img, created_at: Number(img.created_at) })),
+      images: images.map((img: { created_at: bigint | number; [key: string]: unknown }) => ({ ...img, created_at: Number(img.created_at) })),
     });
   });
 
@@ -730,7 +730,7 @@ export async function buildApp(
     const now = Date.now();
 
     // In a transaction: set all is_default=0, set target is_default=1
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Deprecate current defaults
       await tx.containerImage.updateMany({
         where: { is_default: 1, id: { not: id } },

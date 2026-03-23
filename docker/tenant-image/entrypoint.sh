@@ -21,7 +21,8 @@ fi
 # ── Claude Code credentials check ────────────────────────────────────────────
 CREDENTIALS_PATH="/home/agent/.claude/.credentials.json"
 if [ ! -f "${CREDENTIALS_PATH}" ] || [ ! -s "${CREDENTIALS_PATH}" ]; then
-  echo "WARNING: .credentials.json not found at ${CREDENTIALS_PATH}. Claude CLI may not work." >&2
+  echo "ERROR: .credentials.json is missing or empty. Claude CLI authentication will fail. Ensure ~/.claude/.credentials.json exists on the host and is bind-mounted." >&2
+  exit 1
 fi
 
 # ── Required directories ──────────────────────────────────────────────────────

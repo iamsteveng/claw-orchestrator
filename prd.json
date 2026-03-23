@@ -1,26 +1,54 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "fix/deployment-issues",
-  "description": "Welcome message + message delivery after tenant ACTIVE",
+  "branchName": "ralph/docker-compose-verified",
+  "description": "Verify and fix the Docker Compose test stack until all services start healthy and the full unit+integration test suite passes",
   "userStories": [
     {
-      "id": "US-045",
-      "title": "Send welcome Slack DM when tenant becomes ACTIVE and deliver subsequent messages to container",
-      "description": "As a Slack user, I want to receive a welcome message when my workspace is ready, and have my subsequent messages forwarded to the agent and responses sent back to me.",
+      "id": "US-001",
+      "title": "Docker Compose stack starts healthy",
+      "description": "As a developer, I want `docker compose -f docker/docker-compose.test.yml up --build -d` to result in all three services (control-plane, slack-relay, scheduler) running healthy with no crashes.",
       "acceptanceCriteria": [
-        "After health poll marks tenant ACTIVE, control plane (or relay) sends a Slack DM to the user: \"Your workspace is ready! You can start chatting now.\" using the SLACK_BOT_TOKEN via Slack chat.postMessage API",
-        "The welcome message is sent to the correct Slack channel (the DM channel from the original event)",
-        "Subsequent messages from the same user are forwarded to the tenant container via POST http://<container-ip>:3100/message with x-relay-token header",
-        "The container IP is resolved via docker inspect (not container name) since the host cannot resolve Docker container names",
-        "When the container message-server returns a response, the relay sends it back to the user via Slack chat.postMessage",
-        "The message_queue row is updated to status=DELIVERED after successful forwarding",
-        "The Slack channel_id from the original event must be stored in the message_queue or tenant record so the response can be sent to the correct DM",
-        "pnpm build succeeds",
+        "`docker compose -f docker/docker-compose.test.yml up --build -d` exits code 0",
+        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-cp-test as healthy",
+        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-relay-test as healthy",
+        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-scheduler-test as running (no exit/restart)",
+        "`curl -s http://localhost:13200/health` returns `{\"ok\":true,...}`",
+        "`curl -s http://localhost:13101/health` returns `{\"ok\":true,...}`",
+        "docker logs claw-cp-test shows no Fatal/Error lines",
+        "docker logs claw-relay-test shows no Fatal/Error lines",
+        "Tear down with `docker compose -f docker/docker-compose.test.yml down -v` exits code 0",
         "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "The SLACK_BOT_TOKEN is available in the relay env vars. The relay already has the Slack SDK or can use fetch to call chat.postMessage. The container message-server.js uses openclaw agent --local --agent main --message TEXT --json --timeout 120. Store the slack_channel_id on the tenant record or message_queue so responses can be routed back."
+      "notes": "The stack is nearly working. The last known state: control-plane and slack-relay were marked healthy, scheduler was running. The Dockerfile uses node:22-bookworm-slim as base with openssl installed. Prisma client copy-all strategy (`find /app/node_modules/.pnpm -path '*/@prisma+client@*/node_modules/.prisma/client' -type d -exec sh -c 'cp -r ...' ...`) is the current approach in docker/Dockerfile. The compose file uses ports 13200:3200 and 13101:3101 to avoid conflicts with the live host services on 3200/3101. DATABASE_URL is file:/data/tenants/orchestrator.db inside containers. The DATABASE_URL in the project .env must NOT override this in compose — the compose file sets DATABASE_URL in the environment block explicitly. Run `docker compose -f docker/docker-compose.test.yml down -v` before each test attempt to ensure a clean state."
+    },
+    {
+      "id": "US-002",
+      "title": "Full test suite passes on host",
+      "description": "As a developer, I want `pnpm test` (the full vitest test suite) to pass with no failures after all Dockerfile and source changes are committed.",
+      "acceptanceCriteria": [
+        "`pnpm test` exits code 0",
+        "No test files report failures",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "The test suite runs on the host (not inside Docker). Run from /home/ubuntu/.openclaw/workspace/claw-orchestrator. Tests use SQLite in /tmp and mock Docker — they do not need the Docker Compose stack to be up. If tests were passing before this branch, they should still pass. Fix any regressions introduced by the type annotation changes to app-factory.ts."
+    },
+    {
+      "id": "US-003",
+      "title": "Dockerfile and compose changes committed and pushed",
+      "description": "As a developer, I want all working Dockerfile and docker-compose.test.yml changes committed to the branch and pushed to the PR.",
+      "acceptanceCriteria": [
+        "git status shows clean working tree",
+        "git log shows commits for all Dockerfile and compose fixes",
+        "git push origin ralph/docker-compose-and-contract-tests succeeds",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Branch is ralph/docker-compose-and-contract-tests. Remote is origin (https://github.com/iamsteveng/claw-orchestrator.git). PR #7 already exists for this branch."
     }
   ]
 }

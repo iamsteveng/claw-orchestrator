@@ -13,11 +13,10 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=claw
-WorkingDirectory=/opt/claw-orchestrator/apps/scheduler
-EnvironmentFile=/opt/claw-orchestrator/.env
-ExecStart=/usr/bin/node dist/index.js
-Restart=always
+WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator
+EnvironmentFile=/home/ubuntu/.openclaw/workspace/claw-orchestrator/deploy/systemd/claw-orchestrator.env
+ExecStart=/usr/bin/node apps/scheduler/dist/index.js
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
