@@ -1,54 +1,38 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/fix-test-portability",
-  "description": "Fix test suite portability so all tests pass on any host, not just the dev machine",
+  "branchName": "ralph/fix-test-portability-ec2",
+  "description": "Fix remaining test failures on EC2: replace execSync shell spawning with direct spawnSync calls to avoid /bin/sh ENOENT in vitest workers",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix npx PATH issue in vitest worker threads",
-      "description": "As a developer, I want `pnpm test` to pass on any Linux host without npx PATH issues in vitest workers.",
+      "title": "Replace execSync prisma calls with spawnSync to avoid /bin/sh ENOENT",
+      "description": "As a developer, I want all tests to pass on EC2 Ubuntu 24.04 where vitest worker threads cannot find /bin/sh.",
       "acceptanceCriteria": [
-        "All tests that currently fail with `spawnSync /bin/sh ENOENT` or `npx: not found` pass cleanly",
-        "The fix applies to all test files that call `execSync('npx prisma db push ...')` — replace with the full prisma binary path or use the `PATH` env from `process.env.PATH`",
-        "The pattern to use: `execSync('npx prisma db push --skip-generate', { env: { ...process.env }, ... })` already passes `process.env` — the issue is that `npx` resolves via PATH but vitest workers may not inherit it. Fix: replace `npx prisma` with `node_modules/.bin/prisma` (relative to the repo root) which is always present regardless of PATH. Use `path.join(process.cwd(), 'node_modules/.bin/prisma')` or the pattern `$(npm root)/.bin/prisma`.",
-        "All previously-passing tests still pass",
+        "All test files that call `execSync(...)` with prisma are updated to use `spawnSync` with `shell: false` instead",
+        "The pattern to use: replace `execSync(\\`${process.cwd()}/node_modules/.bin/prisma db push --skip-generate\\`, { env: { ...process.env, DATABASE_URL: dbUrl }, stdio: 'pipe' })` with `const result = spawnSync(\\`${process.cwd()}/node_modules/.bin/prisma\\`, ['db', 'push', '--skip-generate'], { env: { ...process.env, DATABASE_URL: dbUrl }, stdio: 'pipe', shell: false }); if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString())`",
+        "Add `import { spawnSync } from 'node:child_process'` (or change the existing `execSync` import to include `spawnSync`) in every affected file",
+        "All 78 test files pass on the EC2 host at /opt/claw-orchestrator",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "Failing tests all call `execSync('npx prisma db push --skip-generate', { env: { ...process.env }, stdio: 'pipe' })`. The fix is to replace `npx prisma` with the direct binary: `path.join(process.cwd(), 'node_modules/.bin/prisma')` which works regardless of PATH. Files to fix: tests/e2e/*.test.ts, tests/integration/tc-005.test.ts, tests/integration/tc-008.test.ts, tests/integration/tc-009.test.ts, tests/integration/tc-010.test.ts, tests/integration/tc-014.test.ts, tests/integration/tc-016.test.ts, tests/integration/tc-021.test.ts, tests/integration/tc-022.test.ts, tests/integration/tc-029.test.ts and any others with the same pattern. Use `grep -rn 'npx prisma' tests/` to find all occurrences."
+      "notes": "Root cause: vitest worker threads on EC2 Ubuntu 24.04 m7g instances cannot find /bin/sh when execSync tries to spawn a shell. The fix is spawnSync with shell:false which bypasses /bin/sh entirely. Files affected: tests/e2e/*.test.ts and tests/integration/tc-005.test.ts, tc-008.test.ts, tc-009.test.ts, tc-010.test.ts, tc-014.test.ts, tc-016.test.ts, tc-021.test.ts, tc-022.test.ts, tc-024.test.ts, tc-027.test.ts, tc-028.test.ts, tc-029.test.ts, tc-030.test.ts, tc-031.test.ts, tc-032.test.ts and any others. Use `grep -rln 'execSync' tests/` to find all. The prisma binary path is already correct: `${process.cwd()}/node_modules/.bin/prisma`."
     },
     {
       "id": "US-002",
-      "title": "Fix hardcoded absolute paths in tc-038 and tc-039",
-      "description": "As a developer, I want tc-038 and tc-039 to work on any host, not just the dev machine at /home/ubuntu/.openclaw/workspace/claw-orchestrator/.",
+      "title": "Verify 78/78 tests pass and push",
+      "description": "As a developer, I want pnpm test to exit 0 on the EC2 host with all 78 test files passing.",
       "acceptanceCriteria": [
-        "tc-038 and tc-039 pass on any host where the repo is checked out",
-        "Hardcoded path `/home/ubuntu/.openclaw/workspace/claw-orchestrator/docker/tenant-image/` replaced with a dynamic path using `path.resolve(__dirname, '../../docker/tenant-image/')` or equivalent `import.meta.url`-based resolution",
-        "All previously-passing tests still pass",
+        "`pnpm test` exits code 0",
+        "Test Files: 78 passed (78)",
+        "All changes committed and pushed to origin",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "tc-038 reads `health-server.js` and tc-039 reads `message-server.js` from `docker/tenant-image/`. The current HEALTH_SERVER_PATH and MESSAGE_SERVER_PATH constants are hardcoded to `/home/ubuntu/.openclaw/workspace/claw-orchestrator/docker/tenant-image/...`. Fix: use `path.resolve(__dirname, '../../../docker/tenant-image/health-server.js')` (adjust relative levels based on file location in tests/integration/)."
-    },
-    {
-      "id": "US-003",
-      "title": "Verify full test suite passes and push",
-      "description": "As a developer, I want `pnpm test` to exit 0 with all tests passing, committed and pushed.",
-      "acceptanceCriteria": [
-        "`pnpm test` exits code 0",
-        "No test files report failures",
-        "All changes committed with descriptive message",
-        "Branch pushed to origin",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 3,
-      "passes": true,
-      "notes": "Target branch: ralph/fix-test-portability. After fixing, run `pnpm test` to confirm. Then commit and push."
+      "passes": false,
+      "notes": "Branch: ralph/fix-test-portability-ec2. Run `pnpm test` to confirm after fixes."
     }
   ]
 }

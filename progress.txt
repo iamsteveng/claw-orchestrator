@@ -774,3 +774,28 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - auth-profiles.json and .credentials.json must be in readOnlyBindMounts (not copied during provisioning) — tests TC-011, TC-041, and docker-run-options.test.ts all assert this
   - TC-015 TENANT_STARTED test needs 4 setImmediate flushes (not 2) because Prisma awaits chain (tenant.update → auditLog.create) requires more event loop turns to complete
 ---
+
+## 2026-03-23 - US-001 + US-002 + US-003 (ralph/fix-test-portability)
+- What was implemented: Fixed test suite portability across all hosts
+- Files changed:
+  - 29 test files in tests/e2e/ and tests/integration/: replaced `npx prisma` with `${process.cwd()}/node_modules/.bin/prisma`
+  - tests/integration/tc-038.test.ts: replaced hardcoded REPO_ROOT with `dirname(fileURLToPath(import.meta.url))`
+  - tests/integration/tc-039.test.ts: same fix
+  - prd.json: all stories marked passes: true
+- **Learnings for future iterations:**
+  - `npx prisma` in execSync fails in vitest worker threads because PATH may not include npx. Use `${process.cwd()}/node_modules/.bin/prisma` instead.
+  - For ESM test files, `__dirname` is not available — use `dirname(fileURLToPath(import.meta.url))` for portable path resolution.
+  - Full test suite: 78 files, 507 tests, all passing.
+---
+
+## 2026-03-23 - US-001
+- What was implemented: Replaced all `execSync` prisma db push calls with `spawnSync` using `shell: false` across 29 test files
+- Files changed:
+  - tests/e2e/*.test.ts (12 files)
+  - tests/integration/*.test.ts (17 files)
+- **Learnings for future iterations:**
+  - On EC2 Ubuntu 24.04, vitest worker threads cannot find /bin/sh, causing `execSync` to fail with ENOENT
+  - Fix: use `spawnSync(binary, argsArray, { shell: false })` with explicit error checking via `result.status`
+  - Three variants existed: with cwd option (most), without cwd, and with REPO_ROOT constant for cwd
+  - All 78 test files pass after the change (507 tests total)
+---

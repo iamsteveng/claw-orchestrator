@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { mkdir, rm, writeFile, access } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
@@ -92,11 +92,13 @@ beforeAll(async () => {
 
   await mkdir(TEST_DATA_DIR, { recursive: true });
 
-  execSync(`${process.cwd()}/node_modules/.bin/prisma db push --skip-generate`, {
+  const result = spawnSync(`${process.cwd()}/node_modules/.bin/prisma`, ['db', 'push', '--skip-generate'], {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
+    shell: false,
     cwd: '/home/ubuntu/.openclaw/workspace/claw-orchestrator',
   });
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
 
   // 2. Create PrismaClient
   prisma = new PrismaClient({ datasourceUrl: dbUrl });

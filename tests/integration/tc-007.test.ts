@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm, access } from 'node:fs/promises';
 import type { FastifyInstance } from 'fastify';
@@ -56,10 +56,12 @@ beforeAll(async () => {
   await mkdir(TEST_DATA_DIR, { recursive: true });
 
   // Apply Prisma schema to temp DB
-  execSync(`${process.cwd()}/node_modules/.bin/prisma db push --skip-generate`, {
+  const result = spawnSync(`${process.cwd()}/node_modules/.bin/prisma`, ['db', 'push', '--skip-generate'], {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
+    shell: false,
   });
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
 
   // Create PrismaClient pointing at test DB
   prisma = new PrismaClient({ datasourceUrl: dbUrl });
