@@ -22,6 +22,7 @@ import { PrismaClient } from '@prisma/client';
 import { spawnSync } from 'node:child_process';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
 import { mkdir, rm, readFile, access, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { buildApp as BuildAppFn } from '../../apps/control-plane/src/app-factory.js';
 import type { buildSlackRelayApp as BuildRelayFn } from '../../apps/slack-relay/src/app-factory.js';
@@ -309,7 +310,7 @@ describe('TC-001: First Slack message → tenant provisioned → container start
 
     // Write agent output evidence
     await writeFile(
-      '/home/ubuntu/.openclaw/workspace/claw-orchestrator/agent-output.txt',
+      path.join(process.cwd(), 'agent-output.txt'),
       `TC-001 Agent Output Evidence\n` +
       `============================\n` +
       `Tenant ID: ${expectedTenantId}\n` +
