@@ -11,11 +11,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { spawn, ChildProcess } from 'node:child_process';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 
-const REPO_ROOT = '/home/ubuntu/.openclaw/workspace/claw-orchestrator';
-const HEALTH_SERVER_PATH = join(REPO_ROOT, 'docker/tenant-image/health-server.js');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const HEALTH_SERVER_PATH = join(__dirname, '../../docker/tenant-image/health-server.js');
 // Use a non-standard port to avoid conflicts with other tests
 const TEST_PORT = 13101;
 
