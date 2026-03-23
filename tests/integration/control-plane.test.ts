@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -58,10 +58,12 @@ beforeAll(async () => {
   await mkdir(TEST_DATA_DIR, { recursive: true });
 
   // Apply schema via prisma db push
-  execSync(`${process.cwd()}/node_modules/.bin/prisma db push --skip-generate`, {
+  const result = spawnSync(`${process.cwd()}/node_modules/.bin/prisma`, ['db', 'push', '--skip-generate'], {
     env: { ...process.env, DATABASE_URL: dbUrl },
     stdio: 'pipe',
+    shell: false,
   });
+  if (result.status !== 0) throw new Error('prisma db push failed: ' + result.stderr?.toString());
 
   // Override DATABASE_URL env so controlPlaneConfig picks up the test DB
   // (Note: controlPlaneConfig is already loaded, but PrismaClient uses datasourceUrl directly)
