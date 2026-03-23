@@ -228,6 +228,259 @@ sudo systemctl reload caddy
 
 ---
 
+## Deploying on AWS EC2 (Recommended)
+
+This is the recommended deployment path for POC and production. Runs all three services in Docker Compose on a single EC2 instance, with a persistent EBS volume for data.
+
+### Infrastructure
+
+| Resource | Spec |
+|----------|------|
+| Instance | `t4g.small` (arm64, 2GB RAM) — upgrade to `t4g.2xlarge` for ~10 users |
+| OS | Ubuntu 24.04 LTS arm64 |
+| Root EBS | 20GB `gp3` (OS + Docker images) |
+| Data EBS | 20GB `gp3`, mounted at `/data` (SQLite DB + tenant workspaces — survives instance replacement) |
+| Elastic IP | Static IP — required so the Slack webhook URL never changes |
+| Domain | Use `<elastic-ip>.nip.io` (e.g. `54.12.34.56.nip.io`) — no DNS setup needed, works with Let's Encrypt |
+
+**Security group rules:**
+
+| Port | Protocol | Source | Purpose |
+|------|----------|--------|---------|
+| 22 | TCP | Your IP | SSH |
+| 80 | TCP | 0.0.0.0/0 | HTTP → HTTPS redirect (Caddy) |
+| 443 | TCP | 0.0.0.0/0 | HTTPS — Slack webhooks |
+
+Ports 3200 (control-plane) and 3101 (relay) stay internal — never expose them publicly.
+
+### Step 1: Launch the EC2 instance
+
+1. Launch `t4g.small` with Ubuntu 24.04 LTS arm64
+2. Attach your SSH key pair
+3. Attach the security group above
+4. Add a second EBS volume (20GB `gp3`) — this will be `/data`
+5. Allocate an Elastic IP and associate it with the instance
+
+### Step 2: Bootstrap the instance
+
+SSH in and run:
+
+```bash
+ssh ubuntu@<elastic-ip>
+
+# System deps
+sudo apt-get update && sudo apt-get install -y \
+  docker.io docker-compose-plugin git curl
+
+# Add ubuntu to docker group
+sudo usermod -aG docker ubuntu
+newgrp docker
+
+# Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
+sudo apt-get install -y nodejs
+sudo npm install -g pnpm
+
+# Caddy (reverse proxy + auto TLS)
+sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt-get update && sudo apt-get install -y caddy
+
+# Mount data volume (replace nvme1n1 with your device name — check with `lsblk`)
+sudo mkfs.ext4 /dev/nvme1n1
+sudo mkdir -p /data
+sudo mount /dev/nvme1n1 /data
+echo "/dev/nvme1n1 /data ext4 defaults,nofail 0 2" | sudo tee -a /etc/fstab
+sudo mkdir -p /data/tenants
+sudo chown -R ubuntu:ubuntu /data
+
+# Clone repo
+git clone https://github.com/iamsteveng/claw-orchestrator.git /opt/claw-orchestrator
+sudo chown -R ubuntu:ubuntu /opt/claw-orchestrator
+```
+
+### Step 3: Create the .env file
+
+```bash
+cp /opt/claw-orchestrator/.env.example /opt/claw-orchestrator/.env
+nano /opt/claw-orchestrator/.env
+```
+
+Fill in:
+
+```env
+# Control Plane
+CONTROL_PLANE_PORT=3200
+DATABASE_URL=file:/data/tenants/orchestrator.db
+DATA_DIR=/data/tenants
+TENANT_IMAGE=claw-tenant:latest
+TEMPLATES_DIR=/opt/claw-orchestrator/templates
+LOG_LEVEL=info
+NODE_ENV=production
+
+# Slack Relay
+SLACK_RELAY_PORT=3101
+SLACK_SIGNING_SECRET=<your-slack-signing-secret>
+SLACK_BOT_TOKEN=xoxb-<your-bot-token>
+CONTROL_PLANE_URL=http://control-plane:3200
+
+# Scheduler
+SCHEDULER_INTERVAL_MS=60000
+IDLE_STOP_HOURS=48
+```
+
+### Step 4: Copy auth files from your local machine
+
+OpenClaw model auth and Claude Code auth are bind-mounted into each tenant container. They must exist on the host before starting.
+
+From your **local machine**:
+
+```bash
+# Copy OpenClaw auth
+scp ~/.openclaw/agents/main/agent/auth-profiles.json ubuntu@<elastic-ip>:~/.openclaw/agents/main/agent/
+
+# Copy Claude Code credentials
+scp ~/.claude/.credentials.json ubuntu@<elastic-ip>:~/.claude/
+```
+
+Or on the EC2 instance, authenticate directly:
+```bash
+# OpenClaw — run openclaw and authenticate
+# Claude Code
+claude auth login
+```
+
+Verify both exist:
+```bash
+test -f ~/.openclaw/agents/main/agent/auth-profiles.json && echo "✓ OpenClaw auth OK"
+test -f ~/.claude/.credentials.json && echo "✓ Claude Code auth OK"
+```
+
+### Step 5: Build the tenant image
+
+```bash
+cd /opt/claw-orchestrator
+docker build \
+  --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
+  -t claw-tenant:latest \
+  docker/tenant-image/
+```
+
+### Step 6: Start the stack
+
+```bash
+cd /opt/claw-orchestrator
+docker compose -f docker/docker-compose.test.yml up -d --build
+docker compose -f docker/docker-compose.test.yml ps
+```
+
+Both `claw-cp-test` and `claw-relay-test` should show as `healthy`.
+
+Verify:
+```bash
+curl http://localhost:13200/health  # {"ok":true,...}
+curl http://localhost:13101/health  # {"ok":true,...}
+```
+
+### Step 7: Run database migrations + add yourself to allowlist
+
+```bash
+cd /opt/claw-orchestrator
+DATABASE_URL=file:/data/tenants/orchestrator.db npx prisma migrate deploy
+
+# Add yourself (get your Slack team/user IDs from the Slack app)
+curl -s -X POST http://localhost:13200/v1/admin/allowlist \
+  -H "content-type: application/json" \
+  -d '{"slack_team_id":"T_YOUR_TEAM","slack_user_id":"U_YOUR_USER","added_by":"admin"}'
+```
+
+### Step 8: Configure Caddy
+
+```bash
+sudo nano /etc/caddy/Caddyfile
+```
+
+```
+<elastic-ip>.nip.io {
+    reverse_proxy localhost:13101
+}
+```
+
+```bash
+sudo systemctl reload caddy
+```
+
+Verify TLS is working:
+```bash
+curl https://<elastic-ip>.nip.io/health
+```
+
+### Step 9: Configure the Slack app
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) → your app → **Event Subscriptions**
+2. Set Request URL: `https://<elastic-ip>.nip.io/slack/events`
+3. Slack sends a challenge — the relay handles it automatically (wait for ✓ Verified)
+4. Ensure `message.im` is subscribed under Bot Events
+5. Save changes and reinstall the app to your workspace if prompted
+
+### Step 10: Keep stack running across reboots
+
+```bash
+sudo tee /etc/systemd/system/claw-orchestrator.service > /dev/null <<EOF
+[Unit]
+Description=Claw Orchestrator (Docker Compose)
+After=docker.service
+Requires=docker.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/claw-orchestrator
+ExecStart=docker compose -f docker/docker-compose.test.yml up
+ExecStop=docker compose -f docker/docker-compose.test.yml down
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl enable claw-orchestrator
+sudo systemctl start claw-orchestrator
+```
+
+### Verify end-to-end
+
+Send yourself a DM in Slack. You should see:
+1. Relay receives event → logs show incoming request
+2. Control plane provisions tenant → container starts
+3. User receives "Your workspace is ready!" DM
+4. Second message → forwarded to container → agent responds
+
+```bash
+# Watch live
+docker logs claw-cp-test -f
+docker logs claw-relay-test -f
+```
+
+### Updating
+
+```bash
+cd /opt/claw-orchestrator
+git pull
+docker compose -f docker/docker-compose.test.yml up -d --build
+```
+
+To rebuild the tenant image after updates:
+```bash
+docker build \
+  --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
+  -t claw-tenant:latest \
+  docker/tenant-image/
+```
+
+---
+
 ## Updating
 
 ```bash
