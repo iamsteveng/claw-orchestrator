@@ -726,3 +726,35 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - All call sites inside processSlackEventWithConfig pass the existing `log` object
   - chat.postMessage response body must be awaited and checked for ok:false to surface Slack API errors
 ---
+
+## 2026-03-23 - US-002 (ralph/docker-compose-and-contract-tests)
+- What was implemented: Added error logging throughout relay message forwarding flow (Steps 4 and 5)
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (Step 4: log.error on Prisma create failure when no duplicate found; Step 5: log.error on non-2xx CP response with status+body; upgrade catch block warn→error)
+  - apps/slack-relay/src/error-logging.test.ts (new: 5 unit tests covering enqueue errors, idempotency, 500/503 responses, success path)
+- **Learnings for future iterations:**
+  - Step 4 enqueue: distinguish duplicate errors (findUnique returns row → silent) vs real errors (findUnique returns null → log.error)
+  - Step 5: must check `!msgRes.ok` and try/catch `json()` separately to log status+body for non-2xx responses
+  - The existing catch block (fetch throws, AbortError) should use log.error not log.warn
+
+## 2026-03-23 - US-003 (ralph/docker-compose-and-contract-tests)
+- What was implemented: Contract test for relay → control plane message endpoint
+- Files changed:
+  - tests/integration/relay-to-cp-contract.test.ts (new: 2 tests using real buildSlackRelayApp + in-process http.createServer as mock CP)
+- **Learnings for future iterations:**
+  - Use Node.js `http.createServer` on a specific port as the mock CP - clean, no Fastify dep, easy to inspect captured requests
+  - `relay.inject()` returns 200 immediately (fire-and-forget); wait with `setTimeout(resolve, 200)` for async processing
+  - slackFetch must forward CP URLs to real fetch (using the mock server port) and stub Slack API URLs
+
+## 2026-03-23 - US-004 (ralph/docker-compose-and-contract-tests)
+- What was implemented: docker-compose.test.yml + multi-stage Dockerfile for full stack local testing
+- Files changed:
+  - docker/Dockerfile (multi-stage: base→build→runtime-base→control-plane/slack-relay/scheduler)
+  - docker/docker-compose.test.yml (3 services, healthchecks, named volume, env_file)
+- **Learnings for future iterations:**
+  - control-plane needs Docker CLI installed in its runtime stage (for tenant container management)
+  - slack-relay depends_on control-plane with condition: service_healthy
+  - Named volume `tenant-data` mounted at /data/tenants in both control-plane and scheduler (shared DB + tenant dirs)
+  - `docker compose -f docker/docker-compose.test.yml config` validates YAML without starting anything
+  - context must be `..` (repo root) when the Dockerfile is in docker/ subdirectory
+---

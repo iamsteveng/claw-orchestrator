@@ -72,7 +72,7 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "The monorepo has no root Dockerfile yet. You may need to create docker/Dockerfile as a multi-stage build (build stage: pnpm install + tsc; runtime stage: copy dist). Reference docker/tenant-image/Dockerfile for patterns. The compose file should NOT embed secrets — use env_file or runtime env vars."
     }
   ]
