@@ -1,12 +1,10 @@
 /**
- * TC-011: auth-profiles.json bind-mount → included in docker run options
+ * TC-011: docker run options — auth files copied during provisioning (not bind-mounted)
  *
  * Verifies that buildDockerRunOptions returns DockerRunOptions that:
- *  - Include a readOnlyBindMount containing auth-profiles.json
- *  - The bind mount path ends in auth-profiles.json
- *  - The bind mount entry is in readOnlyBindMounts (docker-client appends :ro)
+ *  - readOnlyBindMounts is empty (auth files are copied into tenant home during provisioning)
  *  - Container env includes HOME, XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME
- *  - Resource flags: cpus=1.0, memory=1536m, pidsLimit=256
+ *  - Resource flags: cpus=1.0, memory=3072m, pidsLimit=256
  */
 import { describe, it, expect } from 'vitest';
 import { buildDockerRunOptions } from '../../apps/control-plane/src/docker-run-options.js';
@@ -18,25 +16,14 @@ const TEST_OPTS = {
 };
 
 describe('TC-011: auth-profiles.json bind-mount → included in docker run options', () => {
-  it('TC-011: readOnlyBindMounts includes auth-profiles.json path (docker-client will append :ro)', () => {
+  it('TC-011: readOnlyBindMounts is empty — auth files copied into tenant home during provisioning', () => {
     const result = buildDockerRunOptions(TEST_OPTS);
 
     expect(result.readOnlyBindMounts).toBeDefined();
     expect(Array.isArray(result.readOnlyBindMounts)).toBe(true);
-
-    // Find the auth-profiles.json mount entry
-    const authMount = result.readOnlyBindMounts!.find(m => m.includes('auth-profiles.json'));
-    expect(authMount).toBeDefined();
-
-    // Host path (left of first colon) must end in auth-profiles.json
-    const [hostPath] = authMount!.split(':');
-    expect(hostPath.endsWith('auth-profiles.json')).toBe(true);
-
-    // Simulate what docker-client does: appends :ro to each readOnlyBindMount
-    // The resulting mount arg should contain auth-profiles.json and end with :ro
-    const dockerArg = authMount + ':ro';
-    expect(dockerArg).toMatch(/auth-profiles\.json/);
-    expect(dockerArg.endsWith(':ro')).toBe(true);
+    // Auth files are copied by the control plane during provisioning into ${dataDir}/home
+    // They do NOT need bind mounts (which conflict with the parent /home/agent volume mount)
+    expect(result.readOnlyBindMounts).toHaveLength(0);
   });
 
   it('TC-011: container env includes HOME and XDG_* variables', () => {

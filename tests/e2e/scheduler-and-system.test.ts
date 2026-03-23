@@ -92,7 +92,7 @@ describe('TC-018: Tenant ID computation → sha256(team:user).slice(0,16)', () =
 
 // ─── TC-011: auth-profiles.json bind-mount ────────────────────────────────────
 describe('TC-011: auth-profiles.json bind-mount → included in docker run options', () => {
-  it('buildDockerRunOptions includes auth-profiles.json as read-only bind mount', () => {
+  it('buildDockerRunOptions readOnlyBindMounts is empty — auth files copied during provisioning', () => {
     const opts = buildDockerRunOptions({
       tenantId: 'test123',
       image: 'claw-tenant:latest',
@@ -101,12 +101,8 @@ describe('TC-011: auth-profiles.json bind-mount → included in docker run optio
 
     expect(opts.readOnlyBindMounts).toBeDefined();
     expect(Array.isArray(opts.readOnlyBindMounts)).toBe(true);
-
-    const authMount = opts.readOnlyBindMounts!.find((m: string) => m.includes('auth-profiles.json'));
-    expect(authMount).toBeDefined();
-    expect(authMount).toContain('auth-profiles.json');
-    // The source path should be the host user's home dir path
-    expect(authMount).toContain(`${homedir()}/.openclaw/agents/main/agent/auth-profiles.json`);
+    // Auth files are copied by provisioning into ${dataDir}/home — no bind mounts needed
+    expect(opts.readOnlyBindMounts).toHaveLength(0);
   });
 
   it('container env includes HOME and XDG vars', () => {

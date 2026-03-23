@@ -36,20 +36,9 @@ describe('buildDockerRunOptions', () => {
     expect(opts.ulimitNofile).toBe('1024:1024');
   });
 
-  it('bind-mounts auth-profiles.json read-only', () => {
+  it('readOnlyBindMounts is empty (auth files are copied into tenant home during provisioning)', () => {
     const opts = buildDockerRunOptions(BASE);
-    const hostAuthProfiles = `${homedir()}/.openclaw/agents/main/agent/auth-profiles.json`;
-    expect(opts.readOnlyBindMounts).toContain(
-      `${hostAuthProfiles}:/home/agent/.openclaw/agents/main/agent/auth-profiles.json`,
-    );
-  });
-
-  it('bind-mounts .credentials.json read-only', () => {
-    const opts = buildDockerRunOptions(BASE);
-    const hostCredentials = `${homedir()}/.claude/.credentials.json`;
-    expect(opts.readOnlyBindMounts).toContain(
-      `${hostCredentials}:/home/agent/.claude/.credentials.json`,
-    );
+    expect(opts.readOnlyBindMounts).toHaveLength(0);
   });
 
   it('bind-mounts tenant data directories and sets env vars', () => {
