@@ -43,9 +43,8 @@ export function buildDockerRunOptions(opts: {
   const pidsLimit = overrides.pids_limit !== undefined ? overrides.pids_limit : DEFAULTS.pidsLimit;
 
   const hostHome = homedir();
-  // Auth files are COPIED into tenant home during provisioning (not bind-mounted)
-  // because OpenClaw needs write access to auth-profiles.json (usage stats)
-  // and the files must be owned by the container agent user (uid 1001).
+  const hostAuthProfiles = `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`;
+  const hostCredentials = `${hostHome}/.claude/.credentials.json`;
 
   return {
     name: `claw-tenant-${tenantId}`,
@@ -60,7 +59,10 @@ export function buildDockerRunOptions(opts: {
       `${dataDir}/workspace:/workspace`,
       `${dataDir}/config:/home/agent/.config`,
     ],
-    readOnlyBindMounts: [],
+    readOnlyBindMounts: [
+      `${hostAuthProfiles}:/home/agent/.openclaw/agents/main/agent/auth-profiles.json`,
+      `${hostCredentials}:/home/agent/.claude/.credentials.json`,
+    ],
     env: [
       'HOME=/home/agent',
       'XDG_CONFIG_HOME=/home/agent/.config',

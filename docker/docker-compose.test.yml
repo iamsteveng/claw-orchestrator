@@ -34,7 +34,7 @@ services:
     image: claw-control-plane:test
     container_name: claw-cp-test
     ports:
-      - "3200:3200"
+      - "13200:3200"
     environment:
       - DATABASE_URL=file:/data/tenants/orchestrator.db
       - DATA_DIR=/data/tenants
@@ -64,7 +64,7 @@ services:
     image: claw-slack-relay:test
     container_name: claw-relay-test
     ports:
-      - "3101:3101"
+      - "13101:3101"
     environment:
       - SLACK_RELAY_PORT=3101
       - CONTROL_PLANE_URL=http://control-plane:3200

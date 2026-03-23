@@ -1,79 +1,54 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/docker-compose-and-contract-tests",
-  "description": "Docker Compose test environment + module contract tests + silent error fixes",
+  "branchName": "ralph/docker-compose-verified",
+  "description": "Verify and fix the Docker Compose test stack until all services start healthy and the full unit+integration test suite passes",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix silent error in postSlackDm",
-      "description": "As an operator, I want postSlackDm failures to be logged so I can diagnose delivery issues.",
+      "title": "Docker Compose stack starts healthy",
+      "description": "As a developer, I want `docker compose -f docker/docker-compose.test.yml up --build -d` to result in all three services (control-plane, slack-relay, scheduler) running healthy with no crashes.",
       "acceptanceCriteria": [
-        "postSlackDm catches errors and calls log.error({ err }, 'Failed to send Slack DM') instead of swallowing them",
-        "postSlackDm accepts an optional logger argument (or uses a module-level logger fallback) so tests can verify the log call",
-        "Unit test added: postSlackDm logs error when conversations.open fails",
-        "Unit test added: postSlackDm logs error when chat.postMessage fails",
-        "Typecheck passes",
-        "Tests pass"
+        "`docker compose -f docker/docker-compose.test.yml up --build -d` exits code 0",
+        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-cp-test as healthy",
+        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-relay-test as healthy",
+        "`docker compose -f docker/docker-compose.test.yml ps` shows claw-scheduler-test as running (no exit/restart)",
+        "`curl -s http://localhost:13200/health` returns `{\"ok\":true,...}`",
+        "`curl -s http://localhost:13101/health` returns `{\"ok\":true,...}`",
+        "docker logs claw-cp-test shows no Fatal/Error lines",
+        "docker logs claw-relay-test shows no Fatal/Error lines",
+        "Tear down with `docker compose -f docker/docker-compose.test.yml down -v` exits code 0",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "postSlackDm is in apps/slack-relay/src/app-factory.ts. Currently returns silently when openBody.ok is false — no log emitted."
+      "notes": "The stack is nearly working. The last known state: control-plane and slack-relay were marked healthy, scheduler was running. The Dockerfile uses node:22-bookworm-slim as base with openssl installed. Prisma client copy-all strategy (`find /app/node_modules/.pnpm -path '*/@prisma+client@*/node_modules/.prisma/client' -type d -exec sh -c 'cp -r ...' ...`) is the current approach in docker/Dockerfile. The compose file uses ports 13200:3200 and 13101:3101 to avoid conflicts with the live host services on 3200/3101. DATABASE_URL is file:/data/tenants/orchestrator.db inside containers. The DATABASE_URL in the project .env must NOT override this in compose — the compose file sets DATABASE_URL in the environment block explicitly. Run `docker compose -f docker/docker-compose.test.yml down -v` before each test attempt to ensure a clean state."
     },
     {
       "id": "US-002",
-      "title": "Add error logging throughout relay message forwarding flow",
-      "description": "As an operator, I want all silent failures in the relay's message processing (Steps 4 and 5) to emit log.error so I can trace broken delivery chains.",
+      "title": "Full test suite passes on host",
+      "description": "As a developer, I want `pnpm test` (the full vitest test suite) to pass with no failures after all Dockerfile and source changes are committed.",
       "acceptanceCriteria": [
-        "Step 4 (Prisma enqueue): wrap in try/catch, log.error on failure with { err, tenantId, slackEventId }",
-        "Step 5 (forward to control plane): existing catch block already has log.warn — upgrade to log.error and include response status + body when available",
-        "Any fetch to the CP message endpoint that returns non-2xx logs the status code and response body",
-        "Unit test added: relay logs error when Prisma enqueue throws",
-        "Unit test added: relay logs error when CP message endpoint returns 500",
-        "Typecheck passes",
-        "Tests pass"
+        "`pnpm test` exits code 0",
+        "No test files report failures",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "processSlackEventWithConfig is in apps/slack-relay/src/app-factory.ts. Steps 4 and 5 are around lines 164-283."
+      "notes": "The test suite runs on the host (not inside Docker). Run from /home/ubuntu/.openclaw/workspace/claw-orchestrator. Tests use SQLite in /tmp and mock Docker — they do not need the Docker Compose stack to be up. If tests were passing before this branch, they should still pass. Fix any regressions introduced by the type annotation changes to app-factory.ts."
     },
     {
       "id": "US-003",
-      "title": "Add contract test for relay → control plane message endpoint",
-      "description": "As a developer, I want an integration test that verifies the relay correctly calls POST /v1/tenants/:tenantId/message with the expected payload and headers.",
+      "title": "Dockerfile and compose changes committed and pushed",
+      "description": "As a developer, I want all working Dockerfile and docker-compose.test.yml changes committed to the branch and pushed to the PR.",
       "acceptanceCriteria": [
-        "Test spins up a real buildSlackRelayApp instance + an in-process HTTP mock server (not a real control plane)",
-        "Mock CP server verifies: correct path /v1/tenants/<tenantId>/message, method POST, header x-relay-token present",
-        "Test sends a Slack event via POST /slack/events and asserts the mock CP received the forwarded message",
-        "Test covers the case where CP returns 200 (success path)",
-        "Test covers the case where CP returns 500 (error is logged, relay does not crash)",
-        "Test file: tests/integration/relay-to-cp-contract.test.ts",
-        "Typecheck passes",
-        "Tests pass"
+        "git status shows clean working tree",
+        "git log shows commits for all Dockerfile and compose fixes",
+        "git push origin ralph/docker-compose-and-contract-tests succeeds",
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Use existing pattern from tests/integration/control-plane.test.ts for building the app. Mock fetch or spin a real HTTP server for the CP side."
-    },
-    {
-      "id": "US-004",
-      "title": "Create docker-compose.test.yml for full stack local testing",
-      "description": "As a developer, I want a docker-compose.test.yml that brings up control-plane, slack-relay, and scheduler in isolated containers so I can test the full message delivery chain without host interference.",
-      "acceptanceCriteria": [
-        "File created at docker/docker-compose.test.yml",
-        "Services: control-plane (port 3200), slack-relay (port 3101), scheduler — all built from the monorepo Dockerfile or a new multi-stage Dockerfile at docker/Dockerfile",
-        "control-plane mounts /var/run/docker.sock so it can start tenant containers",
-        "slack-relay depends_on control-plane with condition: service_healthy",
-        "control-plane has a healthcheck: curl -f http://localhost:3200/health",
-        "slack-relay has a healthcheck: curl -f http://localhost:3101/health",
-        "All services use env_file: ../../.env (relative to docker/ dir) or accept env vars via environment block with sensible defaults",
-        "A volume named tenant-data is defined and mounted at /data/tenants in control-plane",
-        "A README section or comment block in the compose file documents: how to build, how to run (docker compose -f docker/docker-compose.test.yml up --build), how to tear down",
-        "docker compose -f docker/docker-compose.test.yml config passes (valid YAML, no schema errors)",
-        "Typecheck passes"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "The monorepo has no root Dockerfile yet. You may need to create docker/Dockerfile as a multi-stage build (build stage: pnpm install + tsc; runtime stage: copy dist). Reference docker/tenant-image/Dockerfile for patterns. The compose file should NOT embed secrets — use env_file or runtime env vars."
+      "notes": "Branch is ralph/docker-compose-and-contract-tests. Remote is origin (https://github.com/iamsteveng/claw-orchestrator.git). PR #7 already exists for this branch."
     }
   ]
 }
