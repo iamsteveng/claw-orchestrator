@@ -1,5 +1,4 @@
 import type { DockerRunOptions } from '@claw/docker-client';
-import { homedir } from 'node:os';
 
 export interface ResourceOverrides {
   cpus?: number;
@@ -42,10 +41,6 @@ export function buildDockerRunOptions(opts: {
   const memorySwap = overrides.memory_mb !== undefined ? `${overrides.memory_mb}m` : DEFAULTS.memorySwap;
   const pidsLimit = overrides.pids_limit !== undefined ? overrides.pids_limit : DEFAULTS.pidsLimit;
 
-  const hostHome = homedir();
-  const hostAuthProfiles = `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`;
-  const hostCredentials = `${hostHome}/.claude/.credentials.json`;
-
   return {
     name: `claw-tenant-${tenantId}`,
     image,
@@ -59,10 +54,7 @@ export function buildDockerRunOptions(opts: {
       `${dataDir}/workspace:/workspace`,
       `${dataDir}/config:/home/agent/.config`,
     ],
-    readOnlyBindMounts: [
-      `${hostAuthProfiles}:/home/agent/.openclaw/agents/main/agent/auth-profiles.json`,
-      `${hostCredentials}:/home/agent/.claude/.credentials.json`,
-    ],
+    readOnlyBindMounts: [],
     env: [
       'HOME=/home/agent',
       'XDG_CONFIG_HOME=/home/agent/.config',
