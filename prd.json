@@ -51,7 +51,7 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Use existing pattern from tests/integration/control-plane.test.ts for building the app. Mock fetch or spin a real HTTP server for the CP side."
     },
     {
