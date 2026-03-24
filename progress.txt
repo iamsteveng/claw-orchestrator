@@ -1,3 +1,16 @@
+## 2026-03-24 - US-001 + US-002 + US-003 (fix-duplicate-messages)
+- What was implemented: event_id deduplication in Slack relay; removed 30s stale event check
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (removed stale-event drop; added Map<string,number> processedEventIds cache inside buildSlackRelayApp; evict every 5min via unref'd setInterval; check/set before fire-and-forget)
+  - apps/slack-relay/src/dedup.test.ts (5 new tests: same event_id twice → 1 provision call; different event_ids → 2 calls; duplicate is fast 200; retry header drops; retry doesn't pollute cache)
+- **Learnings for future iterations:**
+  - event_id dedup cache must be scoped inside buildSlackRelayApp() (per-instance), not module-level global
+  - Mark event_id as seen BEFORE fire-and-forget to handle concurrent duplicate requests
+  - setInterval for cache eviction should be unref()'d so it doesn't keep Node alive in tests
+  - X-Slack-Retry-Num check runs BEFORE event_id dedup — retries never populate the dedup cache
+  - 84 test files / 546 tests pass after this change
+---
+
 ## 2026-03-24 - US-001 + US-002 + US-003 (reconcile-active-tenants-on-restart)
 - What was implemented: Added ACTIVE tenant reconciliation on startup; integration tests
 - Files changed:
