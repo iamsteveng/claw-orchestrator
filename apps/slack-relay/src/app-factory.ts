@@ -410,6 +410,14 @@ export async function buildSlackRelayApp(
       return reply.send({});
     }
 
+    // Drop stale events (older than 30 seconds) — prevents Slack event backlog replay
+    // when the endpoint was temporarily unavailable and Slack queued up events.
+    const eventTime = body.event_time;
+    if (eventTime !== undefined && Date.now() / 1000 - eventTime > 30) {
+      req.log.info({ eventId: body.event_id, eventTime, ageSeconds: Math.floor(Date.now() / 1000 - eventTime) }, 'Dropping stale Slack event');
+      return reply.send({});
+    }
+
     // Fire-and-forget: return 200 immediately
     void processSlackEventWithConfig(body, config, req.log, fetchFn, prisma).catch((err) => {
       req.log.error({ err }, 'Error processing Slack event');
