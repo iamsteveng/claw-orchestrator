@@ -807,3 +807,20 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - `pnpm test` exits 0 with 507 tests passing across 78 test files after spawnSync fix
   - Branch successfully pushed to origin/ralph/fix-test-portability-ec2
 ---
+
+## 2026-03-23 - US-001 + US-002 + US-003 (ralph/tenant-container-health-tests)
+- What was implemented:
+  - `tests/integration/tc-auth-files.test.ts`: Integration test verifying that provisioning copies auth files into the tenant home dir with correct content. Uses `vi.stubEnv + vi.resetModules + dynamic import` pattern for DATA_DIR isolation. Creates minimal fixture files if host auth files don't exist.
+  - `tests/integration/tc-container-health.test.ts`: End-to-end container lifecycle test using a real `docker run` against `claw-tenant:latest`. Polls health endpoint, verifies auth files inside container via `docker exec`.
+- Files changed:
+  - `tests/integration/tc-auth-files.test.ts` (new)
+  - `tests/integration/tc-container-health.test.ts` (new)
+  - `prd.json` (all stories marked passes: true)
+- **Learnings for future iterations:**
+  - **workspace dir must be chmod 0o777**: The container's agent user (uid 1001) needs write access to `/workspace`. The health server (`checkWritable('/workspace')`) will return `workspace_mounted: false` if it's not writable, causing the health endpoint to return 503. Always call `chmod(dir, 0o777)` on host dirs before mounting them as container volumes.
+  - **entrypoint chowns /home/agent to agent:agent**: After the container runs and is stopped, files in the home volume dir are owned by uid 1001. Cleanup must fix permissions first: `docker run --rm -v "${testDir}:/mnt" alpine chmod -R 777 /mnt` before `rm -rf`.
+  - **Health check requires openclaw to be running**: `allOk = checks.openclaw && checks.workspace_mounted && checks.home_mounted`. The container starts openclaw gateway in the foreground — if it starts successfully (credentials valid), health returns 200. If credentials are invalid or openclaw fails, health stays 503.
+  - **docker port output format**: `docker port name 3101` returns `"0.0.0.0:32768\n[::]:32768\n"` — use `.trim().match(/:(\d+)$/)` to extract port from the last line.
+  - **Real auth files from host homedir work in CI**: `/home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json` and `/home/ubuntu/.claude/.credentials.json` exist on this machine. Always check with `access()` first and create minimal fixtures only if missing.
+  - **Container health returns 503 until openclaw starts**: Poll with 500ms intervals. The container typically reaches healthy state within 2-3 seconds.
+---
