@@ -116,79 +116,6 @@ function validateBody(body) {
   return null;
 }
 
-// ── Serial message queue ──────────────────────────────────────────────────────
-// Ensures only one openclaw process runs at a time to prevent session lock
-// contention. Max depth of 10; excess requests get 503.
-
-const MAX_QUEUE_DEPTH = 10;
-
-/** @type {Array<{text: string, messageId: string, resolve: Function, reject: Function}>} */
-const messageQueue = [];
-let isProcessing = false;
-
-/**
- * Process the next item in the queue if not already processing.
- */
-async function processNext() {
-  if (isProcessing || messageQueue.length === 0) return;
-  isProcessing = true;
-  const { text, messageId, resolve, reject } = messageQueue.shift();
-  try {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 3000;
-    let lastResult = null;
-    let lastError = null;
-
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const result = await forwardToOpenclaw(text);
-        if (result.response) {
-          resolve(result);
-          lastResult = result;
-          break;
-        }
-        lastResult = result;
-        process.stdout.write(
-          JSON.stringify({
-            level: 'warn',
-            msg: 'openclaw returned empty response',
-            messageId,
-            attempt,
-          }) + '\n'
-        );
-      } catch (err) {
-        lastError = err;
-        process.stderr.write(
-          JSON.stringify({
-            level: 'error',
-            msg: 'openclaw error',
-            messageId,
-            attempt,
-            error: err.message,
-          }) + '\n'
-        );
-      }
-
-      if (attempt < MAX_RETRIES) {
-        await sleep(RETRY_DELAY_MS);
-      }
-    }
-
-    if (!lastResult || !lastResult.response) {
-      if (lastError) {
-        reject(lastError);
-      } else {
-        reject(new Error('Agent returned empty response after retries'));
-      }
-    }
-  } catch (err) {
-    reject(err);
-  } finally {
-    isProcessing = false;
-    processNext();
-  }
-}
-
 const server = http.createServer(async (req, res) => {
   if (req.method !== 'POST' || req.url !== '/message') {
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -229,37 +156,52 @@ const server = http.createServer(async (req, res) => {
     }) + '\n'
   );
 
-  // Check queue capacity
-  if (messageQueue.length >= MAX_QUEUE_DEPTH) {
-    res.writeHead(503, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: 'Queue full' }));
-    return;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 3000;
+  let lastResult = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await forwardToOpenclaw(body.text);
+      if (result.response) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, response: result.response, blocks: result.blocks }));
+        return;
+      }
+      lastResult = result;
+      process.stdout.write(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'openclaw returned empty response',
+          messageId: body.messageId,
+          attempt,
+        }) + '\n'
+      );
+    } catch (err) {
+      lastError = err;
+      process.stderr.write(
+        JSON.stringify({
+          level: 'error',
+          msg: 'openclaw error',
+          messageId: body.messageId,
+          attempt,
+          error: err.message,
+        }) + '\n'
+      );
+    }
+
+    if (attempt < MAX_RETRIES) {
+      await sleep(RETRY_DELAY_MS);
+    }
   }
 
-  const wasProcessing = isProcessing || messageQueue.length > 0;
-
-  if (wasProcessing) {
-    // Already processing — enqueue with no-op callbacks and respond immediately
-    messageQueue.push({ text: body.text, messageId: body.messageId, resolve: () => {}, reject: () => {} });
-    processNext();
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, queued: true }));
-    return;
-  }
-
-  // Queue is empty and not processing — enqueue and wait inline for the result
-  const resultPromise = new Promise((resolve, reject) => {
-    messageQueue.push({ text: body.text, messageId: body.messageId, resolve, reject });
-  });
-  processNext();
-
-  try {
-    const result = await resultPromise;
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, response: result.response, blocks: result.blocks }));
-  } catch (err) {
+  if (lastError) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: err.message }));
+    res.end(JSON.stringify({ ok: false, error: lastError.message }));
+  } else {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Agent returned empty response after retries' }));
   }
 });
 
