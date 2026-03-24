@@ -266,6 +266,7 @@ export async function processSlackEventWithConfig(
       let errBody: unknown;
       try { errBody = await msgRes.json(); } catch { /* ignore parse error */ }
       log.error({ tenantId, slackEventId, status: msgRes.status, body: errBody }, 'CP message endpoint returned non-2xx');
+      await postSlackDm(slackUserId, 'I received your message but had trouble generating a response. Please try again.', config.SLACK_BOT_TOKEN, fetchFn, log);
     } else if (msgRes.ok) {
       const msgBody = await msgRes.json() as { ok?: boolean; response?: string; blocks?: unknown[] | null };
 
@@ -292,6 +293,8 @@ export async function processSlackEventWithConfig(
             headers: { 'content-type': 'application/json', authorization: `Bearer ${config.SLACK_BOT_TOKEN}` },
             body: JSON.stringify({ channel, text: msgBody.response }),
           });
+        } else {
+          await postSlackDm(slackUserId, 'I received your message but had trouble generating a response. Please try again.', config.SLACK_BOT_TOKEN, fetchFn, log);
         }
       }
     }
