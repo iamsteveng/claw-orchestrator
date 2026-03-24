@@ -1,58 +1,51 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/fix-duplicate-messages",
-  "description": "Fix duplicate bot messages: ensure each Slack event_id is processed exactly once, even under backlog replay or concurrent delivery",
+  "branchName": "ralph/fix-message-server-serial-queue",
+  "description": "Fix message-server to process messages serially (one at a time) to prevent openclaw session lock contention",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Deduplicate Slack events by event_id at the relay level using in-memory cache",
-      "description": "As a user, I want to receive exactly one bot response per message I send, regardless of Slack retries or backlog delivery.",
+      "title": "Message-server: queue incoming messages and process serially",
+      "description": "As a user, I want my messages processed one at a time so openclaw doesn't get concurrent session lock conflicts causing errors and duplicate responses.",
       "acceptanceCriteria": [
-        "Add an in-memory Set (or LRU cache) in the relay to track processed event_ids",
-        "Before processing any Slack event, check if event_id is already in the set — if so, return 200 immediately without processing",
-        "Add the event_id to the set after accepting it for processing (before fire-and-forget, not after)",
-        "The cache should hold event_ids for at least 10 minutes (TTL) to cover Slack's retry window",
-        "Use a simple Map<string, number> where value is the timestamp of when it was added, evict entries older than 10 minutes",
-        "This deduplication is in ADDITION to the existing X-Slack-Retry-Num check (keep both)",
-        "Remove the 30-second stale event check added in PR #26 — it is too aggressive and drops legitimate events from users who message slowly. The event_id dedup is the correct solution.",
-        "Typecheck passes",
-        "Tests pass"
+        "message-server.js maintains a simple async queue (array + processing flag)",
+        "When a POST /message arrives and the queue is empty and not processing, process immediately",
+        "When a POST /message arrives while already processing, add to queue and respond 200 with { ok: true, queued: true }",
+        "After each message completes (success or error), dequeue and process the next one",
+        "The queue should have a max depth of 10 — if full, respond 503 with { ok: false, error: 'Queue full' }",
+        "Processing is still async relative to HTTP (respond 200 quickly, process in background) — the relay already handles the async response pattern via long-polling",
+        "Typecheck passes (this is plain JS, no TypeScript)"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "File: apps/slack-relay/src/app-factory.ts. The processedEventIds cache should be created inside buildSlackRelayApp() so it is per-app-instance (not global). Use a Map<string, number> where the value is Date.now() at insertion time. Before processing, check if event_id exists in map. If yes, log info and return 200. If no, add to map then proceed. Periodically evict old entries using setInterval every 5 minutes inside the app factory. The event_id comes from body.event_id (envelope.event_id). This handles BOTH: (1) Slack retry of same event (X-Slack-Retry-Num), (2) Slack backlog delivery of events we already processed."
+      "notes": "File: docker/tenant-image/message-server.js. The current code calls forwardToOpenclaw() immediately on every request. Add a simple queue: const messageQueue = []; let isProcessing = false; async function processNext() { if (isProcessing || messageQueue.length === 0) return; isProcessing = true; const { text, resolve, reject } = messageQueue.shift(); try { const result = await forwardToOpenclaw(text); resolve(result); } catch(e) { reject(e); } finally { isProcessing = false; processNext(); } }. In the request handler, instead of calling forwardToOpenclaw directly, push to queue. BUT: the relay is polling via long HTTP request — it needs the response inline. So actually the better fix is simpler: use a mutex/semaphore so only one openclaw process runs at a time, but still return the response to the caller when done. Use a simple promise chain as a mutex: let currentProcessing = Promise.resolve(); currentProcessing = currentProcessing.then(() => forwardToOpenclaw(text)).catch(() => forwardToOpenclaw(text)); return await currentProcessing. Actually the cleanest fix: serialize with a simple lock flag and a queue of { resolve, reject, text } tuples."
     },
     {
       "id": "US-002",
-      "title": "Add tests for event_id deduplication",
-      "description": "As a developer, I want tests that verify the relay processes each event_id exactly once.",
+      "title": "Remove stale session lock file on container startup",
+      "description": "As a developer, I want stale .lock files cleaned up when the container starts so previous crashes don't block new messages.",
       "acceptanceCriteria": [
-        "Test: same event_id sent twice → only one call to processSlackEventWithConfig (or equivalent)",
-        "Test: different event_ids → both processed",
-        "Test: event_id dedup works across concurrent requests (fire-and-forget pattern)",
-        "Test: X-Slack-Retry-Num header still drops retries (existing behavior preserved)",
-        "All existing relay tests still pass",
-        "Typecheck passes",
-        "Tests pass"
+        "In docker/tenant-image/entrypoint.sh, before starting the gateway, remove any stale .jsonl.lock files in /home/agent/.openclaw/agents/main/sessions/",
+        "Use: find /home/agent/.openclaw/agents/main/sessions -name '*.lock' -delete 2>/dev/null || true",
+        "This prevents the 'session file locked' error after container restart",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Add tests to apps/slack-relay/src/verify-signature.test.ts or create a new test file apps/slack-relay/src/dedup.test.ts. Use buildSlackRelayApp + app.inject() pattern. Send POST /slack/events twice with the same event_id and valid signature. Assert that the mock fetchFn (or processSlackEvent spy) was called only once."
+      "notes": "File: docker/tenant-image/entrypoint.sh. Add the find command before the 'exec su -s /bin/bash agent -c ...' line. Must run as root (before dropping to agent user)."
     },
     {
       "id": "US-003",
-      "title": "Commit, push and PR",
-      "description": "All tests passing, committed, pushed, PR opened.",
+      "title": "Commit and push",
+      "description": "All changes committed and pushed.",
       "acceptanceCriteria": [
-        "pnpm test exits 0",
-        "83+ test files pass",
-        "Changes committed and pushed",
-        "Typecheck passes",
-        "Tests pass"
+        "Changes committed with descriptive message",
+        "Branch pushed to origin",
+        "Typecheck passes"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Branch: ralph/fix-duplicate-messages"
+      "passes": false,
+      "notes": "Branch: ralph/fix-message-server-serial-queue"
     }
   ]
 }
