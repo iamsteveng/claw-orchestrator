@@ -1,46 +1,47 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/fix-mock-openclaw-stderr",
-  "description": "Fix test mocks to match real openclaw --json behavior (writes to stderr) so stdout/stderr bugs are caught in CI",
+  "branchName": "ralph/reconcile-active-tenants-on-restart",
+  "description": "On control plane startup, check ACTIVE tenants whose containers are no longer running and reset them to STOPPED so they auto-restart on next message",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix tc-039: mock openclaw writes to stderr like real openclaw",
-      "description": "As a developer, I want tc-039 to catch the stdout/stderr bug that was missed previously.",
+      "title": "Reconcile ACTIVE tenants on startup — reset to STOPPED if container not running",
+      "description": "As an operator, when the server restarts, I want tenants that were ACTIVE to be detected as STOPPED so they restart automatically on the next user message, instead of failing with ENOTFOUND.",
       "acceptanceCriteria": [
-        "In tests/integration/tc-039.test.ts, update the mock openclaw shell script to write JSON to stderr instead of stdout",
-        "The mock script should be: #!/bin/sh\\ncat > /dev/null\\necho '{\"payloads\":[{\"text\":\"mock response\",\"mediaUrl\":null}]}' >&2",
-        "The test assertion for the response body should still pass (the message-server now reads from stderr)",
-        "All existing tc-039 tests still pass",
+        "In apps/control-plane/src/startup-reconciliation.ts, after handling STARTING tenants, add logic to check ACTIVE tenants",
+        "For each ACTIVE tenant: use dockerClient.inspect(container_name) to check if the container is running",
+        "If the container is NOT running (or inspect fails, or no dockerClient): set tenant status to STOPPED, updated_at = now",
+        "If the container IS running: leave it as ACTIVE (it survived the restart)",
+        "Log a warn for each tenant reset to STOPPED: { tenantId, containerName }, 'Tenant container not running on startup — reset to STOPPED'",
+        "The STOPPED status means the relay will call /start on next message, which calls docker.start() to restart the existing container",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "File: tests/integration/tc-039.test.ts. The mock openclaw binary is created with chmodSync in beforeAll. Find the line that creates the mock script content and change `echo '{...}'` to `echo '{...}' >&2`. The message-server.js now reads from stderr (fixed in PR #21), so the test should pass once the mock matches."
+      "notes": "File: apps/control-plane/src/startup-reconciliation.ts. Add a new block after the STARTING tenant check (around line 90). Pattern is identical to the STARTING tenant loop — find ACTIVE tenants, inspect each, collect those not running, update to STOPPED. Use TenantStatus.STOPPED from @claw/shared-types. The reconcile function signature already accepts dockerClient as optional ReconcileDockerClient."
     },
     {
       "id": "US-002",
-      "title": "Fix message-delivery e2e test: use real message-server.js with mock openclaw",
-      "description": "As a developer, I want the message-delivery e2e test to exercise the real message-server.js code path (not a mocked container endpoint) so stdout/stderr bugs are caught.",
+      "title": "Integration tests for ACTIVE tenant reconciliation on restart",
+      "description": "As a developer, I want tests that verify ACTIVE tenants with stopped containers are reset to STOPPED on startup, and ACTIVE tenants with running containers are left alone.",
       "acceptanceCriteria": [
-        "In tests/e2e/message-delivery.test.ts, replace the mock container HTTP server with a test that spawns the real message-server.js with a mock openclaw binary injected via PATH",
-        "The mock openclaw binary writes JSON to stderr: echo '{\"payloads\":[{\"text\":\"Hello from agent\",\"mediaUrl\":null}]}' >&2",
-        "The test starts the real message-server.js (from docker/tenant-image/message-server.js) on a test port using node with a modified PATH env containing the mock openclaw",
-        "The test sets RELAY_TOKEN env for the message-server process",
-        "The test hits POST /message on the message-server and verifies it returns { ok: true, response: 'Hello from agent' }",
-        "The existing full relay→CP→container mock chain test can remain as-is OR be updated to use the real message-server — do whatever is cleanest",
-        "All tests pass",
+        "Test file: tests/integration/tc-reconcile-active.test.ts",
+        "Test 1: ACTIVE tenant whose container is NOT running → reconcile resets to STOPPED",
+        "Test 2: ACTIVE tenant whose container IS running → reconcile leaves as ACTIVE",
+        "Test 3: Multiple ACTIVE tenants — some running, some not — correct ones reset to STOPPED",
+        "Test 4: ACTIVE tenant with no dockerClient provided → reset to STOPPED (safe default)",
+        "Tests use real SQLite DB (temp file) and mocked dockerClient",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "The real message-server.js is at docker/tenant-image/message-server.js. Spawn it with: spawn('node', [MESSAGE_SERVER_PATH], { env: { ...process.env, PATH: mockBinDir + ':' + process.env.PATH, RELAY_TOKEN: 'test-token', HOME: tmpDir } }). Use the same pattern as tc-039 for creating the mock openclaw binary. The message-server listens on PORT env var (default 3100). Use a random test port. Pattern reference: tests/integration/tc-039.test.ts for spawning message-server.js with mock openclaw."
+      "notes": "Pattern: see tests/integration/tc-016.test.ts for reconcile test setup. Create a PrismaClient with a temp DB, seed ACTIVE tenants directly, call reconcile() with a mocked dockerClient, assert final tenant statuses. The mocked dockerClient for non-running: returns null or { State: { Running: false } }. For running: returns { State: { Running: true } }. Use the same vi.spyOn(Date, 'now') pattern to avoid SQLite Int overflow."
     },
     {
       "id": "US-003",
-      "title": "Confirm all tests pass and push",
+      "title": "Commit and push",
       "description": "All tests passing, committed and pushed.",
       "acceptanceCriteria": [
         "pnpm test exits 0",
@@ -51,7 +52,7 @@
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Branch: ralph/fix-mock-openclaw-stderr"
+      "notes": "Branch: ralph/reconcile-active-tenants-on-restart"
     }
   ]
 }
