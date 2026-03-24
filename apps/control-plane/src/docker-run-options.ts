@@ -24,6 +24,7 @@ export function buildDockerRunOptions(opts: {
   dataDir: string;
   resourceOverrides?: string | null;
   relayToken?: string;
+  network?: string;
 }): DockerRunOptions {
   const { tenantId, image, dataDir, resourceOverrides } = opts;
 
@@ -55,6 +56,7 @@ export function buildDockerRunOptions(opts: {
       `${dataDir}/config:/home/agent/.config`,
     ],
     readOnlyBindMounts: [],
+    ...(opts.network ? { network: opts.network } : {}),
     env: [
       'HOME=/home/agent',
       'XDG_CONFIG_HOME=/home/agent/.config',

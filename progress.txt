@@ -824,3 +824,32 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
   - **Real auth files from host homedir work in CI**: `/home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json` and `/home/ubuntu/.claude/.credentials.json` exist on this machine. Always check with `access()` first and create minimal fixtures only if missing.
   - **Container health returns 503 until openclaw starts**: Poll with 500ms intervals. The container typically reaches healthy state within 2-3 seconds.
 ---
+
+## 2026-03-24 - US-001 (HOST_DATA_DIR Unit Tests)
+- What was implemented: Extended docker-run-options.test.ts with two new test cases verifying volume mount paths
+- Files changed:
+  - apps/control-plane/src/docker-run-options.test.ts (added 2 tests: DATA_DIR only path, HOST_DATA_DIR vs DATA_DIR path)
+- **Learnings for future iterations:**
+  - buildDockerRunOptions takes dataDir as a direct parameter — caller is responsible for passing HOST_DATA_DIR or DATA_DIR
+  - Volume mount format: `${dataDir}/home:/home/agent`, `${dataDir}/workspace:/workspace`, `${dataDir}/config:/home/agent/.config`
+  - Env vars (HOME, XDG_CONFIG_HOME) always use container-side paths (/home/agent), not host paths
+---
+
+## 2026-03-24 - US-002 (HOST_DATA_DIR Integration Test)
+- What was implemented: New integration test tc-host-data-dir.test.ts with two scenarios
+- Files changed:
+  - tests/integration/tc-host-data-dir.test.ts (new file, 2 describe blocks, 4 tests)
+- **Learnings for future iterations:**
+  - When using two vi.resetModules() + dynamic import describe blocks in the same file, each scenario needs its own afterAll with delay before cleanup (10 setImmediate flushes + 150ms setTimeout) to allow releaseStartupLock to complete before DB disconnect/unlink
+  - Error "attempt to write a readonly database" means releaseStartupLock ran after the DB file was unlinked — prisma still holds an inode reference but the file is marked for deletion
+  - The `.finally(() => void releaseStartupLock(...))` chain in app-factory.ts runs after pollUntilHealthy resolves — the mock's real async DB operations (prisma.tenant.update) must complete before afterAll cleanup
+  - mockDc.run.mock.calls[0][0] gives the DockerRunOptions passed to the first docker.run call — use `as { volumes: string[] }` cast to access volumes
+  - vi.unstubAllEnvs() should be called at the END of each scenario's afterAll (after cleanup), not before
+  - delete process.env['HOST_DATA_DIR'] is needed for scenario 2 since vi.unstubAllEnvs() in scenario 1 may restore the original value
+---
+
+## 2026-03-24 - US-003 (Commit and Push)
+- What was implemented: All stories committed and pushed to ralph/test-host-data-dir
+- 81 test files, 529 tests all passing
+- Branch pushed to origin
+---
