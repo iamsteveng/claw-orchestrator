@@ -4,6 +4,12 @@ export const controlPlaneConfigSchema = z.object({
   CONTROL_PLANE_PORT: z.coerce.number().int().positive().default(3200),
   DATABASE_URL: z.string().min(1),
   DATA_DIR: z.string().min(1),
+  // HOST_DATA_DIR: the path to the data directory as seen by the Docker host.
+  // When the control plane runs inside a container, DATA_DIR is the in-container path
+  // (e.g. /data/tenants) but docker run resolves volume mounts using HOST paths.
+  // Set HOST_DATA_DIR to the actual host path (e.g. /home/ubuntu/data/tenants) when
+  // they differ. Defaults to DATA_DIR when not set.
+  HOST_DATA_DIR: z.string().min(1).optional(),
   TENANT_IMAGE: z.string().min(1),
   TEMPLATES_DIR: z.string().min(1).default('/opt/claw-orchestrator/templates/workspace'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),

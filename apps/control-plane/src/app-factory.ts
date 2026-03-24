@@ -300,10 +300,15 @@ export async function buildApp(
       const dc = options?.dockerClient ?? (await import('@claw/docker-client')).DockerClient;
       if (previousStatus === TenantStatus.NEW) {
         // First-time start: create and run a new container with resource limits + bind mounts
+        // Use HOST_DATA_DIR for volume mount paths if set — when the control plane
+        // runs inside a container, DATA_DIR is the in-container path but docker run
+        // resolves volume sources as HOST paths. HOST_DATA_DIR lets them differ.
+        const hostDataDir = controlPlaneConfig.HOST_DATA_DIR ?? controlPlaneConfig.DATA_DIR;
+        const hostTenantDir = `${hostDataDir}/${tenantId}`;
         const runOpts = buildDockerRunOptions({
           tenantId,
           image: imageTag,
-          dataDir: tenant.data_dir,
+          dataDir: hostTenantDir,
           resourceOverrides: tenant.resource_overrides,
           relayToken: tenant.relay_token,
         });
