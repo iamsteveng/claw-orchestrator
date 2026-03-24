@@ -249,16 +249,9 @@ describe('TC-015: Audit log → events recorded for all system actions', () => {
       `Start returned ${res.statusCode}: ${res.body}`,
     ).toSatisfy((s: number) => s === 200 || s === 202);
 
-    // pollUntilHealthy mock is async — flush microtask queue (multiple passes needed
-    // because Prisma awaits chain: tenant.update → auditLog.create → each needs a turn)
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    // pollUntilHealthy mock is async — wait for microtask queue to drain
+    // Using setTimeout(50) is more reliable than setImmediate chains for deep promise chains
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
     const audit = await prisma.auditLog.findFirst({
       where: { tenant_id: tenantId, event_type: 'TENANT_STARTED' },

@@ -1,3 +1,15 @@
+## 2026-03-24 - US-001 + US-002 + US-003 (fix-message-server-serial-queue)
+- What was implemented: Serial message queue in message-server.js; stale lock cleanup in entrypoint.sh
+- Files changed:
+  - docker/tenant-image/message-server.js: added MAX_QUEUE_DEPTH=10, messageQueue array, isProcessing flag, processNext() async processor; first request waits inline, queued requests respond {ok:true, queued:true} immediately, full queue returns 503
+  - docker/tenant-image/entrypoint.sh: added `find /home/agent/.openclaw/agents/main/sessions -name '*.lock' -delete 2>/dev/null || true` before gateway startup
+- **Learnings for future iterations:**
+  - For queued messages (wasProcessing=true), use no-op resolve/reject callbacks to avoid unhandled promise rejections — only create an awaited Promise for the first (inline) message
+  - message-server.js is plain JS (no TypeScript), tested via tc-039.test.ts (integration) and message-delivery.test.ts (e2e)
+  - The first request responds inline with the full {ok:true, response, blocks} result; queued requests get {ok:true, queued:true} immediately
+  - Queue depth check uses `messageQueue.length >= MAX_QUEUE_DEPTH` before push (not including currently-processing item)
+---
+
 ## 2026-03-24 - US-001 + US-002 + US-003 (fix-duplicate-messages)
 - What was implemented: event_id deduplication in Slack relay; removed 30s stale event check
 - Files changed:

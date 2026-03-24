@@ -44,5 +44,8 @@ if [ -f /usr/local/lib/claw-message-server.js ]; then
   su -s /bin/bash agent -c "RELAY_TOKEN=$RELAY_TOKEN node /usr/local/lib/claw-message-server.js" &
 fi
 
+# ── Clean up stale session lock files from previous crashes ──────────────────
+find /home/agent/.openclaw/agents/main/sessions -name '*.lock' -delete 2>/dev/null || true
+
 # ── Drop to agent user and start OpenClaw gateway in foreground ──────────────
 exec su -s /bin/bash agent -c "exec openclaw gateway"
