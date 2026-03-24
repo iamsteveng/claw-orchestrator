@@ -51,4 +51,28 @@ describe('buildDockerRunOptions', () => {
     expect(opts.env).toContain('XDG_CACHE_HOME=/home/agent/.cache');
     expect(opts.env).toContain('XDG_STATE_HOME=/home/agent/.local/state');
   });
+
+  it('when only DATA_DIR is set (no HOST_DATA_DIR), volume mounts use DATA_DIR path', () => {
+    const dataDirPath = '/data/tenants/abc123';
+    const opts = buildDockerRunOptions({ ...BASE, dataDir: dataDirPath });
+    expect(opts.volumes).toContain(`${dataDirPath}/home:/home/agent`);
+    expect(opts.volumes).toContain(`${dataDirPath}/workspace:/workspace`);
+    expect(opts.volumes).toContain(`${dataDirPath}/config:/home/agent/.config`);
+    // env vars always use container-side paths, not host paths
+    expect(opts.env).toContain('HOME=/home/agent');
+    expect(opts.env).toContain('XDG_CONFIG_HOME=/home/agent/.config');
+  });
+
+  it('when HOST_DATA_DIR differs from DATA_DIR, passing HOST_DATA_DIR as dataDir produces different volume paths', () => {
+    const hostDataDir = '/tmp/claw-host-test/abc123';
+    const opts = buildDockerRunOptions({ ...BASE, dataDir: hostDataDir });
+    expect(opts.volumes).toContain(`${hostDataDir}/home:/home/agent`);
+    expect(opts.volumes).toContain(`${hostDataDir}/workspace:/workspace`);
+    expect(opts.volumes).toContain(`${hostDataDir}/config:/home/agent/.config`);
+    // volume source paths differ from the DATA_DIR-based paths
+    expect(opts.volumes).not.toContain('/data/tenants/abc123/home:/home/agent');
+    // env vars still use container-side paths regardless of host dataDir
+    expect(opts.env).toContain('HOME=/home/agent');
+    expect(opts.env).toContain('XDG_CONFIG_HOME=/home/agent/.config');
+  });
 });

@@ -1,66 +1,59 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/tenant-container-health-tests",
-  "description": "Add tests verifying that tenant containers spawn successfully, become healthy, and have correct auth file ownership",
+  "branchName": "ralph/test-host-data-dir",
+  "description": "Add tests covering the HOST_DATA_DIR / DATA_DIR path resolution for docker-in-docker deployments",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Test: auth files copied with correct ownership during provisioning",
-      "description": "As a developer, I want a test that verifies provisioning copies auth files into the tenant home dir with correct ownership and non-empty content.",
+      "title": "Unit tests: buildDockerRunOptions uses HOST_DATA_DIR when provided",
+      "description": "As a developer, I want unit tests that verify buildDockerRunOptions receives the correct dataDir — specifically that the control plane passes HOST_DATA_DIR (not DATA_DIR) when it is set.",
       "acceptanceCriteria": [
-        "Test file: tests/integration/tc-auth-files.test.ts",
-        "Test provisions a tenant via buildApp (control plane) with mock docker",
-        "After provisioning, assert auth-profiles.json exists at ${dataDir}/home/.openclaw/agents/main/agent/auth-profiles.json",
-        "Assert auth-profiles.json is non-empty (size > 0)",
-        "Assert .credentials.json exists at ${dataDir}/home/.claude/.credentials.json",
-        "Assert .credentials.json is non-empty (size > 0)",
-        "Assert the files are readable (fs.access with fs.constants.R_OK passes)",
-        "Use a real temp dir for dataDir so actual file I/O is tested",
-        "Use real auth files from process.env or create minimal fixture files if env not set",
+        "Test file: apps/control-plane/src/docker-run-options.test.ts (extend existing)",
+        "Test: when only DATA_DIR is set (no HOST_DATA_DIR), volume mounts use DATA_DIR path",
+        "Test: the volume mount format is '${dataDir}/home:/home/agent', '${dataDir}/workspace:/workspace', '${dataDir}/config:/home/agent/.config'",
+        "Test: env vars HOME, XDG_CONFIG_HOME use /home/agent (not dataDir-based paths)",
+        "All existing docker-run-options tests still pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "The control plane provisioning code is in apps/control-plane/src/app-factory.ts. It copies auth files via copyFile() at lines ~139-140. The source paths are homedir()/.openclaw/agents/main/agent/auth-profiles.json and homedir()/.claude/.credentials.json. For CI where these may not exist, create minimal fixture files in beforeAll. Use the vi.stubEnv + vi.resetModules + dynamic import pattern for DATA_DIR isolation. Pattern: see tests/integration/tc-012.test.ts for provisioning via buildApp."
+      "notes": "buildDockerRunOptions takes a 'dataDir' parameter directly — it is the caller's responsibility to pass HOST_DATA_DIR or DATA_DIR. The unit tests should verify the volume mount format given a specific dataDir input. Add two new test cases: one verifying that given dataDir='/data/tenants/abc', volumes contain '/data/tenants/abc/home:/home/agent' etc; another verifying that a DIFFERENT dataDir value (simulating HOST_DATA_DIR) produces different volume paths."
     },
     {
       "id": "US-002",
-      "title": "Test: tenant container spawns, becomes healthy, and auth files are accessible",
-      "description": "As a developer, I want an integration test that verifies the full container lifecycle: docker run succeeds, container stays up, and the auth files inside the container are accessible by the agent user.",
+      "title": "Integration test: control plane /start uses HOST_DATA_DIR for volume mounts",
+      "description": "As a developer, I want an integration test that verifies when HOST_DATA_DIR is set and differs from DATA_DIR, the control plane uses HOST_DATA_DIR as the volume mount source for tenant containers.",
       "acceptanceCriteria": [
-        "Test file: tests/integration/tc-container-health.test.ts",
-        "Test uses a REAL docker run (not mocked) against the claw-tenant:latest image",
-        "Test is skipped if claw-tenant:latest image does not exist (skip with: if (!imageExists) return)",
-        "Test provisions a tenant home dir with real auth files (copy from host homedir or create fixtures)",
-        "Runs docker run with the same volume mounts as the control plane would use",
-        "Asserts the container starts (docker ps shows the container)",
-        "Asserts the container health endpoint at the correct port returns {ok: true} within 30 seconds",
-        "Asserts docker inspect shows the container is running (not exited)",
-        "Asserts that inside the container, /home/agent/.openclaw/agents/main/agent/auth-profiles.json exists and is non-empty (run docker exec cat to verify)",
-        "Asserts that inside the container, /home/agent/.claude/.credentials.json exists and is non-empty",
-        "Cleans up: docker stop + docker rm in afterAll",
+        "Test file: tests/integration/tc-host-data-dir.test.ts",
+        "Test sets DATA_DIR to an in-container-style path (e.g. /data/tenants) and HOST_DATA_DIR to a different host-style path (e.g. /tmp/claw-host-test)",
+        "Test calls POST /v1/tenants/:id/start (via app.inject) with a mocked docker client",
+        "Asserts that docker.run was called with volume mounts using the HOST_DATA_DIR path, NOT the DATA_DIR path",
+        "E.g. volumes should contain '/tmp/claw-host-test/<tenantId>/home:/home/agent' when HOST_DATA_DIR=/tmp/claw-host-test",
+        "Second test: when HOST_DATA_DIR is NOT set, volumes use DATA_DIR path",
+        "E.g. volumes should contain '/data/tenants/<tenantId>/home:/home/agent' when only DATA_DIR=/data/tenants",
+        "Use vi.stubEnv + vi.resetModules + dynamic import pattern for env isolation",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "This test requires Docker to be available and claw-tenant:latest to be built. Check image exists with: execSync('docker image inspect claw-tenant:latest', {stdio:'pipe'}) - if it throws, skip. Use a unique container name to avoid conflicts: claw-tenant-test-<randomId>. The health server inside the container listens on port 3101 by default — map it to a random host port. The message server listens on port 3100. Use execSync('docker run -d ...') and then poll the health endpoint. Cleanup is critical — always remove the container even if test fails (use try/finally in afterAll). Reference the docker run args from buildDockerRunOptions in apps/control-plane/src/docker-run-options.ts for the correct volume/env structure."
+      "notes": "The relevant code is in apps/control-plane/src/app-factory.ts around line 303-315 where buildDockerRunOptions is called with hostTenantDir = (HOST_DATA_DIR ?? DATA_DIR) + '/' + tenantId. Use the mockDc pattern from tc-021.test.ts or tc-015.test.ts to capture the docker.run call and inspect its opts.volumes array. The test needs to provision a tenant first (POST /v1/tenants/provision) to create the tenant record, then call /start. Use the pattern: vi.stubEnv('DATA_DIR', '/data/tenants'); vi.stubEnv('HOST_DATA_DIR', '/tmp/claw-host-test'); vi.resetModules(); const { buildApp } = await import('../../apps/control-plane/src/app-factory.js')."
     },
     {
       "id": "US-003",
-      "title": "Commit and push with PR",
-      "description": "As a developer, I want the new tests committed and pushed to a PR.",
+      "title": "Commit and push",
+      "description": "All tests passing, committed and pushed.",
       "acceptanceCriteria": [
-        "pnpm test passes (78+ test files)",
-        "Changes committed with descriptive message",
-        "Branch pushed to origin",
+        "pnpm test exits 0",
+        "80+ test files pass",
+        "Changes committed and pushed",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Branch: ralph/tenant-container-health-tests"
+      "notes": "Branch: ralph/test-host-data-dir"
     }
   ]
 }
