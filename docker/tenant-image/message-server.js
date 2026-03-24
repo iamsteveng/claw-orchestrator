@@ -18,7 +18,7 @@ const RELAY_TOKEN = process.env.RELAY_TOKEN || '';
  */
 function forwardToOpenclaw(text) {
   return new Promise((resolve, reject) => {
-    const child = spawn('openclaw', ['agent', '--message', text, '--local', '--json', '--timeout', '120'], {
+    const child = spawn('openclaw', ['agent', '--local', '--agent', 'main', '--message', text, '--json', '--timeout', '120'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
     });
