@@ -35,7 +35,7 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "The real message-server.js is at docker/tenant-image/message-server.js. Spawn it with: spawn('node', [MESSAGE_SERVER_PATH], { env: { ...process.env, PATH: mockBinDir + ':' + process.env.PATH, RELAY_TOKEN: 'test-token', HOME: tmpDir } }). Use the same pattern as tc-039 for creating the mock openclaw binary. The message-server listens on PORT env var (default 3100). Use a random test port. Pattern reference: tests/integration/tc-039.test.ts for spawning message-server.js with mock openclaw."
     },
     {
@@ -50,7 +50,7 @@
         "Tests pass"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Branch: ralph/fix-mock-openclaw-stderr"
     }
   ]
