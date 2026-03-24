@@ -12,6 +12,15 @@ const PORT = 3100;
 const RELAY_TOKEN = process.env.RELAY_TOKEN || '';
 
 /**
+ * Sleep for the given number of milliseconds.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * Forward a message to the openclaw agent via the gateway CLI.
  * @param {string} text - The message text to send
  * @returns {Promise<{response: string, blocks: null}>}
@@ -147,21 +156,52 @@ const server = http.createServer(async (req, res) => {
     }) + '\n'
   );
 
-  try {
-    const result = await forwardToOpenclaw(body.text);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, response: result.response, blocks: result.blocks }));
-  } catch (err) {
-    process.stderr.write(
-      JSON.stringify({
-        level: 'error',
-        msg: 'openclaw error',
-        messageId: body.messageId,
-        error: err.message,
-      }) + '\n'
-    );
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 3000;
+  let lastResult = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const result = await forwardToOpenclaw(body.text);
+      if (result.response) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, response: result.response, blocks: result.blocks }));
+        return;
+      }
+      lastResult = result;
+      process.stdout.write(
+        JSON.stringify({
+          level: 'warn',
+          msg: 'openclaw returned empty response',
+          messageId: body.messageId,
+          attempt,
+        }) + '\n'
+      );
+    } catch (err) {
+      lastError = err;
+      process.stderr.write(
+        JSON.stringify({
+          level: 'error',
+          msg: 'openclaw error',
+          messageId: body.messageId,
+          attempt,
+          error: err.message,
+        }) + '\n'
+      );
+    }
+
+    if (attempt < MAX_RETRIES) {
+      await sleep(RETRY_DELAY_MS);
+    }
+  }
+
+  if (lastError) {
     res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: false, error: err.message }));
+    res.end(JSON.stringify({ ok: false, error: lastError.message }));
+  } else {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: false, error: 'Agent returned empty response after retries' }));
   }
 });
 
