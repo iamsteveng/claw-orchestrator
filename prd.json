@@ -1,59 +1,70 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/test-host-data-dir",
-  "description": "Add tests covering the HOST_DATA_DIR / DATA_DIR path resolution for docker-in-docker deployments",
+  "branchName": "ralph/e2e-message-delivery-tests",
+  "description": "Fix end-to-end message delivery and add tests covering the full Slack → relay → CP → container → Slack response chain",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Unit tests: buildDockerRunOptions uses HOST_DATA_DIR when provided",
-      "description": "As a developer, I want unit tests that verify buildDockerRunOptions receives the correct dataDir — specifically that the control plane passes HOST_DATA_DIR (not DATA_DIR) when it is set.",
+      "title": "Fix message-server: retry openclaw if response is empty (gateway startup race)",
+      "description": "As a user, I want my first message to always get a response, even if the agent gateway is still initializing when the first message arrives.",
       "acceptanceCriteria": [
-        "Test file: apps/control-plane/src/docker-run-options.test.ts (extend existing)",
-        "Test: when only DATA_DIR is set (no HOST_DATA_DIR), volume mounts use DATA_DIR path",
-        "Test: the volume mount format is '${dataDir}/home:/home/agent', '${dataDir}/workspace:/workspace', '${dataDir}/config:/home/agent/.config'",
-        "Test: env vars HOME, XDG_CONFIG_HOME use /home/agent (not dataDir-based paths)",
-        "All existing docker-run-options tests still pass",
-        "Typecheck passes",
-        "Tests pass"
+        "message-server.js retries the openclaw command up to 3 times with 3-second delays if the response text is empty",
+        "If all retries return empty, message-server returns { ok: false, error: 'Agent returned empty response after retries' } with HTTP 500",
+        "On successful non-empty response, returns { ok: true, response: text } as before",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "buildDockerRunOptions takes a 'dataDir' parameter directly — it is the caller's responsibility to pass HOST_DATA_DIR or DATA_DIR. The unit tests should verify the volume mount format given a specific dataDir input. Add two new test cases: one verifying that given dataDir='/data/tenants/abc', volumes contain '/data/tenants/abc/home:/home/agent' etc; another verifying that a DIFFERENT dataDir value (simulating HOST_DATA_DIR) produces different volume paths."
+      "notes": "The race condition: container starts, message arrives within seconds, openclaw gateway is still initializing so --json returns empty payloads. Fix: wrap forwardToOpenclaw in a retry loop with 3s delay between attempts. The file is docker/tenant-image/message-server.js (plain JS, no TypeScript)."
     },
     {
       "id": "US-002",
-      "title": "Integration test: control plane /start uses HOST_DATA_DIR for volume mounts",
-      "description": "As a developer, I want an integration test that verifies when HOST_DATA_DIR is set and differs from DATA_DIR, the control plane uses HOST_DATA_DIR as the volume mount source for tenant containers.",
+      "title": "Fix relay: always send a Slack DM when message delivery fails or returns empty",
+      "description": "As a user, I want to always receive some response in Slack — even if the agent fails, I should get an error message rather than silence.",
       "acceptanceCriteria": [
-        "Test file: tests/integration/tc-host-data-dir.test.ts",
-        "Test sets DATA_DIR to an in-container-style path (e.g. /data/tenants) and HOST_DATA_DIR to a different host-style path (e.g. /tmp/claw-host-test)",
-        "Test calls POST /v1/tenants/:id/start (via app.inject) with a mocked docker client",
-        "Asserts that docker.run was called with volume mounts using the HOST_DATA_DIR path, NOT the DATA_DIR path",
-        "E.g. volumes should contain '/tmp/claw-host-test/<tenantId>/home:/home/agent' when HOST_DATA_DIR=/tmp/claw-host-test",
-        "Second test: when HOST_DATA_DIR is NOT set, volumes use DATA_DIR path",
-        "E.g. volumes should contain '/data/tenants/<tenantId>/home:/home/agent' when only DATA_DIR=/data/tenants",
-        "Use vi.stubEnv + vi.resetModules + dynamic import pattern for env isolation",
+        "In apps/slack-relay/src/app-factory.ts, when msgBody.ok is true but msgBody.response is empty/falsy AND msgBody.blocks is null, send a fallback DM: 'I received your message but had trouble generating a response. Please try again.'",
+        "When msgBody.ok is false (CP returned non-2xx), the existing error log is preserved and a DM is sent",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "The relevant code is in apps/control-plane/src/app-factory.ts around line 303-315 where buildDockerRunOptions is called with hostTenantDir = (HOST_DATA_DIR ?? DATA_DIR) + '/' + tenantId. Use the mockDc pattern from tc-021.test.ts or tc-015.test.ts to capture the docker.run call and inspect its opts.volumes array. The test needs to provision a tenant first (POST /v1/tenants/provision) to create the tenant record, then call /start. Use the pattern: vi.stubEnv('DATA_DIR', '/data/tenants'); vi.stubEnv('HOST_DATA_DIR', '/tmp/claw-host-test'); vi.resetModules(); const { buildApp } = await import('../../apps/control-plane/src/app-factory.js')."
+      "notes": "File: apps/slack-relay/src/app-factory.ts around lines 281-295. Add an else clause after the existing msgBody.response check to send a fallback message when response is empty."
     },
     {
       "id": "US-003",
-      "title": "Commit and push",
-      "description": "All tests passing, committed and pushed.",
+      "title": "Add e2e test: full message delivery chain with real message-server",
+      "description": "As a developer, I want an e2e test that exercises the full message delivery path from relay → CP → message-server mock → relay → Slack DM.",
       "acceptanceCriteria": [
-        "pnpm test exits 0",
-        "80+ test files pass",
-        "Changes committed and pushed",
+        "Test file: tests/e2e/message-delivery.test.ts",
+        "Test starts a real relay + real control plane (mocked docker)",
+        "Test provisions a tenant and sets it ACTIVE",
+        "Test sets up a mock message server (HTTP server on a random port) that returns { ok: true, response: 'Hello from agent' }",
+        "Test updates the tenant's container to point to the mock message server (or mock the fetch call to the container)",
+        "Test sends a Slack event POST /slack/events to the relay",
+        "Test asserts that chat.postMessage was called with the correct channel and text 'Hello from agent'",
+        "Test asserts the message_queue row ends up as DELIVERED",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Branch: ralph/test-host-data-dir"
+      "notes": "Pattern: similar to tests/integration/relay-to-cp-contract.test.ts but full e2e. Use the vi.fn() mock for fetchFn to intercept Slack API calls. The tricky part is making the CP forward to a mock container endpoint — look at how the CP /message endpoint calls the container (uses fetch to http://containerName:3100/message, where containerName is derived from tenantId). You can intercept this by mocking globalThis.fetch in the CP, or by using a real HTTP mock server and patching the container hostname resolution."
+    },
+    {
+      "id": "US-004",
+      "title": "Commit, push and create PR",
+      "description": "All fixes and tests committed, pushed and PR opened.",
+      "acceptanceCriteria": [
+        "pnpm test passes (81+ test files)",
+        "Changes committed",
+        "Branch pushed to origin",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "Branch: ralph/e2e-message-delivery-tests"
     }
   ]
 }

@@ -853,3 +853,34 @@ US-027: Scheduler: service scaffold with idle tenant stop (48-hour inactivity)
 - 81 test files, 529 tests all passing
 - Branch pushed to origin
 ---
+
+## 2026-03-24 - US-001
+- What was implemented: Retry logic in message-server.js for empty openclaw responses
+- Files changed:
+  - docker/tenant-image/message-server.js (added sleep helper + retry loop up to 3 times with 3s delay)
+- **Learnings for future iterations:**
+  - message-server.js is plain JS (no TypeScript), lives in docker/tenant-image/
+  - Retry on empty response: check `result.response` truthiness after forwardToOpenclaw; retry up to 3 times with 3s delay; on exhaustion return HTTP 500 with 'Agent returned empty response after retries'
+  - On persistent errors (exceptions), still return the last error message (not the empty-response error)
+---
+
+## 2026-03-24 - US-002
+- What was implemented: Relay now sends Slack DM when message delivery fails or returns empty
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts (2 changes: add DM when !msgRes.ok, add else branch for empty msgBody.response)
+- **Learnings for future iterations:**
+  - DM text for failures: 'I received your message but had trouble generating a response. Please try again.'
+  - Two cases: (1) CP returns non-2xx (!msgRes.ok) → log error + send DM; (2) CP returns 200 with ok:true but no response/blocks → send DM
+---
+
+## 2026-03-24 - US-003
+- What was implemented: E2e test for full message delivery chain
+- Files changed:
+  - tests/e2e/message-delivery.test.ts (new file, 4 tests)
+- **Learnings for future iterations:**
+  - Used ports 13319/13320 for this test (CP/Relay)
+  - mockNow = 40_000_000 to avoid collisions with other tests
+  - Test team/user: T_MSG_DEL / U_MSG_DEL
+  - Mock container message endpoint: intercept URL containing ':3100/message' and return { ok: true, response: 'Hello from agent', blocks: null }
+  - Full chain verified: tenant ACTIVE + chat.postMessage called with agent text + message_queue row DELIVERED + MESSAGE_DELIVERED audit log
+---
