@@ -38,6 +38,9 @@ services:
     environment:
       - DATABASE_URL=file:/data/tenants/orchestrator.db
       - DATA_DIR=/data/tenants
+      # HOST_DATA_DIR: set this to the host path if it differs from DATA_DIR
+      # (needed when control plane runs in a container and spawns tenant containers via Docker socket)
+      # - HOST_DATA_DIR=/home/ubuntu/data/tenants
       - CONTROL_PLANE_PORT=3200
       - LOG_LEVEL=info
       - NODE_ENV=production
