@@ -9,9 +9,13 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID, createHash, createHmac } from 'node:crypto';
+import { readFileSync, writeFileSync, mkdirSync, chmodSync, rmSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import os from 'node:os';
+import http from 'node:http';
 import type { FastifyInstance } from 'fastify';
 
 // Mock Date.now() to small incrementing counter to avoid SQLite Int32 overflow
@@ -22,6 +26,8 @@ import { buildApp } from '../../apps/control-plane/src/app-factory.js';
 import { buildSlackRelayApp } from '../../apps/slack-relay/src/app-factory.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+
+const MESSAGE_SERVER_PATH = join(process.cwd(), 'docker/tenant-image/message-server.js');
 
 const TEST_TEAM_ID = 'T_MSG_DEL';
 const TEST_USER_ID = 'U_MSG_DEL';
@@ -64,6 +70,27 @@ function computeExpectedTenantId(teamId: string, userId: string): string {
     .update(`${teamId}:${userId}`)
     .digest('hex')
     .slice(0, 16);
+}
+
+async function waitForServer(port: number, retries = 30, delayMs = 100): Promise<void> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, path: '/message', method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': 2 } },
+          (res) => { res.resume(); resolve(); }
+        );
+        req.on('error', reject);
+        req.write('{}');
+        req.end();
+      });
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  throw new Error(`Server on port ${port} did not start within ${retries * delayMs}ms`);
 }
 
 async function pollUntil(
@@ -297,4 +324,79 @@ describe('E2E: Full message delivery chain (relay → CP → container → Slack
 
     expect(found).toBe(true);
   }, 20_000);
+});
+
+// ─── Real message-server.js test ──────────────────────────────────────────────
+
+describe('E2E: Real message-server.js with mock openclaw writing JSON to stderr', () => {
+  const MS_TEST_PORT = 13321;
+  const MS_RELAY_TOKEN = 'test-relay-token-e2e-ms';
+  let msProcess: ChildProcess | null = null;
+  let msTmpDir: string | null = null;
+
+  beforeAll(async () => {
+    msTmpDir = join(os.tmpdir(), `ms-e2e-${Date.now()}`);
+    mkdirSync(msTmpDir, { recursive: true });
+
+    const mockOpenclaw = join(msTmpDir, 'openclaw');
+    // Write JSON to stderr like real openclaw --json does
+    writeFileSync(
+      mockOpenclaw,
+      '#!/bin/sh\ncat > /dev/null\necho \'{"payloads":[{"text":"Hello from agent","mediaUrl":null}]}\' >&2\n',
+    );
+    chmodSync(mockOpenclaw, 0o755);
+
+    const source = readFileSync(MESSAGE_SERVER_PATH, 'utf8');
+    const patched = source.replace(/const PORT = \d+;/, `const PORT = ${MS_TEST_PORT};`);
+
+    msProcess = spawn(process.execPath, ['-e', patched], {
+      env: {
+        ...process.env,
+        RELAY_TOKEN: MS_RELAY_TOKEN,
+        PATH: `${msTmpDir}:${process.env.PATH}`,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    msProcess.stderr?.on('data', () => {});
+    msProcess.stdout?.on('data', () => {});
+
+    await waitForServer(MS_TEST_PORT);
+  }, 15_000);
+
+  afterAll(async () => {
+    if (msProcess) {
+      msProcess.kill('SIGTERM');
+      msProcess = null;
+    }
+    if (msTmpDir) {
+      rmSync(msTmpDir, { recursive: true, force: true });
+      msTmpDir = null;
+    }
+  }, 10_000);
+
+  it('POST /message returns { ok: true, response: "Hello from agent" }', async () => {
+    const body = JSON.stringify({
+      messageId: 'msg-ms-e2e-001',
+      slackEventId: 'evt-ms-e2e-001',
+      userId: 'U_MS_E2E',
+      teamId: 'T_MS_E2E',
+      text: 'hello agent',
+      slackPayload: {},
+      timestamp: 1234567890,
+    });
+    const res = await fetch(`http://127.0.0.1:${MS_TEST_PORT}/message`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Relay-Token': MS_RELAY_TOKEN,
+      },
+      body,
+    });
+    expect(res.status).toBe(200);
+    const json = await res.json() as { ok: boolean; response: string; blocks: null };
+    expect(json.ok).toBe(true);
+    expect(json.response).toBe('Hello from agent');
+    expect(json.blocks).toBeNull();
+  }, 10_000);
 });

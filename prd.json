@@ -1,70 +1,57 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/e2e-message-delivery-tests",
-  "description": "Fix end-to-end message delivery and add tests covering the full Slack → relay → CP → container → Slack response chain",
+  "branchName": "ralph/fix-mock-openclaw-stderr",
+  "description": "Fix test mocks to match real openclaw --json behavior (writes to stderr) so stdout/stderr bugs are caught in CI",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Fix message-server: retry openclaw if response is empty (gateway startup race)",
-      "description": "As a user, I want my first message to always get a response, even if the agent gateway is still initializing when the first message arrives.",
+      "title": "Fix tc-039: mock openclaw writes to stderr like real openclaw",
+      "description": "As a developer, I want tc-039 to catch the stdout/stderr bug that was missed previously.",
       "acceptanceCriteria": [
-        "message-server.js retries the openclaw command up to 3 times with 3-second delays if the response text is empty",
-        "If all retries return empty, message-server returns { ok: false, error: 'Agent returned empty response after retries' } with HTTP 500",
-        "On successful non-empty response, returns { ok: true, response: text } as before",
-        "Typecheck passes"
+        "In tests/integration/tc-039.test.ts, update the mock openclaw shell script to write JSON to stderr instead of stdout",
+        "The mock script should be: #!/bin/sh\\ncat > /dev/null\\necho '{\"payloads\":[{\"text\":\"mock response\",\"mediaUrl\":null}]}' >&2",
+        "The test assertion for the response body should still pass (the message-server now reads from stderr)",
+        "All existing tc-039 tests still pass",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "The race condition: container starts, message arrives within seconds, openclaw gateway is still initializing so --json returns empty payloads. Fix: wrap forwardToOpenclaw in a retry loop with 3s delay between attempts. The file is docker/tenant-image/message-server.js (plain JS, no TypeScript)."
+      "notes": "File: tests/integration/tc-039.test.ts. The mock openclaw binary is created with chmodSync in beforeAll. Find the line that creates the mock script content and change `echo '{...}'` to `echo '{...}' >&2`. The message-server.js now reads from stderr (fixed in PR #21), so the test should pass once the mock matches."
     },
     {
       "id": "US-002",
-      "title": "Fix relay: always send a Slack DM when message delivery fails or returns empty",
-      "description": "As a user, I want to always receive some response in Slack — even if the agent fails, I should get an error message rather than silence.",
+      "title": "Fix message-delivery e2e test: use real message-server.js with mock openclaw",
+      "description": "As a developer, I want the message-delivery e2e test to exercise the real message-server.js code path (not a mocked container endpoint) so stdout/stderr bugs are caught.",
       "acceptanceCriteria": [
-        "In apps/slack-relay/src/app-factory.ts, when msgBody.ok is true but msgBody.response is empty/falsy AND msgBody.blocks is null, send a fallback DM: 'I received your message but had trouble generating a response. Please try again.'",
-        "When msgBody.ok is false (CP returned non-2xx), the existing error log is preserved and a DM is sent",
+        "In tests/e2e/message-delivery.test.ts, replace the mock container HTTP server with a test that spawns the real message-server.js with a mock openclaw binary injected via PATH",
+        "The mock openclaw binary writes JSON to stderr: echo '{\"payloads\":[{\"text\":\"Hello from agent\",\"mediaUrl\":null}]}' >&2",
+        "The test starts the real message-server.js (from docker/tenant-image/message-server.js) on a test port using node with a modified PATH env containing the mock openclaw",
+        "The test sets RELAY_TOKEN env for the message-server process",
+        "The test hits POST /message on the message-server and verifies it returns { ok: true, response: 'Hello from agent' }",
+        "The existing full relay→CP→container mock chain test can remain as-is OR be updated to use the real message-server — do whatever is cleanest",
+        "All tests pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
-      "notes": "File: apps/slack-relay/src/app-factory.ts around lines 281-295. Add an else clause after the existing msgBody.response check to send a fallback message when response is empty."
+      "passes": false,
+      "notes": "The real message-server.js is at docker/tenant-image/message-server.js. Spawn it with: spawn('node', [MESSAGE_SERVER_PATH], { env: { ...process.env, PATH: mockBinDir + ':' + process.env.PATH, RELAY_TOKEN: 'test-token', HOME: tmpDir } }). Use the same pattern as tc-039 for creating the mock openclaw binary. The message-server listens on PORT env var (default 3100). Use a random test port. Pattern reference: tests/integration/tc-039.test.ts for spawning message-server.js with mock openclaw."
     },
     {
       "id": "US-003",
-      "title": "Add e2e test: full message delivery chain with real message-server",
-      "description": "As a developer, I want an e2e test that exercises the full message delivery path from relay → CP → message-server mock → relay → Slack DM.",
+      "title": "Confirm all tests pass and push",
+      "description": "All tests passing, committed and pushed.",
       "acceptanceCriteria": [
-        "Test file: tests/e2e/message-delivery.test.ts",
-        "Test starts a real relay + real control plane (mocked docker)",
-        "Test provisions a tenant and sets it ACTIVE",
-        "Test sets up a mock message server (HTTP server on a random port) that returns { ok: true, response: 'Hello from agent' }",
-        "Test updates the tenant's container to point to the mock message server (or mock the fetch call to the container)",
-        "Test sends a Slack event POST /slack/events to the relay",
-        "Test asserts that chat.postMessage was called with the correct channel and text 'Hello from agent'",
-        "Test asserts the message_queue row ends up as DELIVERED",
+        "pnpm test exits 0",
+        "82+ test files pass",
+        "Changes committed and pushed to origin",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": "Pattern: similar to tests/integration/relay-to-cp-contract.test.ts but full e2e. Use the vi.fn() mock for fetchFn to intercept Slack API calls. The tricky part is making the CP forward to a mock container endpoint — look at how the CP /message endpoint calls the container (uses fetch to http://containerName:3100/message, where containerName is derived from tenantId). You can intercept this by mocking globalThis.fetch in the CP, or by using a real HTTP mock server and patching the container hostname resolution."
-    },
-    {
-      "id": "US-004",
-      "title": "Commit, push and create PR",
-      "description": "All fixes and tests committed, pushed and PR opened.",
-      "acceptanceCriteria": [
-        "pnpm test passes (81+ test files)",
-        "Changes committed",
-        "Branch pushed to origin",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": "Branch: ralph/e2e-message-delivery-tests"
+      "passes": false,
+      "notes": "Branch: ralph/fix-mock-openclaw-stderr"
     }
   ]
 }
