@@ -154,7 +154,17 @@ describe('TC-016: Control plane startup reconciliation → crashed state reset',
       info: (_msg: string) => {},
       warn: (_obj: unknown, _msg: string) => {},
     };
-    await expect(reconcile(prisma, log)).resolves.toBeUndefined();
+    // Pass a dockerClient that reports the ACTIVE tenant's container as running
+    // so it stays ACTIVE (STARTING tenant has no running container → FAILED)
+    const mockDockerClient = {
+      inspect: async (containerName: string) => {
+        if (containerName === `claw-tenant-${activeTenantId}`) {
+          return { State: { Running: true } };
+        }
+        return { State: { Running: false } };
+      },
+    };
+    await expect(reconcile(prisma, log, mockDockerClient)).resolves.toBeUndefined();
   });
 
   it('TC-016: PROVISIONING tenant → status=FAILED after reconciliation', async () => {
