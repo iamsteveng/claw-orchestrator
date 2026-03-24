@@ -1,58 +1,58 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/reconcile-active-tenants-on-restart",
-  "description": "On control plane startup, check ACTIVE tenants whose containers are no longer running and reset them to STOPPED so they auto-restart on next message",
+  "branchName": "ralph/fix-duplicate-messages",
+  "description": "Fix duplicate bot messages: ensure each Slack event_id is processed exactly once, even under backlog replay or concurrent delivery",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Reconcile ACTIVE tenants on startup — reset to STOPPED if container not running",
-      "description": "As an operator, when the server restarts, I want tenants that were ACTIVE to be detected as STOPPED so they restart automatically on the next user message, instead of failing with ENOTFOUND.",
+      "title": "Deduplicate Slack events by event_id at the relay level using in-memory cache",
+      "description": "As a user, I want to receive exactly one bot response per message I send, regardless of Slack retries or backlog delivery.",
       "acceptanceCriteria": [
-        "In apps/control-plane/src/startup-reconciliation.ts, after handling STARTING tenants, add logic to check ACTIVE tenants",
-        "For each ACTIVE tenant: use dockerClient.inspect(container_name) to check if the container is running",
-        "If the container is NOT running (or inspect fails, or no dockerClient): set tenant status to STOPPED, updated_at = now",
-        "If the container IS running: leave it as ACTIVE (it survived the restart)",
-        "Log a warn for each tenant reset to STOPPED: { tenantId, containerName }, 'Tenant container not running on startup — reset to STOPPED'",
-        "The STOPPED status means the relay will call /start on next message, which calls docker.start() to restart the existing container",
+        "Add an in-memory Set (or LRU cache) in the relay to track processed event_ids",
+        "Before processing any Slack event, check if event_id is already in the set — if so, return 200 immediately without processing",
+        "Add the event_id to the set after accepting it for processing (before fire-and-forget, not after)",
+        "The cache should hold event_ids for at least 10 minutes (TTL) to cover Slack's retry window",
+        "Use a simple Map<string, number> where value is the timestamp of when it was added, evict entries older than 10 minutes",
+        "This deduplication is in ADDITION to the existing X-Slack-Retry-Num check (keep both)",
+        "Remove the 30-second stale event check added in PR #26 — it is too aggressive and drops legitimate events from users who message slowly. The event_id dedup is the correct solution.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "File: apps/control-plane/src/startup-reconciliation.ts. Add a new block after the STARTING tenant check (around line 90). Pattern is identical to the STARTING tenant loop — find ACTIVE tenants, inspect each, collect those not running, update to STOPPED. Use TenantStatus.STOPPED from @claw/shared-types. The reconcile function signature already accepts dockerClient as optional ReconcileDockerClient."
+      "notes": "File: apps/slack-relay/src/app-factory.ts. The processedEventIds cache should be created inside buildSlackRelayApp() so it is per-app-instance (not global). Use a Map<string, number> where the value is Date.now() at insertion time. Before processing, check if event_id exists in map. If yes, log info and return 200. If no, add to map then proceed. Periodically evict old entries using setInterval every 5 minutes inside the app factory. The event_id comes from body.event_id (envelope.event_id). This handles BOTH: (1) Slack retry of same event (X-Slack-Retry-Num), (2) Slack backlog delivery of events we already processed."
     },
     {
       "id": "US-002",
-      "title": "Integration tests for ACTIVE tenant reconciliation on restart",
-      "description": "As a developer, I want tests that verify ACTIVE tenants with stopped containers are reset to STOPPED on startup, and ACTIVE tenants with running containers are left alone.",
+      "title": "Add tests for event_id deduplication",
+      "description": "As a developer, I want tests that verify the relay processes each event_id exactly once.",
       "acceptanceCriteria": [
-        "Test file: tests/integration/tc-reconcile-active.test.ts",
-        "Test 1: ACTIVE tenant whose container is NOT running → reconcile resets to STOPPED",
-        "Test 2: ACTIVE tenant whose container IS running → reconcile leaves as ACTIVE",
-        "Test 3: Multiple ACTIVE tenants — some running, some not — correct ones reset to STOPPED",
-        "Test 4: ACTIVE tenant with no dockerClient provided → reset to STOPPED (safe default)",
-        "Tests use real SQLite DB (temp file) and mocked dockerClient",
+        "Test: same event_id sent twice → only one call to processSlackEventWithConfig (or equivalent)",
+        "Test: different event_ids → both processed",
+        "Test: event_id dedup works across concurrent requests (fire-and-forget pattern)",
+        "Test: X-Slack-Retry-Num header still drops retries (existing behavior preserved)",
+        "All existing relay tests still pass",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "Pattern: see tests/integration/tc-016.test.ts for reconcile test setup. Create a PrismaClient with a temp DB, seed ACTIVE tenants directly, call reconcile() with a mocked dockerClient, assert final tenant statuses. The mocked dockerClient for non-running: returns null or { State: { Running: false } }. For running: returns { State: { Running: true } }. Use the same vi.spyOn(Date, 'now') pattern to avoid SQLite Int overflow."
+      "notes": "Add tests to apps/slack-relay/src/verify-signature.test.ts or create a new test file apps/slack-relay/src/dedup.test.ts. Use buildSlackRelayApp + app.inject() pattern. Send POST /slack/events twice with the same event_id and valid signature. Assert that the mock fetchFn (or processSlackEvent spy) was called only once."
     },
     {
       "id": "US-003",
-      "title": "Commit and push",
-      "description": "All tests passing, committed and pushed.",
+      "title": "Commit, push and PR",
+      "description": "All tests passing, committed, pushed, PR opened.",
       "acceptanceCriteria": [
         "pnpm test exits 0",
-        "82+ test files pass",
-        "Changes committed and pushed to origin",
+        "83+ test files pass",
+        "Changes committed and pushed",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Branch: ralph/reconcile-active-tenants-on-restart"
+      "notes": "Branch: ralph/fix-duplicate-messages"
     }
   ]
 }
