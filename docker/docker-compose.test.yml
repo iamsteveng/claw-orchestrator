@@ -40,7 +40,7 @@ services:
       - DATA_DIR=/data/tenants
       # HOST_DATA_DIR: set this to the host path if it differs from DATA_DIR
       # (needed when control plane runs in a container and spawns tenant containers via Docker socket)
-      # - HOST_DATA_DIR=/home/ubuntu/data/tenants
+      - HOST_DATA_DIR=/data/tenants
       - CONTROL_PLANE_PORT=3200
       - LOG_LEVEL=info
       - NODE_ENV=production
@@ -48,7 +48,7 @@ services:
       - ../.env
     volumes:
       # Named volume for tenant data (containers, workspaces, etc.)
-      - tenant-data:/data/tenants
+      - /data/tenants:/data/tenants
       # Bind-mount Docker socket so control-plane can manage tenant containers
       - /var/run/docker.sock:/var/run/docker.sock
       # Auth files for tenant provisioning (read-only)
@@ -109,7 +109,7 @@ services:
     env_file:
       - ../.env
     volumes:
-      - tenant-data:/data/tenants
+      - /data/tenants:/data/tenants
     depends_on:
       control-plane:
         condition: service_healthy
