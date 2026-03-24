@@ -60,7 +60,7 @@ echo "--- DB state ---"
 docker exec claw-cp-test node -e "
 const { PrismaClient } = require('/app/node_modules/@prisma/client');
 const p = new PrismaClient({ datasourceUrl: 'file:/data/tenants/orchestrator.db' });
-Promise.all([p.tenant.count(), p.allowlist.count(), p.tenant.findMany({where:{status:{not:'ACTIVE'}}})]).then(([tc, ac, stuck]) => {
+Promise.all([p.tenant.count(), p.allowlist.count(), p.tenant.findMany({where:{status:{in:['STARTING','FAILED','PROVISIONING']}}})]).then(([tc, ac, stuck]) => {
   console.log('  Tenants:', tc, '| Allowlist:', ac);
   stuck.forEach(t => console.log('  ⚠️  STUCK tenant:', t.id, t.status));
   if (stuck.length > 0) process.exitCode = 1;
