@@ -1,3 +1,15 @@
+## 2026-03-24 - US-001 + US-002 + US-003
+- What was implemented: Fixed mock openclaw in tc-039 to write JSON to stderr; added real message-server.js integration test to e2e message-delivery test
+- Files changed:
+  - tests/integration/tc-039.test.ts (mock openclaw now writes JSON to stderr: `echo '{"payloads":[{"text":"mock response","mediaUrl":null}]}' >&2`)
+  - tests/e2e/message-delivery.test.ts (added new describe block that spawns real message-server.js with mock openclaw; added imports for spawn, ChildProcess, readFileSync, etc.)
+- **Learnings for future iterations:**
+  - Real openclaw `--json` writes its JSON output to stderr, not stdout. message-server.js reads `stderr.trim() || stdout.trim()` so stderr takes priority.
+  - Mock openclaw scripts must write JSON to stderr to match real behavior: `echo '{"payloads":[...]}' >&2`
+  - The `waitForServer` helper in tc-039 pattern works well for e2e tests that spawn processes — retry HTTP requests until non-connection-error response
+  - `process.cwd()` is reliable for constructing paths to files in the workspace when running vitest from root
+---
+
 ## Codebase Patterns
 - shared-config: schemas in `schemas.ts`, per-service config files (control-plane.ts etc.) import schemas and call `parse(process.env)` at module level; vitest-setup.ts sets required env vars so tests can import these modules
 - Root vitest.config.ts `setupFiles` includes `packages/shared-config/src/vitest-setup.ts` — applies to ALL test files in the monorepo

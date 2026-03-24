@@ -85,7 +85,8 @@ beforeAll(async () => {
 
   const mockOpenclaw = join(tmpDir, 'openclaw');
   // Drain stdin before echoing so the server's stdin.write() doesn't EPIPE
-  writeFileSync(mockOpenclaw, '#!/bin/sh\ncat > /dev/null\necho "Hello from mock openclaw"\n');
+  // Write JSON to stderr like real openclaw --json does
+  writeFileSync(mockOpenclaw, '#!/bin/sh\ncat > /dev/null\necho \'{"payloads":[{"text":"mock response","mediaUrl":null}]}\' >&2\n');
   chmodSync(mockOpenclaw, 0o755);
 
   const source = readFileSync(MESSAGE_SERVER_PATH, 'utf8');
