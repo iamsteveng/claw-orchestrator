@@ -341,6 +341,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const EVENT_ID_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const EVENT_ID_EVICT_INTERVAL_MS = 5 * 60 * 1000; // evict every 5 minutes
+
 /**
  * Builds a Fastify slack-relay instance with an explicit config object.
  * Useful in tests: pass a config with CONTROL_PLANE_URL pointing to a test server.
@@ -355,6 +358,19 @@ export async function buildSlackRelayApp(
   prisma?: PrismaClient,
 ): Promise<FastifyInstance> {
   const startedAt = Date.now();
+
+  // In-memory event_id dedup cache: Map<eventId, insertedAt ms>
+  // Covers both Slack backlog replay and X-Slack-Retry-Num retries.
+  const processedEventIds = new Map<string, number>();
+
+  // Periodically evict entries older than 10 minutes
+  const evictTimer = setInterval(() => {
+    const cutoff = Date.now() - EVENT_ID_TTL_MS;
+    for (const [id, ts] of processedEventIds) {
+      if (ts < cutoff) processedEventIds.delete(id);
+    }
+  }, EVENT_ID_EVICT_INTERVAL_MS);
+  evictTimer.unref(); // don't keep the process alive
 
   const app = Fastify({
     logger: false,
@@ -410,12 +426,16 @@ export async function buildSlackRelayApp(
       return reply.send({});
     }
 
-    // Drop stale events (older than 30 seconds) — prevents Slack event backlog replay
-    // when the endpoint was temporarily unavailable and Slack queued up events.
-    const eventTime = body.event_time;
-    if (eventTime !== undefined && Date.now() / 1000 - eventTime > 30) {
-      req.log.info({ eventId: body.event_id, eventTime, ageSeconds: Math.floor(Date.now() / 1000 - eventTime) }, 'Dropping stale Slack event');
-      return reply.send({});
+    // Deduplicate by event_id: if we've already seen this event, skip processing.
+    // Covers both Slack backlog replay and concurrent duplicate delivery.
+    const eventId = body.event_id;
+    if (eventId) {
+      if (processedEventIds.has(eventId)) {
+        req.log.info({ eventId }, 'Duplicate event_id — already processed, skipping');
+        return reply.send({});
+      }
+      // Mark as seen BEFORE fire-and-forget to prevent concurrent duplicates
+      processedEventIds.set(eventId, Date.now());
     }
 
     // Fire-and-forget: return 200 immediately
