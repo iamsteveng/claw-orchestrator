@@ -401,6 +401,15 @@ export async function buildSlackRelayApp(
       return reply.send({ challenge: body.challenge });
     }
 
+    // Ignore Slack retries — we process each event exactly once via event_id dedup.
+    // Slack retries when it doesn't get a 200 within 3s; we always return 200 immediately
+    // so retries mean Slack is re-delivering an event we already handled.
+    const retryNum = req.headers['x-slack-retry-num'];
+    if (retryNum !== undefined) {
+      req.log.info({ retryNum, eventId: body.event_id }, 'Ignoring Slack retry');
+      return reply.send({});
+    }
+
     // Fire-and-forget: return 200 immediately
     void processSlackEventWithConfig(body, config, req.log, fetchFn, prisma).catch((err) => {
       req.log.error({ err }, 'Error processing Slack event');
