@@ -465,19 +465,34 @@ docker logs claw-relay-test -f
 
 ### Updating
 
+Always use `--build` to ensure running containers reflect the latest code:
+
 ```bash
 cd /opt/claw-orchestrator
-git pull
+git fetch origin main && git reset --hard origin/main
 docker compose -f docker/docker-compose.test.yml up -d --build
-```
-
-To rebuild the tenant image after updates:
-```bash
 docker build \
   --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
   -t claw-tenant:latest \
   docker/tenant-image/
 ```
+
+> ⚠️ Never use `docker compose up -d` without `--build` after a code change — running containers will be stale even if the code on disk is updated.
+
+### Auditing for stale state
+
+Run the audit script to check for stale images, containers, volumes, or stuck tenants:
+
+```bash
+bash /opt/claw-orchestrator/scripts/audit.sh
+```
+
+The audit checks:
+- Image version labels vs current git HEAD (catches stale images that weren't rebuilt after `git pull`)
+- Orphaned tenant containers
+- Stale Docker volumes
+- Stuck tenants in DB (STARTING/FAILED with no running container)
+- CONTAINER_NETWORK and HOST_DATA_DIR env vars set correctly
 
 ---
 
