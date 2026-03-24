@@ -100,22 +100,37 @@ export async function reconcile(
   });
 
   const tenantsToStop: string[] = [];
+  const tenantsToNew: string[] = [];
   for (const tenant of activeTenants) {
     let isRunning = false;
+    let containerExists = false;
     if (dockerClient && tenant.container_name) {
       try {
         const result = await dockerClient.inspect(tenant.container_name);
-        isRunning = result?.State?.Running === true;
+        if (result !== null) {
+          containerExists = true;
+          isRunning = result?.State?.Running === true;
+        }
       } catch {
-        // Inspect failed — treat as not running
+        // Inspect failed — treat as not existing
       }
     }
     if (!isRunning) {
-      tenantsToStop.push(tenant.id);
-      log.warn(
-        { tenantId: tenant.id, containerName: tenant.container_name },
-        'Tenant container not running on startup — reset to STOPPED',
-      );
+      if (containerExists) {
+        // Container exists but stopped — can be restarted with docker start
+        tenantsToStop.push(tenant.id);
+        log.warn(
+          { tenantId: tenant.id, containerName: tenant.container_name },
+          'Tenant container stopped on startup — reset to STOPPED',
+        );
+      } else {
+        // Container doesn't exist — needs docker run (fresh start)
+        tenantsToNew.push(tenant.id);
+        log.warn(
+          { tenantId: tenant.id, containerName: tenant.container_name },
+          'Tenant container missing on startup — reset to NEW',
+        );
+      }
     }
   }
 
@@ -123,6 +138,13 @@ export async function reconcile(
     await prisma.tenant.updateMany({
       where: { id: { in: tenantsToStop } },
       data: { status: TenantStatus.STOPPED, updated_at: now },
+    });
+  }
+
+  if (tenantsToNew.length > 0) {
+    await prisma.tenant.updateMany({
+      where: { id: { in: tenantsToNew } },
+      data: { status: TenantStatus.NEW, updated_at: now },
     });
   }
 

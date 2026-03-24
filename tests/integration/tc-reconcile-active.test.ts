@@ -138,7 +138,7 @@ describe('TC-reconcile-active: Reconcile ACTIVE tenants on startup', () => {
     expect(stopped2!.status).toBe('STOPPED');
   });
 
-  it('Test 4: No dockerClient provided → all ACTIVE tenants reset to STOPPED (safe default)', async () => {
+  it('Test 4: No dockerClient provided → all ACTIVE tenants reset to NEW (container assumed missing)', async () => {
     const tenantId = await createActiveTenant('T4_NODOCKERCTL');
 
     // No dockerClient — safe default is to reset to STOPPED
@@ -146,10 +146,10 @@ describe('TC-reconcile-active: Reconcile ACTIVE tenants on startup', () => {
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     expect(tenant).not.toBeNull();
-    expect(tenant!.status).toBe('STOPPED');
+    expect(tenant!.status).toBe("NEW");
   });
 
-  it('Test 4b: inspect throws → tenant reset to STOPPED', async () => {
+  it('Test 4b: inspect throws → tenant reset to NEW (container assumed missing)', async () => {
     const tenantId = await createActiveTenant('T4B_THROWS');
 
     const mockDockerClient = {
@@ -162,10 +162,10 @@ describe('TC-reconcile-active: Reconcile ACTIVE tenants on startup', () => {
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     expect(tenant).not.toBeNull();
-    expect(tenant!.status).toBe('STOPPED');
+    expect(tenant!.status).toBe("NEW");
   });
 
-  it('Test 4c: inspect returns null → tenant reset to STOPPED', async () => {
+  it('Test 4c: inspect returns null → tenant reset to NEW (container does not exist)', async () => {
     const tenantId = await createActiveTenant('T4C_NULL');
 
     const mockDockerClient = {
@@ -178,7 +178,7 @@ describe('TC-reconcile-active: Reconcile ACTIVE tenants on startup', () => {
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     expect(tenant).not.toBeNull();
-    expect(tenant!.status).toBe('STOPPED');
+    expect(tenant!.status).toBe("NEW");
   });
 
   it('Test 5: warn is called for each tenant reset to STOPPED', async () => {
@@ -202,7 +202,7 @@ describe('TC-reconcile-active: Reconcile ACTIVE tenants on startup', () => {
       (c) => (c.obj as { tenantId: string }).tenantId === tenantId,
     );
     expect(warnForTenant).toBeDefined();
-    expect(warnForTenant!.msg).toBe('Tenant container not running on startup — reset to STOPPED');
+    expect(warnForTenant!.msg).toBe('Tenant container stopped on startup — reset to STOPPED');
     expect((warnForTenant!.obj as { containerName: string }).containerName).toBe(
       `claw-tenant-${tenantId}`,
     );
