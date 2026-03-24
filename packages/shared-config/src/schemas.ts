@@ -10,6 +10,10 @@ export const controlPlaneConfigSchema = z.object({
   // Set HOST_DATA_DIR to the actual host path (e.g. /home/ubuntu/data/tenants) when
   // they differ. Defaults to DATA_DIR when not set.
   HOST_DATA_DIR: z.string().min(1).optional(),
+  // CONTAINER_NETWORK: Docker network to attach tenant containers to.
+  // Required when the control plane runs inside Docker Compose so tenant
+  // containers can reach the control plane (same network) for health checks.
+  CONTAINER_NETWORK: z.string().min(1).optional(),
   TENANT_IMAGE: z.string().min(1),
   TEMPLATES_DIR: z.string().min(1).default('/opt/claw-orchestrator/templates/workspace'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),

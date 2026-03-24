@@ -41,6 +41,8 @@ services:
       # HOST_DATA_DIR: set this to the host path if it differs from DATA_DIR
       # (needed when control plane runs in a container and spawns tenant containers via Docker socket)
       - HOST_DATA_DIR=/data/tenants
+      # CONTAINER_NETWORK: Docker network tenant containers join (must match this compose network)
+      - CONTAINER_NETWORK=claw-orchestrator-test_default
       - CONTROL_PLANE_PORT=3200
       - LOG_LEVEL=info
       - NODE_ENV=production

@@ -311,6 +311,7 @@ export async function buildApp(
           dataDir: hostTenantDir,
           resourceOverrides: tenant.resource_overrides,
           relayToken: tenant.relay_token,
+          network: controlPlaneConfig.CONTAINER_NETWORK,
         });
         await dc.run(runOpts);
       } else {
