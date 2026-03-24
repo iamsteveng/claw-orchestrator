@@ -91,6 +91,41 @@ export async function reconcile(
     });
   }
 
+  // For ACTIVE tenants: check if their container is still running.
+  // If not running (or no docker client provided), reset to STOPPED so the relay
+  // will call /start on the next message, restarting the existing container.
+  const activeTenants = await prisma.tenant.findMany({
+    where: { status: TenantStatus.ACTIVE },
+    select: { id: true, container_name: true },
+  });
+
+  const tenantsToStop: string[] = [];
+  for (const tenant of activeTenants) {
+    let isRunning = false;
+    if (dockerClient && tenant.container_name) {
+      try {
+        const result = await dockerClient.inspect(tenant.container_name);
+        isRunning = result?.State?.Running === true;
+      } catch {
+        // Inspect failed — treat as not running
+      }
+    }
+    if (!isRunning) {
+      tenantsToStop.push(tenant.id);
+      log.warn(
+        { tenantId: tenant.id, containerName: tenant.container_name },
+        'Tenant container not running on startup — reset to STOPPED',
+      );
+    }
+  }
+
+  if (tenantsToStop.length > 0) {
+    await prisma.tenant.updateMany({
+      where: { id: { in: tenantsToStop } },
+      data: { status: TenantStatus.STOPPED, updated_at: now },
+    });
+  }
+
   // Write SYSTEM_STARTUP audit event
   await prisma.auditLog.create({
     data: {
