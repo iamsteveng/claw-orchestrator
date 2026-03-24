@@ -49,19 +49,19 @@ function forwardToOpenclaw(text) {
 
     child.on('close', (code) => {
       if (code === 0) {
-        // openclaw --json returns { payloads: [{ text, mediaUrl }], meta: {...} }
-        // Extract the text from the first payload
+        // openclaw --json writes output to stderr (stdout may be empty)
+        const raw = stderr.trim() || stdout.trim();
         try {
-          const parsed = JSON.parse(stdout.trim());
+          const parsed = JSON.parse(raw);
           const payloads = parsed.payloads || [];
           const text = payloads.map(p => p.text).filter(Boolean).join('\n').trim();
-          resolve({ response: text || stdout.trim(), blocks: null });
+          resolve({ response: text || raw, blocks: null });
         } catch {
           // Not JSON — return raw output
-          resolve({ response: stdout.trim(), blocks: null });
+          resolve({ response: raw, blocks: null });
         }
       } else {
-        reject(new Error(stderr.trim() || `openclaw exited with code ${code}`));
+        reject(new Error(stderr.trim() || stdout.trim() || `openclaw exited with code ${code}`));
       }
     });
 
