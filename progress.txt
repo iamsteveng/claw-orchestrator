@@ -1,3 +1,15 @@
+## 2026-03-27 - US-001 + US-002 + US-003 (fix-bot-feedback-loop)
+- What was implemented: Bot self-message filtering via Slack auth.test at startup
+- Files changed:
+  - apps/slack-relay/src/app-factory.ts: added auth.test call at buildSlackRelayApp startup to resolve botUserId; added botUserId optional param to processSlackEventWithConfig; added check to skip events where event.user === botUserId
+  - apps/slack-relay/src/bot-filter.test.ts: 5 new tests covering all AC (bot self-filtered, human processed, bot_id check preserved, subtype check preserved, graceful degradation on auth.test failure)
+- **Learnings for future iterations:**
+  - The cleanest pattern for resolving botUserId: call auth.test in buildSlackRelayApp closure, pass as optional param to processSlackEventWithConfig
+  - dedup.test.ts needed no changes since the fetch mock already returns 200 for auth.test (it uses mockResolvedValue which matches any URL)
+  - auth.test must use POST method per Slack API convention; wrap in try/catch for graceful degradation
+  - In bot-filter.test.ts, the makeAuthFailFetch mock must reset after buildSlackRelayApp() so subsequent inject() calls succeed
+---
+
 ## 2026-03-24 - US-001 + US-002 + US-003 (fix-message-server-serial-queue)
 - What was implemented: Serial message queue in message-server.js; stale lock cleanup in entrypoint.sh
 - Files changed:
