@@ -1,51 +1,57 @@
 {
   "project": "claw-orchestrator",
-  "branchName": "ralph/fix-message-server-serial-queue",
-  "description": "Fix message-server to process messages serially (one at a time) to prevent openclaw session lock contention",
+  "branchName": "ralph/fix-bot-feedback-loop",
+  "description": "Fix Slack bot feedback loop: the bot's own DM replies are being processed as new user messages, causing an infinite conversation loop",
   "userStories": [
     {
       "id": "US-001",
-      "title": "Message-server: queue incoming messages and process serially",
-      "description": "As a user, I want my messages processed one at a time so openclaw doesn't get concurrent session lock conflicts causing errors and duplicate responses.",
+      "title": "Resolve the bot's own Slack user ID at startup and skip events from it",
+      "description": "As a user, I want the bot to never respond to its own messages, preventing infinite feedback loops in Slack DMs.",
       "acceptanceCriteria": [
-        "message-server.js maintains a simple async queue (array + processing flag)",
-        "When a POST /message arrives and the queue is empty and not processing, process immediately",
-        "When a POST /message arrives while already processing, add to queue and respond 200 with { ok: true, queued: true }",
-        "After each message completes (success or error), dequeue and process the next one",
-        "The queue should have a max depth of 10 — if full, respond 503 with { ok: false, error: 'Queue full' }",
-        "Processing is still async relative to HTTP (respond 200 quickly, process in background) — the relay already handles the async response pattern via long-polling",
-        "Typecheck passes (this is plain JS, no TypeScript)"
+        "At relay startup (inside buildSlackRelayApp), call Slack API 'auth.test' using the SLACK_BOT_TOKEN to resolve the bot's own user ID",
+        "Store the bot user ID (e.g. 'U_BOTID') in a variable inside the app factory closure",
+        "In the /slack/events handler (inside processSlackEventWithConfig), if envelope.event?.user equals the bot's user ID, log info and return immediately without processing",
+        "Also keep the existing bot_id and subtype checks as secondary guards",
+        "If auth.test fails at startup, log a warning but don't crash — the bot_id/subtype checks remain as fallback",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
-      "notes": "File: docker/tenant-image/message-server.js. The current code calls forwardToOpenclaw() immediately on every request. Add a simple queue: const messageQueue = []; let isProcessing = false; async function processNext() { if (isProcessing || messageQueue.length === 0) return; isProcessing = true; const { text, resolve, reject } = messageQueue.shift(); try { const result = await forwardToOpenclaw(text); resolve(result); } catch(e) { reject(e); } finally { isProcessing = false; processNext(); } }. In the request handler, instead of calling forwardToOpenclaw directly, push to queue. BUT: the relay is polling via long HTTP request — it needs the response inline. So actually the better fix is simpler: use a mutex/semaphore so only one openclaw process runs at a time, but still return the response to the caller when done. Use a simple promise chain as a mutex: let currentProcessing = Promise.resolve(); currentProcessing = currentProcessing.then(() => forwardToOpenclaw(text)).catch(() => forwardToOpenclaw(text)); return await currentProcessing. Actually the cleanest fix: serialize with a simple lock flag and a queue of { resolve, reject, text } tuples."
+      "notes": "The Slack auth.test API (https://slack.com/api/auth.test) returns { ok: true, user_id: 'UXXXXXXXX', bot_id: 'BXXXXXXXX', ... } when called with the bot token. Call it once at startup via fetchFn('https://slack.com/api/auth.test', { headers: { authorization: 'Bearer ' + config.SLACK_BOT_TOKEN } }). Store the user_id. Then in processSlackEventWithConfig, add: if (slackUserId === botUserId) { log.info({ slackEventId }, 'Ignoring own bot message'); return; }. The botUserId must be passed to processSlackEventWithConfig as a new parameter or stored in a closure variable accessible from the event handler. IMPORTANT: The current architecture has processSlackEventWithConfig as a standalone exported function, not a closure. The cleanest approach is: (1) call auth.test in buildSlackRelayApp, (2) pass botUserId to processSlackEventWithConfig as a new optional parameter, (3) in the /slack/events handler, pass the resolved botUserId. This avoids changing the function signature in a breaking way (make it optional with default undefined, which means no filtering = backwards compatible)."
     },
     {
       "id": "US-002",
-      "title": "Remove stale session lock file on container startup",
-      "description": "As a developer, I want stale .lock files cleaned up when the container starts so previous crashes don't block new messages.",
+      "title": "Add tests for bot self-message filtering",
+      "description": "As a developer, I want tests that verify the bot never processes its own messages.",
       "acceptanceCriteria": [
-        "In docker/tenant-image/entrypoint.sh, before starting the gateway, remove any stale .jsonl.lock files in /home/agent/.openclaw/agents/main/sessions/",
-        "Use: find /home/agent/.openclaw/agents/main/sessions -name '*.lock' -delete 2>/dev/null || true",
-        "This prevents the 'session file locked' error after container restart",
-        "Typecheck passes"
+        "Test: event where envelope.event.user === botUserId is NOT processed (no provision call made)",
+        "Test: event where envelope.event.user !== botUserId IS processed normally",
+        "Test: event with bot_id field is still filtered (existing check preserved)",
+        "Test: event with subtype 'bot_message' is still filtered (existing check preserved)",
+        "Test: if auth.test fails at startup, bot still functions but without self-filtering (graceful degradation)",
+        "All existing tests still pass",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
-      "notes": "File: docker/tenant-image/entrypoint.sh. Add the find command before the 'exec su -s /bin/bash agent -c ...' line. Must run as root (before dropping to agent user)."
+      "notes": "Add tests to apps/slack-relay/src/dedup.test.ts or create a new apps/slack-relay/src/bot-filter.test.ts. Use the buildSlackRelayApp + app.inject() pattern. Mock the fetch to intercept auth.test and return a known bot user ID. Then send events with that user ID and verify they are not processed."
     },
     {
       "id": "US-003",
       "title": "Commit and push",
       "description": "All changes committed and pushed.",
       "acceptanceCriteria": [
-        "Changes committed with descriptive message",
-        "Branch pushed to origin",
-        "Typecheck passes"
+        "npm run build passes (in the claw-orchestrator repo: pnpm -r build)",
+        "pnpm test passes",
+        "Changes committed and pushed",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
       "passes": true,
-      "notes": "Branch: ralph/fix-message-server-serial-queue"
+      "notes": "Branch: ralph/fix-bot-feedback-loop. Build with: pnpm -r build. Test with: pnpm test."
     }
   ]
 }
