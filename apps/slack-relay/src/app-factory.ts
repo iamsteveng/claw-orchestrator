@@ -29,6 +29,8 @@ export interface SlackEventEnvelope {
   team_id?: string;
   event?: {
     user?: string;
+    bot_id?: string;
+    subtype?: string;
     type?: string;
     text?: string;
     channel?: string;
@@ -97,6 +99,13 @@ export async function processSlackEventWithConfig(
 
   if (!slackTeamId || !slackUserId) {
     log.warn({ envelope }, 'Slack event missing team_id or user');
+    return;
+  }
+
+  // Ignore bot messages to prevent feedback loops — the bot's own DMs trigger
+  // message.im events which would otherwise be processed as user messages.
+  if (envelope.event?.bot_id || envelope.event?.subtype === 'bot_message') {
+    log.info({ slackEventId, bot_id: envelope.event?.bot_id }, 'Ignoring bot message');
     return;
   }
 
