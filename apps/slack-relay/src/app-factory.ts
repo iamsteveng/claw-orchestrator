@@ -91,6 +91,7 @@ export async function processSlackEventWithConfig(
   log: { warn: (ctx: object, msg: string) => void; error: (ctx: object, msg: string) => void; info: (ctx: object, msg: string) => void },
   fetchFn: typeof fetch = fetch,
   prisma?: PrismaClient,
+  botUserId?: string,
 ): Promise<void> {
   const slackTeamId = envelope.team_id ?? '';
   const slackUserId = envelope.event?.user ?? '';
@@ -99,6 +100,13 @@ export async function processSlackEventWithConfig(
 
   if (!slackTeamId || !slackUserId) {
     log.warn({ envelope }, 'Slack event missing team_id or user');
+    return;
+  }
+
+  // Ignore the bot's own messages (primary guard): if the event user matches
+  // the resolved bot user ID, skip processing to prevent feedback loops.
+  if (botUserId && slackUserId === botUserId) {
+    log.info({ slackEventId, slackUserId }, 'Ignoring own bot message');
     return;
   }
 
@@ -368,6 +376,22 @@ export async function buildSlackRelayApp(
 ): Promise<FastifyInstance> {
   const startedAt = Date.now();
 
+  // Resolve the bot's own Slack user ID via auth.test to filter self-messages.
+  let botUserId: string | undefined;
+  try {
+    const authRes = await fetchFn('https://slack.com/api/auth.test', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${config.SLACK_BOT_TOKEN}` },
+    });
+    const authBody = await authRes.json() as { ok: boolean; user_id?: string };
+    if (authBody.ok && authBody.user_id) {
+      botUserId = authBody.user_id;
+    }
+  } catch (err) {
+    // Non-fatal: bot_id/subtype checks remain as fallback
+    console.warn({ err }, 'auth.test failed at startup — self-message filtering disabled');
+  }
+
   // In-memory event_id dedup cache: Map<eventId, insertedAt ms>
   // Covers both Slack backlog replay and X-Slack-Retry-Num retries.
   const processedEventIds = new Map<string, number>();
@@ -448,7 +472,7 @@ export async function buildSlackRelayApp(
     }
 
     // Fire-and-forget: return 200 immediately
-    void processSlackEventWithConfig(body, config, req.log, fetchFn, prisma).catch((err) => {
+    void processSlackEventWithConfig(body, config, req.log, fetchFn, prisma, botUserId).catch((err) => {
       req.log.error({ err }, 'Error processing Slack event');
     });
 
