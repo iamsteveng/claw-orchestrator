@@ -55,9 +55,10 @@ function forwardToOpenclaw(text) {
           const parsed = JSON.parse(raw);
           const payloads = parsed.payloads || [];
           const text = payloads.map(p => p.text).filter(Boolean).join('\n').trim();
-          resolve({ response: text || raw, blocks: null });
+          // Never send raw JSON meta to the user — only extracted text
+          resolve({ response: text || '', blocks: null });
         } catch {
-          // Not JSON — return raw output
+          // Not JSON — return raw output (plain text response)
           resolve({ response: raw, blocks: null });
         }
       } else {
