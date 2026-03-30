@@ -2,9 +2,16 @@ import { PrismaClient } from '@prisma/client';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { TenantStatus } from '@claw/shared-types';
 import { execSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildApp } from './app-factory.js';
 import { reconcile } from './startup-reconciliation.js';
 import { pollUntilHealthy } from './health-poll.js';
+
+// Resolve the monorepo-root prisma/schema.prisma path relative to this file.
+// __dirname equivalent in ESM: apps/control-plane/src → up 3 levels → monorepo root
+const MONOREPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../../../..');
+const PRISMA_SCHEMA = resolve(MONOREPO_ROOT, 'prisma', 'schema.prisma');
 
 // ─── Server startup ───────────────────────────────────────────────────────────
 
@@ -14,7 +21,7 @@ async function main(): Promise<void> {
 
   // Run prisma migrate deploy
   try {
-    execSync('npx prisma migrate deploy', {
+    execSync(`npx prisma migrate deploy --schema "${PRISMA_SCHEMA}"`, {
       env: { ...process.env, DATABASE_URL: controlPlaneConfig.DATABASE_URL },
       stdio: 'pipe',
     });
