@@ -9,8 +9,11 @@ import { reconcile } from './startup-reconciliation.js';
 import { pollUntilHealthy } from './health-poll.js';
 
 // Resolve the monorepo-root prisma/schema.prisma path relative to this file.
-// __dirname equivalent in ESM: apps/control-plane/src → up 3 levels → monorepo root
-const MONOREPO_ROOT = resolve(fileURLToPath(import.meta.url), '../../../../..');
+// Compiled to: apps/control-plane/dist/index.js
+// dirname(index.js) = apps/control-plane/dist → ../../.. → monorepo root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname_dist = resolve(__filename, '..');          // apps/control-plane/dist
+const MONOREPO_ROOT = resolve(__dirname_dist, '../../..'); // claw-orchestrator root
 const PRISMA_SCHEMA = resolve(MONOREPO_ROOT, 'prisma', 'schema.prisma');
 
 // ─── Server startup ───────────────────────────────────────────────────────────
