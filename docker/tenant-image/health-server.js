@@ -48,7 +48,8 @@ const server = http.createServer((req, res) => {
     openclaw: checkOpenclaw(),
     workspace_mounted: checkWritable('/workspace'),
     home_mounted: checkWritable('/home/agent'),
-    auth_profiles: fs.existsSync('/run/secrets/auth-profiles.json'),
+    // Check where auth-profiles.json is actually bind-mounted by the control plane
+    auth_profiles: fs.existsSync('/home/agent/.openclaw/agents/main/agent/auth-profiles.json'),
   };
 
   const allOk = checks.openclaw && checks.workspace_mounted && checks.home_mounted;

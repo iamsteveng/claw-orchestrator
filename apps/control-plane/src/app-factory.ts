@@ -133,13 +133,34 @@ export async function buildApp(
       );
 
       // Copy auth files into tenant home (not bind-mounted — OpenClaw needs write access)
-      const { copyFile } = await import('node:fs/promises');
+      const { copyFile, access } = await import('node:fs/promises');
       const { homedir } = await import('node:os');
       const hostHome = homedir();
       const authSrc = `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`;
       const credsSrc = `${hostHome}/.claude/.credentials.json`;
-      await copyFile(authSrc, `${dataDir}/home/.openclaw/agents/main/agent/auth-profiles.json`);
-      await copyFile(credsSrc, `${dataDir}/home/.claude/.credentials.json`);
+      const authDest = `${dataDir}/home/.openclaw/agents/main/agent/auth-profiles.json`;
+      const credsDest = `${dataDir}/home/.claude/.credentials.json`;
+
+      // Ensure destination directories exist before copying
+      const { dirname } = await import('node:path');
+      await mkdir(dirname(authDest), { recursive: true });
+      await mkdir(dirname(credsDest), { recursive: true });
+
+      // Copy auth-profiles.json (warn if missing, don't throw — container still starts)
+      try {
+        await access(authSrc);
+        await copyFile(authSrc, authDest);
+      } catch {
+        console.warn(`auth-profiles.json not found at ${authSrc} — tenant model calls may fail`);
+      }
+
+      // Copy claude credentials (warn if missing, don't throw)
+      try {
+        await access(credsSrc);
+        await copyFile(credsSrc, credsDest);
+      } catch {
+        console.warn(`credentials.json not found at ${credsSrc} — Claude Code may not authenticate`);
+      }
 
       // Create additional OpenClaw dirs the agent needs
       const extraDirs = [
