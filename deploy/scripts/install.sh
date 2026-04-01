@@ -1,23 +1,26 @@
 #!/bin/bash
-# update.sh — Safe update for a running claw-orchestrator deployment
+# install.sh — Fresh-install entry point for claw-orchestrator on a new Ubuntu server
 #
 # Run as: ubuntu (or repo owner) with sudo access
 # Do NOT run as root — pnpm and git operations run as current user
 #
 # Usage:
-#   bash deploy/scripts/update.sh [--skip-validation]
+#   bash deploy/scripts/install.sh [--skip-validation]
 #
-# What it does (10 steps):
-#   1. Pre-deploy backup (when DB exists)
-#   2. Stop services (reverse dependency order)
-#   3. Pull latest code (smart pull — safe when AI agent has local commits)
+# Prerequisites:
+#   - node, pnpm, docker, sqlite3 must be installed
+#   - .env file in repo root with real SLACK_SIGNING_SECRET and SLACK_BOT_TOKEN
+#
+# What it does (9 steps):
+#   1. Check prerequisites (tools + secrets)
+#   2. Create /data/ directories and claw system user
+#   3. Install out-of-repo env file at /etc/claw-orchestrator/env
 #   4. Install pnpm dependencies
 #   5. Build monorepo
 #   6. Build tenant Docker image
 #   7. Run Prisma migrations
-#   8. Update out-of-repo env file + reload systemd unit files
-#   9. Start services
-#  10. Wait for health checks (+ optional validation)
+#   8. Install + enable systemd services and start them
+#   9. Wait for health checks (+ optional validation)
 
 set -euo pipefail
 
@@ -84,89 +87,55 @@ wait_healthy() {
   die "Services did not become healthy after $((retries * interval))s. Check: journalctl -u claw-control-plane -n 50"
 }
 
-# Conditional git pull — handles all git states safely.
-# - Already up-to-date: no-op
-# - Remote ahead (normal update): fast-forward merge
-# - Local ahead (AI agent committed, not yet pushed): skip pull, log warning
-# - Diverged: die with clear message
-smart_pull() {
-  git fetch origin
-  local LOCAL REMOTE BASE
-  LOCAL=$(git rev-parse HEAD)
-  REMOTE=$(git rev-parse "@{u}" 2>/dev/null || die "No upstream branch configured. Run: git branch --set-upstream-to=origin/main main")
-  BASE=$(git merge-base HEAD "@{u}")
-
-  if [ "$LOCAL" = "$REMOTE" ]; then
-    log "Already up to date."
-  elif [ "$LOCAL" = "$BASE" ]; then
-    log "Pulling remote changes..."
-    git merge --ff-only "@{u}"
-  elif [ "$REMOTE" = "$BASE" ]; then
-    log "Local commits present and ahead of remote — skipping pull."
-    log "NOTE: Push local commits to origin so future deployments pick them up."
-  else
-    die "Branches have diverged. Push local commits or resolve manually before redeploying."
-  fi
-}
-
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-log "=== claw-orchestrator update ==="
+log "=== claw-orchestrator fresh install ==="
 log "DEPLOY_DIR=${DEPLOY_DIR}"
 
+# Step 1/9: Prerequisites
+log "Step 1/9: Checking prerequisites (tools + secrets)..."
+for tool in node pnpm docker sqlite3; do
+  command -v "$tool" > /dev/null 2>&1 || die "Required tool not found: ${tool}. Install it and re-run."
+done
 check_secrets
+log "  Prerequisites OK."
 
-# Step 1/10: Pre-deploy backup
-log "Step 1/10: Pre-deploy backup..."
-DB_PATH=$(sed -n 's/^DATABASE_URL=file://p' "${ENV_FILE}")
-DB_PATH="${DB_PATH:-/data/claw-orchestrator/db.sqlite}"
-if [ -f "$DB_PATH" ]; then
-  bash "${DEPLOY_DIR}/deploy/scripts/backup.sh" || die "Backup failed. Aborting update to protect your data."
-else
-  log "  No DB found at ${DB_PATH} — skipping backup (first run or fresh server)."
-fi
+# Step 2/9: Directories and system user
+log "Step 2/9: Creating /data/ directories and claw system user..."
+sudo bash "${DEPLOY_DIR}/deploy/scripts/setup-dirs.sh"
 
-# Step 2/10: Stop services (reverse dependency order: scheduler → relay → control-plane)
-log "Step 2/10: Stopping services..."
-sudo systemctl stop claw-scheduler claw-slack-relay claw-control-plane 2>/dev/null || true
+# Step 3/9: Out-of-repo env file
+log "Step 3/9: Installing out-of-repo env file at ${SYSTEM_ENV_FILE}..."
+install_system_env
+log "  Env file installed (git-tracked template is unchanged)."
 
-# Step 3/10: Pull latest code
-log "Step 3/10: Pulling latest code..."
+# Step 4/9: pnpm dependencies
+log "Step 4/9: Installing pnpm dependencies..."
 cd "${DEPLOY_DIR}"
-smart_pull
-
-# Step 4/10: pnpm dependencies
-log "Step 4/10: Installing pnpm dependencies..."
 pnpm install --frozen-lockfile
 
-# Step 5/10: Build monorepo
-log "Step 5/10: Building monorepo..."
+# Step 5/9: Build monorepo
+log "Step 5/9: Building monorepo..."
 pnpm -r build
 
-# Step 6/10: Tenant Docker image
-log "Step 6/10: Building tenant Docker image..."
+# Step 6/9: Tenant Docker image
+log "Step 6/9: Building tenant Docker image..."
 docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 
-# Step 7/10: Prisma migrations
-log "Step 7/10: Running Prisma migrations..."
+# Step 7/9: Prisma migrations
+log "Step 7/9: Running Prisma migrations..."
 cd "${DEPLOY_DIR}/apps/control-plane"
-BACKUP_HINT="/data/backups/$(date -u +%Y-%m-%d)/db.sqlite"
 DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "${ENV_FILE}")" \
-  npx prisma migrate deploy || \
-  die "Prisma migration failed. Services are stopped. Restore DB from backup at ${BACKUP_HINT} then start services manually."
+  npx prisma migrate deploy
 cd "${DEPLOY_DIR}"
 
-# Step 8/10: Update env file + reload systemd
-log "Step 8/10: Updating out-of-repo env file and reloading systemd..."
-install_system_env
+# Step 8/9: Systemd services
+log "Step 8/9: Installing and enabling systemd services..."
 sudo bash "${DEPLOY_DIR}/deploy/scripts/install-services.sh"
-
-# Step 9/10: Start services
-log "Step 9/10: Starting services..."
 sudo systemctl start claw-control-plane claw-slack-relay claw-scheduler
 
-# Step 10/10: Health check
-log "Step 10/10: Waiting for services to become healthy..."
+# Step 9/9: Health check
+log "Step 9/9: Waiting for services to become healthy..."
 wait_healthy 30 2
 
 # Optional: smoke test
@@ -177,4 +146,4 @@ else
   log "Skipping validate-deployment.sh (--skip-validation passed)."
 fi
 
-log "=== Update complete ==="
+log "=== Install complete ==="
