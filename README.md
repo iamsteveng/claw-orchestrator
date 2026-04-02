@@ -25,9 +25,21 @@ Each tenant gets a Docker container built from `docker/tenant-image/` with OpenC
 - Linux host (AWS EC2 recommended: `t4g.2xlarge` for ~10 users)
 - Docker Engine
 - Node.js 22 + pnpm
+- `sqlite3`
+- `git`
+- `sudo` access for the deploying user
 - An OpenClaw installation on the host with a valid auth profile
 - Claude Code authenticated on the host (`~/.claude/.credentials.json`)
 - A Slack app with a bot token and signing secret
+
+## Deployment Assumptions
+
+The checked-in deployment assets are currently opinionated:
+
+- `deploy/systemd/*.service` use `WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator`
+- `deploy/systemd/claw-orchestrator.env` uses `TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace`
+
+If you deploy from a different checkout path, update those files **before** running the install or update scripts.
 
 ---
 
@@ -42,29 +54,21 @@ sudo usermod -aG docker $USER
 
 # Node.js 22
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
-sudo apt-get install -y nodejs
+sudo apt-get install -y nodejs sqlite3 git
 
 # pnpm
-npm install -g pnpm
+sudo npm install -g pnpm
 ```
 
-### 2. Clone and build
+### 2. Clone the repo at the path expected by the service files
 
 ```bash
-git clone https://github.com/iamsteveng/claw-orchestrator.git /opt/claw-orchestrator
-cd /opt/claw-orchestrator
-pnpm install
-pnpm build
+mkdir -p /home/ubuntu/.openclaw/workspace
+git clone https://github.com/iamsteveng/claw-orchestrator.git /home/ubuntu/.openclaw/workspace/claw-orchestrator
+cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
 ```
 
-### 3. Create data directories
-
-```bash
-sudo mkdir -p /data/claw-orchestrator /data/tenants
-sudo chown -R $USER:$USER /data/claw-orchestrator /data/tenants
-```
-
-### 4. Configure environment
+### 3. Configure `.env`
 
 ```bash
 cp .env.example .env
@@ -78,10 +82,12 @@ CONTROL_PLANE_PORT=3200
 DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
 TENANT_IMAGE=claw-tenant:latest
+TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace
 LOG_LEVEL=info
+NODE_ENV=production
 
 # Slack Relay
-SLACK_RELAY_PORT=3000
+SLACK_RELAY_PORT=3101
 SLACK_SIGNING_SECRET=<your-slack-signing-secret>
 SLACK_BOT_TOKEN=xoxb-<your-bot-token>
 CONTROL_PLANE_URL=http://localhost:3200
@@ -91,9 +97,13 @@ SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
 ```
 
+> **Important:** the deploy scripts read repo `.env` for validation, backup/migration DB path lookup, and Slack secrets. The running systemd services read `/etc/claw-orchestrator/env`, which is generated from `deploy/systemd/claw-orchestrator.env`.
+>
+> As currently implemented, `install.sh` / `update.sh` automatically copy only `SLACK_SIGNING_SECRET` and `SLACK_BOT_TOKEN` from repo `.env` into `/etc/claw-orchestrator/env`. If you change other runtime values, mirror them in `deploy/systemd/claw-orchestrator.env` before running the scripts, or edit `/etc/claw-orchestrator/env` after installation.
+
 > **Model auth:** No `ANTHROPIC_API_KEY` goes here. OpenClaw model auth is provided via a read-only bind-mount of `~/.openclaw/agents/main/agent/auth-profiles.json` into each container. Claude Code auth is provided via `~/.claude/.credentials.json`. Both must exist on the host before starting.
 
-### 5. Verify host auth files exist
+### 4. Verify host auth files exist
 
 ```bash
 test -f ~/.openclaw/agents/main/agent/auth-profiles.json \
@@ -105,39 +115,39 @@ test -f ~/.claude/.credentials.json \
   || echo "✗ .credentials.json missing — run 'claude auth login' first"
 ```
 
-### 6. Run database migrations
+### 5. Run the repeatable install script
 
 ```bash
-cd /opt/claw-orchestrator
-npx prisma migrate deploy
+cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+bash deploy/scripts/install.sh
 ```
 
-### 7. Build the tenant Docker image
+Optional:
 
 ```bash
-docker build \
-  --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
-  -t claw-tenant:latest \
-  docker/tenant-image/
+bash deploy/scripts/install.sh --skip-validation
 ```
 
-### 8. Add yourself to the allowlist
+The install script:
+
+1. validates required tools and Slack secrets
+2. creates `/data/*` directories and the `claw` system user
+3. installs `/etc/claw-orchestrator/env`
+4. installs dependencies and builds the monorepo
+5. builds `claw-tenant:latest`
+6. runs Prisma migrations
+7. installs/enables systemd services and starts them
+8. waits for `/health` on ports `3200` and `3101`
+9. runs `scripts/validate-deployment.sh` unless `--skip-validation` is passed
+
+### 6. Add yourself to the allowlist
 
 ```bash
-# POST to control plane allowlist (once it's running) or insert directly into DB:
 sqlite3 /data/claw-orchestrator/db.sqlite \
   "INSERT INTO allowlist (id, team_id, user_id, created_at) VALUES (lower(hex(randomblob(8))), 'YOUR_TEAM_ID', 'YOUR_USER_ID', unixepoch() * 1000);"
 ```
 
-### 9. Install and start systemd services
-
-```bash
-sudo cp deploy/systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now claw-control-plane claw-slack-relay claw-scheduler
-```
-
-### 10. Open firewall ports
+### 7. Open firewall ports and configure a reverse proxy
 
 Slack requires your host to be publicly reachable over HTTPS. Open these ports in your firewall / AWS security group:
 
@@ -147,7 +157,7 @@ Slack requires your host to be publicly reachable over HTTPS. Open these ports i
 | 80 | HTTP | 0.0.0.0/0 | HTTP→HTTPS redirect (optional) |
 | 22 | TCP | Your IP | SSH access |
 
-> Ports 3000 (relay) and 3200 (control plane) stay **internal only** — never expose them publicly.
+> Ports `3101` (relay) and `3200` (control plane) stay **internal only** — never expose them publicly.
 
 **Set up a reverse proxy (Caddy recommended — handles TLS automatically):**
 
@@ -162,7 +172,7 @@ Edit `/etc/caddy/Caddyfile`:
 
 ```
 your-domain.com {
-    reverse_proxy localhost:3000
+    reverse_proxy localhost:3101
 }
 ```
 
@@ -172,7 +182,7 @@ sudo systemctl reload caddy
 
 > **No domain?** Use `<ec2-ip>.nip.io` as your domain — e.g. `1.2.3.4.nip.io` — it resolves to your IP and works with Let's Encrypt.
 
-### 11. Create the Slack app
+### 8. Create the Slack app
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From a manifest**
 2. Select your workspace and paste this manifest:
@@ -230,7 +240,7 @@ sudo systemctl reload caddy
 
 ## Deploying on AWS EC2 (Recommended)
 
-This is the recommended deployment path for POC and production. Runs all three services in Docker Compose on a single EC2 instance, with a persistent EBS volume for data.
+This is the recommended deployment path for POC and production. Use the repeatable `deploy/scripts/install.sh` and `deploy/scripts/update.sh` flow on a single EC2 instance, with a persistent EBS volume for data.
 
 ### Infrastructure
 
@@ -270,7 +280,7 @@ ssh ubuntu@<elastic-ip>
 
 # System deps
 sudo apt-get update && sudo apt-get install -y \
-  docker.io docker-compose-plugin git curl
+  docker.io git curl sqlite3
 
 # Add ubuntu to docker group
 sudo usermod -aG docker ubuntu
@@ -295,16 +305,17 @@ echo "/dev/nvme1n1 /data ext4 defaults,nofail 0 2" | sudo tee -a /etc/fstab
 sudo mkdir -p /data/tenants
 sudo chown -R ubuntu:ubuntu /data
 
-# Clone repo
-git clone https://github.com/iamsteveng/claw-orchestrator.git /opt/claw-orchestrator
-sudo chown -R ubuntu:ubuntu /opt/claw-orchestrator
+# Clone repo at the path expected by the checked-in systemd files
+mkdir -p /home/ubuntu/.openclaw/workspace
+git clone https://github.com/iamsteveng/claw-orchestrator.git /home/ubuntu/.openclaw/workspace/claw-orchestrator
+sudo chown -R ubuntu:ubuntu /home/ubuntu/.openclaw
 ```
 
 ### Step 3: Create the .env file
 
 ```bash
-cp /opt/claw-orchestrator/.env.example /opt/claw-orchestrator/.env
-nano /opt/claw-orchestrator/.env
+cp /home/ubuntu/.openclaw/workspace/claw-orchestrator/.env.example /home/ubuntu/.openclaw/workspace/claw-orchestrator/.env
+nano /home/ubuntu/.openclaw/workspace/claw-orchestrator/.env
 ```
 
 Fill in:
@@ -312,10 +323,10 @@ Fill in:
 ```env
 # Control Plane
 CONTROL_PLANE_PORT=3200
-DATABASE_URL=file:/data/tenants/orchestrator.db
+DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
 TENANT_IMAGE=claw-tenant:latest
-TEMPLATES_DIR=/opt/claw-orchestrator/templates
+TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace
 LOG_LEVEL=info
 NODE_ENV=production
 
@@ -323,12 +334,14 @@ NODE_ENV=production
 SLACK_RELAY_PORT=3101
 SLACK_SIGNING_SECRET=<your-slack-signing-secret>
 SLACK_BOT_TOKEN=xoxb-<your-bot-token>
-CONTROL_PLANE_URL=http://control-plane:3200
+CONTROL_PLANE_URL=http://localhost:3200
 
 # Scheduler
 SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
 ```
+
+> `install.sh` / `update.sh` copy Slack secrets from repo `.env` into `/etc/claw-orchestrator/env`. If you customize other runtime values, keep `deploy/systemd/claw-orchestrator.env` aligned too.
 
 ### Step 4: Copy auth files from your local machine
 
@@ -357,45 +370,23 @@ test -f ~/.openclaw/agents/main/agent/auth-profiles.json && echo "✓ OpenClaw a
 test -f ~/.claude/.credentials.json && echo "✓ Claude Code auth OK"
 ```
 
-### Step 5: Build the tenant image
+### Step 5: Run the install script
 
 ```bash
-cd /opt/claw-orchestrator
-docker build \
-  --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
-  -t claw-tenant:latest \
-  docker/tenant-image/
+cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+bash deploy/scripts/install.sh
 ```
 
-### Step 6: Start the stack
+This will build the repo, build `claw-tenant:latest`, install `/etc/claw-orchestrator/env`, install/reload the systemd units, start services, wait for health checks, and run deployment validation.
+
+### Step 6: Add yourself to the allowlist
 
 ```bash
-cd /opt/claw-orchestrator
-docker compose -f docker/docker-compose.test.yml up -d --build
-docker compose -f docker/docker-compose.test.yml ps
+sqlite3 /data/claw-orchestrator/db.sqlite \
+  "INSERT INTO allowlist (id, team_id, user_id, created_at) VALUES (lower(hex(randomblob(8))), 'YOUR_TEAM_ID', 'YOUR_USER_ID', unixepoch() * 1000);"
 ```
 
-Both `claw-cp-test` and `claw-relay-test` should show as `healthy`.
-
-Verify:
-```bash
-curl http://localhost:13200/health  # {"ok":true,...}
-curl http://localhost:13101/health  # {"ok":true,...}
-```
-
-### Step 7: Run database migrations + add yourself to allowlist
-
-```bash
-cd /opt/claw-orchestrator
-DATABASE_URL=file:/data/tenants/orchestrator.db npx prisma migrate deploy
-
-# Add yourself (get your Slack team/user IDs from the Slack app)
-curl -s -X POST http://localhost:13200/v1/admin/allowlist \
-  -H "content-type: application/json" \
-  -d '{"slack_team_id":"T_YOUR_TEAM","slack_user_id":"U_YOUR_USER","added_by":"admin"}'
-```
-
-### Step 8: Configure Caddy
+### Step 7: Configure Caddy
 
 ```bash
 sudo nano /etc/caddy/Caddyfile
@@ -403,7 +394,7 @@ sudo nano /etc/caddy/Caddyfile
 
 ```
 <elastic-ip>.nip.io {
-    reverse_proxy localhost:13101
+    reverse_proxy localhost:3101
 }
 ```
 
@@ -416,7 +407,7 @@ Verify TLS is working:
 curl https://<elastic-ip>.nip.io/health
 ```
 
-### Step 9: Configure the Slack app
+### Step 8: Configure the Slack app
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → your app → **Event Subscriptions**
 2. Set Request URL: `https://<elastic-ip>.nip.io/slack/events`
@@ -424,32 +415,7 @@ curl https://<elastic-ip>.nip.io/health
 4. Ensure `message.im` is subscribed under Bot Events
 5. Save changes and reinstall the app to your workspace if prompted
 
-### Step 10: Keep stack running across reboots
-
-```bash
-sudo tee /etc/systemd/system/claw-orchestrator.service > /dev/null <<EOF
-[Unit]
-Description=Claw Orchestrator (Docker Compose)
-After=docker.service
-Requires=docker.service
-
-[Service]
-User=ubuntu
-WorkingDirectory=/opt/claw-orchestrator
-ExecStart=docker compose -f docker/docker-compose.test.yml up
-ExecStop=docker compose -f docker/docker-compose.test.yml down
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl enable claw-orchestrator
-sudo systemctl start claw-orchestrator
-```
-
-### Verify end-to-end
+### Step 9: Verify end-to-end
 
 Send yourself a DM in Slack. You should see:
 1. Relay receives event → logs show incoming request
@@ -458,33 +424,17 @@ Send yourself a DM in Slack. You should see:
 4. Second message → forwarded to container → agent responds
 
 ```bash
-# Watch live
-docker logs claw-cp-test -f
-docker logs claw-relay-test -f
+sudo systemctl status claw-control-plane claw-slack-relay claw-scheduler
+sudo journalctl -u claw-control-plane -f
+sudo journalctl -u claw-slack-relay -f
 ```
-
-### Updating
-
-Always use `--build` to ensure running containers reflect the latest code:
-
-```bash
-cd /opt/claw-orchestrator
-git fetch origin main && git reset --hard origin/main
-docker compose -f docker/docker-compose.test.yml up -d --build
-docker build \
-  --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
-  -t claw-tenant:latest \
-  docker/tenant-image/
-```
-
-> ⚠️ Never use `docker compose up -d` without `--build` after a code change — running containers will be stale even if the code on disk is updated.
 
 ### Auditing for stale state
 
 Run the audit script to check for stale images, containers, volumes, or stuck tenants:
 
 ```bash
-bash /opt/claw-orchestrator/scripts/audit.sh
+bash /home/ubuntu/.openclaw/workspace/claw-orchestrator/scripts/audit.sh
 ```
 
 The audit checks:
@@ -499,21 +449,26 @@ The audit checks:
 ## Updating
 
 ```bash
-cd /opt/claw-orchestrator
-git pull
-pnpm install && pnpm build
-npx prisma migrate deploy
-sudo systemctl restart claw-control-plane claw-slack-relay claw-scheduler
+cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+bash deploy/scripts/update.sh
 ```
 
-To rebuild the tenant image after updates:
+Optional:
 
 ```bash
-docker build \
-  --build-arg IMAGE_TAG=sha-$(git rev-parse --short HEAD) \
-  -t claw-tenant:latest \
-  docker/tenant-image/
+bash deploy/scripts/update.sh --skip-validation
 ```
+
+`deploy/scripts/update.sh` now performs:
+
+1. a pre-deploy backup to `/data/backups/YYYY-MM-DD/` when the DB exists
+2. service stop in reverse dependency order
+3. a safe `git fetch` + fast-forward merge when possible
+4. dependency install, build, tenant image rebuild, and Prisma migration
+5. regeneration of `/etc/claw-orchestrator/env` from the tracked template
+6. systemd unit reinstall/reload, service start, health checks, and optional validation
+
+If the local branch is ahead of upstream, the script skips the pull and logs a warning. If the branch has diverged, it exits and asks for manual resolution before redeploying.
 
 ---
 
@@ -578,6 +533,9 @@ templates/
   workspace/
     AGENTS.md        # Pre-seeded into every tenant workspace at provisioning time
 deploy/
+  scripts/
+    install.sh       # Fresh-install entrypoint for repeatable deployment
+    update.sh        # Safe in-place update entrypoint with backup + health checks
   systemd/           # systemd unit files for all 3 services
 SPEC.md              # Full technical specification (read this before hacking)
 ```
