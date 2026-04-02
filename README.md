@@ -32,14 +32,15 @@ Each tenant gets a Docker container built from `docker/tenant-image/` with OpenC
 - Claude Code authenticated on the host (`~/.claude/.credentials.json`)
 - A Slack app with a bot token and signing secret
 
-## Deployment Assumptions
+## Deployment Notes
 
-The checked-in deployment assets are currently opinionated:
+The checked-in deployment assets are now template-based:
 
-- `deploy/systemd/*.service` use `WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator`
-- `deploy/systemd/claw-orchestrator.env` uses `TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace`
+- `deploy/systemd/*.service` and `deploy/systemd/claw-orchestrator.env` use a `__REPO_DIR__` placeholder
+- `deploy/scripts/install.sh` / `deploy/scripts/update.sh` render that placeholder to the actual checkout path at install time
+- `/etc/claw-orchestrator/env` is regenerated from the tracked template plus the supported matching keys from repo `.env`
 
-If you deploy from a different checkout path, update those files **before** running the install or update scripts.
+That means you can clone the repo wherever you want; the deployment scripts render relocatable systemd assets from the current checkout.
 
 ---
 
@@ -60,12 +61,11 @@ sudo apt-get install -y nodejs sqlite3 git
 sudo npm install -g pnpm
 ```
 
-### 2. Clone the repo at the path expected by the service files
+### 2. Clone the repo
 
 ```bash
-mkdir -p /home/ubuntu/.openclaw/workspace
-git clone https://github.com/iamsteveng/claw-orchestrator.git /home/ubuntu/.openclaw/workspace/claw-orchestrator
-cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+git clone https://github.com/iamsteveng/claw-orchestrator.git ~/claw-orchestrator
+cd ~/claw-orchestrator
 ```
 
 ### 3. Configure `.env`
@@ -82,7 +82,6 @@ CONTROL_PLANE_PORT=3200
 DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
 TENANT_IMAGE=claw-tenant:latest
-TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace
 LOG_LEVEL=info
 NODE_ENV=production
 
@@ -97,9 +96,7 @@ SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
 ```
 
-> **Important:** the deploy scripts read repo `.env` for validation, backup/migration DB path lookup, and Slack secrets. The running systemd services read `/etc/claw-orchestrator/env`, which is generated from `deploy/systemd/claw-orchestrator.env`.
->
-> As currently implemented, `install.sh` / `update.sh` automatically copy only `SLACK_SIGNING_SECRET` and `SLACK_BOT_TOKEN` from repo `.env` into `/etc/claw-orchestrator/env`. If you change other runtime values, mirror them in `deploy/systemd/claw-orchestrator.env` before running the scripts, or edit `/etc/claw-orchestrator/env` after installation.
+> **Important:** `install.sh` / `update.sh` render `/etc/claw-orchestrator/env` from the tracked template in `deploy/systemd/claw-orchestrator.env`, then sync the supported matching runtime keys from repo `.env` into that file. Leave `TEMPLATES_DIR` unset for the normal flow unless you intentionally want to override the default `<repo checkout>/templates/workspace`.
 
 > **Model auth:** No `ANTHROPIC_API_KEY` goes here. OpenClaw model auth is provided via a read-only bind-mount of `~/.openclaw/agents/main/agent/auth-profiles.json` into each container. Claude Code auth is provided via `~/.claude/.credentials.json`. Both must exist on the host before starting.
 
@@ -118,7 +115,7 @@ test -f ~/.claude/.credentials.json \
 ### 5. Run the repeatable install script
 
 ```bash
-cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+cd ~/claw-orchestrator
 bash deploy/scripts/install.sh
 ```
 
@@ -305,17 +302,16 @@ echo "/dev/nvme1n1 /data ext4 defaults,nofail 0 2" | sudo tee -a /etc/fstab
 sudo mkdir -p /data/tenants
 sudo chown -R ubuntu:ubuntu /data
 
-# Clone repo at the path expected by the checked-in systemd files
-mkdir -p /home/ubuntu/.openclaw/workspace
-git clone https://github.com/iamsteveng/claw-orchestrator.git /home/ubuntu/.openclaw/workspace/claw-orchestrator
-sudo chown -R ubuntu:ubuntu /home/ubuntu/.openclaw
+# Clone repo anywhere convenient (install/update render the actual checkout path into systemd assets)
+git clone https://github.com/iamsteveng/claw-orchestrator.git ~/claw-orchestrator
+sudo chown -R ubuntu:ubuntu ~/claw-orchestrator
 ```
 
 ### Step 3: Create the .env file
 
 ```bash
-cp /home/ubuntu/.openclaw/workspace/claw-orchestrator/.env.example /home/ubuntu/.openclaw/workspace/claw-orchestrator/.env
-nano /home/ubuntu/.openclaw/workspace/claw-orchestrator/.env
+cp ~/claw-orchestrator/.env.example ~/claw-orchestrator/.env
+nano ~/claw-orchestrator/.env
 ```
 
 Fill in:
@@ -326,7 +322,6 @@ CONTROL_PLANE_PORT=3200
 DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
 TENANT_IMAGE=claw-tenant:latest
-TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace
 LOG_LEVEL=info
 NODE_ENV=production
 
@@ -341,7 +336,7 @@ SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
 ```
 
-> `install.sh` / `update.sh` copy Slack secrets from repo `.env` into `/etc/claw-orchestrator/env`. If you customize other runtime values, keep `deploy/systemd/claw-orchestrator.env` aligned too.
+> `install.sh` / `update.sh` regenerate `/etc/claw-orchestrator/env` from the tracked template and then sync the supported matching keys from repo `.env`. Leave `TEMPLATES_DIR` unset unless you explicitly want to override the default checkout-relative templates path.
 
 ### Step 4: Copy auth files from your local machine
 
@@ -373,7 +368,7 @@ test -f ~/.claude/.credentials.json && echo "✓ Claude Code auth OK"
 ### Step 5: Run the install script
 
 ```bash
-cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+cd ~/claw-orchestrator
 bash deploy/scripts/install.sh
 ```
 
@@ -434,7 +429,8 @@ sudo journalctl -u claw-slack-relay -f
 Run the audit script to check for stale images, containers, volumes, or stuck tenants:
 
 ```bash
-bash /home/ubuntu/.openclaw/workspace/claw-orchestrator/scripts/audit.sh
+cd ~/claw-orchestrator
+bash scripts/audit.sh
 ```
 
 The audit checks:
@@ -449,7 +445,7 @@ The audit checks:
 ## Updating
 
 ```bash
-cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+cd ~/claw-orchestrator
 bash deploy/scripts/update.sh
 ```
 
@@ -465,7 +461,7 @@ bash deploy/scripts/update.sh --skip-validation
 2. service stop in reverse dependency order
 3. a safe `git fetch` + fast-forward merge when possible
 4. dependency install, build, tenant image rebuild, and Prisma migration
-5. regeneration of `/etc/claw-orchestrator/env` from the tracked template
+5. regeneration of `/etc/claw-orchestrator/env` from the tracked template plus the supported matching repo `.env` overrides
 6. systemd unit reinstall/reload, service start, health checks, and optional validation
 
 If the local branch is ahead of upstream, the script skips the pull and logs a warning. If the branch has diverged, it exits and asks for manual resolution before redeploying.

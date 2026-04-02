@@ -13,7 +13,7 @@ Requires=docker.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator
+WorkingDirectory=__REPO_DIR__
 EnvironmentFile=/etc/claw-orchestrator/env
 ExecStart=/usr/bin/node apps/slack-relay/dist/index.js
 Restart=on-failure

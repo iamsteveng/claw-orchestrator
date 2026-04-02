@@ -30,6 +30,9 @@ ENV_FILE="${DEPLOY_DIR}/.env"
 SYSTEM_ENV_FILE="/etc/claw-orchestrator/env"
 SKIP_VALIDATION=false
 
+# shellcheck source=deploy/scripts/runtime-env.sh
+source "${SCRIPT_DIR}/runtime-env.sh"
+
 for arg in "$@"; do
   [ "$arg" = "--skip-validation" ] && SKIP_VALIDATION=true
 done
@@ -48,20 +51,19 @@ check_secrets() {
     die "SLACK_BOT_TOKEN not set or is placeholder in ${ENV_FILE}"
 }
 
-# Copy template env to out-of-repo location and overlay secrets.
-# Never mutates the git-tracked deploy/systemd/claw-orchestrator.env template.
+# Render the tracked runtime env template to the out-of-repo systemd env file.
+# Sync supported runtime keys from repo .env without mutating the checked-in template.
 install_system_env() {
   sudo mkdir -p /etc/claw-orchestrator
-  sudo cp "${DEPLOY_DIR}/deploy/systemd/claw-orchestrator.env" "${SYSTEM_ENV_FILE}"
-  local var val
-  for var in SLACK_SIGNING_SECRET SLACK_BOT_TOKEN; do
-    val=$(sed -n "s/^${var}=//p" "${ENV_FILE}")
-    if [ -n "$val" ]; then
-      # Remove the existing line then append — treats $val as literal, no sed injection risk
-      sudo sed -i "/^${var}=/d" "${SYSTEM_ENV_FILE}"
-      printf '%s=%s\n' "$var" "$val" | sudo tee -a "${SYSTEM_ENV_FILE}" > /dev/null
-    fi
-  done
+  local rendered_env
+  rendered_env="$(mktemp)"
+  render_runtime_env_file \
+    "${DEPLOY_DIR}/deploy/systemd/claw-orchestrator.env" \
+    "${ENV_FILE}" \
+    "${rendered_env}" \
+    "${DEPLOY_DIR}"
+  sudo cp "${rendered_env}" "${SYSTEM_ENV_FILE}"
+  rm -f "${rendered_env}"
   sudo chmod 640 "${SYSTEM_ENV_FILE}"
   sudo chown root:root "${SYSTEM_ENV_FILE}"
 }
@@ -125,7 +127,7 @@ docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 # Step 7/9: Prisma migrations
 log "Step 7/9: Running Prisma migrations..."
 cd "${DEPLOY_DIR}/apps/control-plane"
-DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "${ENV_FILE}")" \
+DATABASE_URL="$(read_env_value "${SYSTEM_ENV_FILE}" "DATABASE_URL")" \
   npx prisma migrate deploy
 cd "${DEPLOY_DIR}"
 
@@ -141,7 +143,7 @@ wait_healthy 30 2
 # Optional: smoke test
 if [ "$SKIP_VALIDATION" = false ]; then
   log "Running deployment validation..."
-  bash "${DEPLOY_DIR}/scripts/validate-deployment.sh"
+  CLAW_RUNTIME_ENV_FILE="${SYSTEM_ENV_FILE}" bash "${DEPLOY_DIR}/scripts/validate-deployment.sh"
 else
   log "Skipping validate-deployment.sh (--skip-validation passed)."
 fi

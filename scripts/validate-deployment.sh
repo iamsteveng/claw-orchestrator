@@ -6,12 +6,18 @@ PASS=0
 FAIL=0
 
 BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ENV_FILE="$BASE/.env"
-DB="$(/usr/bin/grep DATABASE_URL "$ENV_FILE" 2>/dev/null | cut -d= -f2 | sed 's/file://')"
+SYSTEM_ENV_FILE="/etc/claw-orchestrator/env"
+ENV_FILE="${CLAW_RUNTIME_ENV_FILE:-$SYSTEM_ENV_FILE}"
+[ -f "$ENV_FILE" ] || ENV_FILE="$BASE/.env"
+
+# shellcheck source=deploy/scripts/runtime-env.sh
+source "$BASE/deploy/scripts/runtime-env.sh"
+
+DB="$(read_env_value "$ENV_FILE" "DATABASE_URL" | sed 's/^file://')"
 DB="${DB:-/data/claw-orchestrator/db.sqlite}"
-DATA_DIR="$(/usr/bin/grep DATA_DIR "$ENV_FILE" 2>/dev/null | cut -d= -f2)"
+DATA_DIR="$(read_env_value "$ENV_FILE" "DATA_DIR")"
 DATA_DIR="${DATA_DIR:-/data/tenants}"
-SIGNING_SECRET="$(/usr/bin/grep SLACK_SIGNING_SECRET "$ENV_FILE" 2>/dev/null | cut -d= -f2)"
+SIGNING_SECRET="$(read_env_value "$ENV_FILE" "SLACK_SIGNING_SECRET")"
 RELAY_URL="https://13.212.162.85.nip.io/slack/events"
 TEST_TEAM="T0ABHS0G3"
 TEST_USER="U08M34UT0FL"
@@ -69,11 +75,11 @@ check "HTTPS endpoint reachable" "$([ "$HTTPS_OK" -gt 0 ] && echo PASS || echo F
 # ── 2. Config & Auth ───────────────────────────────────────────────────────────
 section "2. Config & Auth"
 
-check ".env file exists" "$([ -f "$ENV_FILE" ] && echo PASS || echo FAIL)" "$ENV_FILE"
+check "Runtime env file exists" "$([ -f "$ENV_FILE" ] && echo PASS || echo FAIL)" "$ENV_FILE"
 
 for VAR in SLACK_SIGNING_SECRET SLACK_BOT_TOKEN DATABASE_URL DATA_DIR; do
-  VAL=$(grep "^$VAR=" "$ENV_FILE" 2>/dev/null | cut -d= -f2)
-  check ".env: $VAR set" "$([ -n "$VAL" ] && echo PASS || echo FAIL)"
+  VAL="$(read_env_value "$ENV_FILE" "$VAR")"
+  check "env: $VAR set" "$([ -n "$VAL" ] && echo PASS || echo FAIL)"
 done
 
 AUTH_PROFILES="$HOME/.openclaw/agents/main/agent/auth-profiles.json"

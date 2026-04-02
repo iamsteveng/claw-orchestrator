@@ -1456,13 +1456,9 @@ All three Node.js services are managed by **systemd** on the Linux host. Unit fi
 
 Runtime environment for all three services lives in `/etc/claw-orchestrator/env`.
 
-The checked-in deployment assets currently assume the repository checkout path is:
-
-```text
-/home/ubuntu/.openclaw/workspace/claw-orchestrator
-```
-
-If the repo is deployed elsewhere, update the checked-in service files and `deploy/systemd/claw-orchestrator.env` before running the install or update scripts.
+The checked-in deployment assets use a `__REPO_DIR__` placeholder. `deploy/scripts/install.sh`,
+`deploy/scripts/update.sh`, and `deploy/scripts/install-services.sh` render that placeholder to the
+actual repository checkout path during deployment, so the repo no longer has to live at one fixed path.
 
 ### Unit File Template (control plane example)
 
@@ -1474,7 +1470,7 @@ Requires=docker.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator
+WorkingDirectory=__REPO_DIR__
 EnvironmentFile=/etc/claw-orchestrator/env
 ExecStart=/usr/bin/node apps/control-plane/dist/index.js
 Restart=on-failure
@@ -1501,13 +1497,14 @@ There are now two config surfaces involved in deployment:
 1. **Repo `.env`** at `<repo-root>/.env`
    - used by `deploy/scripts/install.sh` and `deploy/scripts/update.sh`
    - validated before deployment
-   - used to derive `DATABASE_URL` for Prisma migrations and pre-update backup lookup
+   - provides operator-supplied overrides for the supported runtime env keys
 2. **Runtime systemd env** at `/etc/claw-orchestrator/env`
    - loaded by the running systemd services
-   - generated from `deploy/systemd/claw-orchestrator.env`
-   - currently only `SLACK_SIGNING_SECRET` and `SLACK_BOT_TOKEN` are copied over automatically from repo `.env`
+   - rendered from `deploy/systemd/claw-orchestrator.env` with the deployment checkout path substituted for `__REPO_DIR__`
+   - synced from repo `.env` for the supported runtime keys (control plane, relay, scheduler, and backup settings)
+   - used as the source of truth for migrations, validation, and subsequent service starts during deploy/update
 
-Because only the Slack secrets are synced automatically today, any other runtime config override must also be applied to `deploy/systemd/claw-orchestrator.env` before deployment or edited directly in `/etc/claw-orchestrator/env` afterwards.
+This removes the old Slack-only sync path and avoids silent drift between repo `.env` and the runtime systemd env.
 
 #### Runtime env file (`/etc/claw-orchestrator/env`)
 
@@ -1516,10 +1513,15 @@ Because only the Slack secrets are synced automatically today, any other runtime
 CONTROL_PLANE_PORT=3200
 DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
+HOST_DATA_DIR=
+DATA_MOUNT=/data
 TENANT_IMAGE=claw-tenant:latest
-TEMPLATES_DIR=/home/ubuntu/.openclaw/workspace/claw-orchestrator/templates/workspace
+TEMPLATES_DIR=__REPO_DIR__/templates/workspace
 LOG_LEVEL=info
 NODE_ENV=production
+MAX_ACTIVE_TENANTS=10
+ACTIVE_TENANTS_OVERFLOW_POLICY=queue
+CONTAINER_NETWORK=
 
 # Slack Relay
 SLACK_RELAY_PORT=3101
@@ -1530,6 +1532,7 @@ CONTROL_PLANE_URL=http://localhost:3200
 # Scheduler
 SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
+S3_BUCKET=
 
 # Model Auth — NO ANTHROPIC_API_KEY here.
 # OpenClaw model auth is provided via a read-only bind-mount of the host's auth-profiles.json
@@ -1546,8 +1549,8 @@ IDLE_STOP_HOURS=48
 ```bash
 # 1. Install Docker Engine
 # 2. Install Node.js 22 + pnpm
-# 3. Clone repo to /home/ubuntu/.openclaw/workspace/claw-orchestrator
-# 4. cp .env.example .env && fill in secrets
+# 3. Clone repo to your preferred checkout path
+# 4. cp .env.example .env && fill in secrets (leave TEMPLATES_DIR unset unless overriding)
 # 5. Verify ~/.openclaw/.../auth-profiles.json and ~/.claude/.credentials.json exist
 # 6. Run: bash deploy/scripts/install.sh
 # 7. Add allowlist entries
@@ -1558,7 +1561,7 @@ IDLE_STOP_HOURS=48
 ### Updates
 
 ```bash
-cd /home/ubuntu/.openclaw/workspace/claw-orchestrator
+cd ~/claw-orchestrator
 bash deploy/scripts/update.sh
 ```
 
@@ -1568,7 +1571,7 @@ bash deploy/scripts/update.sh
 2. stop in reverse dependency order
 3. safe fetch / fast-forward merge when possible
 4. dependency install, rebuild, tenant image rebuild, and Prisma migration
-5. regeneration of `/etc/claw-orchestrator/env` from the tracked template
+5. regeneration of `/etc/claw-orchestrator/env` from the tracked template plus the supported matching repo `.env` overrides
 6. systemd reinstall/reload, service start, health checks, and optional validation
 
 ---

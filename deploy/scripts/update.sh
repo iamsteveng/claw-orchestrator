@@ -26,6 +26,15 @@ DEPLOY_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 ENV_FILE="${DEPLOY_DIR}/.env"
 SYSTEM_ENV_FILE="/etc/claw-orchestrator/env"
 SKIP_VALIDATION=false
+RENDERED_SYSTEM_ENV="$(mktemp)"
+
+# shellcheck source=deploy/scripts/runtime-env.sh
+source "${SCRIPT_DIR}/runtime-env.sh"
+
+cleanup() {
+  rm -f "${RENDERED_SYSTEM_ENV}"
+}
+trap cleanup EXIT
 
 for arg in "$@"; do
   [ "$arg" = "--skip-validation" ] && SKIP_VALIDATION=true
@@ -45,22 +54,21 @@ check_secrets() {
     die "SLACK_BOT_TOKEN not set or is placeholder in ${ENV_FILE}"
 }
 
-# Copy template env to out-of-repo location and overlay secrets.
-# Never mutates the git-tracked deploy/systemd/claw-orchestrator.env template.
+# Render the tracked runtime env template to the out-of-repo systemd env file.
+# Sync supported runtime keys from repo .env without mutating the checked-in template.
 install_system_env() {
   sudo mkdir -p /etc/claw-orchestrator
-  sudo cp "${DEPLOY_DIR}/deploy/systemd/claw-orchestrator.env" "${SYSTEM_ENV_FILE}"
-  local var val
-  for var in SLACK_SIGNING_SECRET SLACK_BOT_TOKEN; do
-    val=$(sed -n "s/^${var}=//p" "${ENV_FILE}")
-    if [ -n "$val" ]; then
-      # Remove the existing line then append — treats $val as literal, no sed injection risk
-      sudo sed -i "/^${var}=/d" "${SYSTEM_ENV_FILE}"
-      printf '%s=%s\n' "$var" "$val" | sudo tee -a "${SYSTEM_ENV_FILE}" > /dev/null
-    fi
-  done
+  sudo cp "${RENDERED_SYSTEM_ENV}" "${SYSTEM_ENV_FILE}"
   sudo chmod 640 "${SYSTEM_ENV_FILE}"
   sudo chown root:root "${SYSTEM_ENV_FILE}"
+}
+
+render_target_system_env() {
+  render_runtime_env_file \
+    "${DEPLOY_DIR}/deploy/systemd/claw-orchestrator.env" \
+    "${ENV_FILE}" \
+    "${RENDERED_SYSTEM_ENV}" \
+    "${DEPLOY_DIR}"
 }
 
 # Poll :3200/health and :3101/health until both respond ok.
@@ -118,10 +126,17 @@ check_secrets
 
 # Step 1/10: Pre-deploy backup
 log "Step 1/10: Pre-deploy backup..."
-DB_PATH=$(sed -n 's/^DATABASE_URL=file://p' "${ENV_FILE}")
+if [ -f "${SYSTEM_ENV_FILE}" ]; then
+  DB_PATH="$(read_env_value "${SYSTEM_ENV_FILE}" "DATABASE_URL" | sed -n 's/^file://p')"
+  BACKUP_S3_BUCKET="$(read_env_value "${SYSTEM_ENV_FILE}" "S3_BUCKET")"
+else
+  DB_PATH="$(read_env_value "${ENV_FILE}" "DATABASE_URL" | sed -n 's/^file://p')"
+  BACKUP_S3_BUCKET="$(read_env_value "${ENV_FILE}" "S3_BUCKET")"
+fi
 DB_PATH="${DB_PATH:-/data/claw-orchestrator/db.sqlite}"
 if [ -f "$DB_PATH" ]; then
-  bash "${DEPLOY_DIR}/deploy/scripts/backup.sh" || die "Backup failed. Aborting update to protect your data."
+  S3_BUCKET="${BACKUP_S3_BUCKET:-}" bash "${DEPLOY_DIR}/deploy/scripts/backup.sh" || \
+    die "Backup failed. Aborting update to protect your data."
 else
   log "  No DB found at ${DB_PATH} — skipping backup (first run or fresh server)."
 fi
@@ -134,6 +149,7 @@ sudo systemctl stop claw-scheduler claw-slack-relay claw-control-plane 2>/dev/nu
 log "Step 3/10: Pulling latest code..."
 cd "${DEPLOY_DIR}"
 smart_pull
+render_target_system_env
 
 # Step 4/10: pnpm dependencies
 log "Step 4/10: Installing pnpm dependencies..."
@@ -151,7 +167,8 @@ docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 log "Step 7/10: Running Prisma migrations..."
 cd "${DEPLOY_DIR}/apps/control-plane"
 BACKUP_HINT="/data/backups/$(date -u +%Y-%m-%d)/db.sqlite"
-DATABASE_URL="$(sed -n 's/^DATABASE_URL=//p' "${ENV_FILE}")" \
+RUNTIME_DATABASE_URL="$(read_env_value "${RENDERED_SYSTEM_ENV}" "DATABASE_URL")"
+DATABASE_URL="${RUNTIME_DATABASE_URL}" \
   npx prisma migrate deploy || \
   die "Prisma migration failed. Services are stopped. Restore DB from backup at ${BACKUP_HINT} then start services manually."
 cd "${DEPLOY_DIR}"
@@ -172,7 +189,7 @@ wait_healthy 30 2
 # Optional: smoke test
 if [ "$SKIP_VALIDATION" = false ]; then
   log "Running deployment validation..."
-  bash "${DEPLOY_DIR}/scripts/validate-deployment.sh"
+  CLAW_RUNTIME_ENV_FILE="${SYSTEM_ENV_FILE}" bash "${DEPLOY_DIR}/scripts/validate-deployment.sh"
 else
   log "Skipping validate-deployment.sh (--skip-validation passed)."
 fi

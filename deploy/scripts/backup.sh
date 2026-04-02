@@ -6,7 +6,13 @@
 
 set -euo pipefail
 
-DB_PATH="/data/claw-orchestrator/db.sqlite"
+DB_PATH_RAW="${DATABASE_URL:-file:/data/claw-orchestrator/db.sqlite}"
+case "${DB_PATH_RAW}" in
+  file://*) DB_PATH="${DB_PATH_RAW#file://}" ;;
+  file:*) DB_PATH="${DB_PATH_RAW#file:}" ;;
+  *) DB_PATH="${DB_PATH_RAW}" ;;
+esac
+DATA_DIR="${DATA_DIR:-/data/tenants}"
 BACKUP_DIR="/data/backups/$(date +%Y-%m-%d)"
 
 echo "[backup] Starting backup at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -28,7 +34,7 @@ echo "[backup] Archiving tenant data..."
 tar -czf "${BACKUP_DIR}/tenants.tar.gz" \
   --exclude='*/cache/*' \
   --exclude='*/.cache/*' \
-  /data/tenants/
+  "${DATA_DIR}/"
 
 # 5. Upload to S3 if configured
 if [ -n "${S3_BUCKET:-}" ]; then
