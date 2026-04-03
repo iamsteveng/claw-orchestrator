@@ -168,13 +168,56 @@ If you do not have DNS yet, `<public-ip>.nip.io` works well for quick setup.
 
 ### 7. Create the Slack app
 
-Create a Slack app with:
+Use Slack's **From a manifest** flow so app creation is repeatable. Replace `your-domain.example` before submitting:
 
-- bot scopes: `chat:write`, `im:history`, `im:read`, `im:write`, `users:read`
-- event subscription: `message.im`
-- request URL: `https://<your-domain>/slack/events`
+```json
+{
+  "display_information": {
+    "name": "Claw Orchestrator",
+    "description": "Your personal AI agent — powered by OpenClaw",
+    "background_color": "#1a1a2e"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Claw",
+      "always_online": true
+    },
+    "app_home": {
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "im:history",
+        "im:read",
+        "im:write",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://your-domain.example/slack/events",
+      "bot_events": [
+        "message.im"
+      ]
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
+```
 
-Then copy the generated bot token and signing secret into `.env`, and restart the relay if needed:
+Then:
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) and create a new app **from a manifest**.
+2. Install it to your workspace.
+3. Copy the generated bot token and signing secret into `.env`.
+4. Restart the relay if needed:
 
 ```bash
 sudo systemctl restart claw-slack-relay
