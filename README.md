@@ -38,6 +38,8 @@ The project targets a single Linux host. A good baseline for evaluation or small
 
 If you deploy on AWS, use an Elastic IP (or a stable DNS record) so your Slack request URL does not change.
 
+If you deploy on an EC2 instance, allow inbound TCP ports `22`, `80`, and `443` in the instance security group: `22` for SSH access, and `80`/`443` so your reverse proxy can receive Slack webhook traffic and serve HTTPS.
+
 ## Installation guide
 
 This is the fastest path to a fresh deployment on an Ubuntu host.
