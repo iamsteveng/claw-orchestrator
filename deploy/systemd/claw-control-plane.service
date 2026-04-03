@@ -13,8 +13,8 @@ Requires=docker.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/ubuntu/.openclaw/workspace/claw-orchestrator
-EnvironmentFile=/home/ubuntu/.openclaw/workspace/claw-orchestrator/deploy/systemd/claw-orchestrator.env
+WorkingDirectory=__REPO_DIR__
+EnvironmentFile=/etc/claw-orchestrator/env
 ExecStart=/usr/bin/node apps/control-plane/dist/index.js
 Restart=on-failure
 RestartSec=5

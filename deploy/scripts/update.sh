@@ -1,27 +1,197 @@
 #!/bin/bash
-# update.sh — Update Claw Orchestrator to the latest version
-# Run as the claw user (or with sudo -u claw) from /opt/claw-orchestrator.
-# Requires root for systemctl restart (or configure sudo for the claw user).
+# update.sh — Safe update for a running claw-orchestrator deployment
+#
+# Run as: ubuntu (or repo owner) with sudo access
+# Do NOT run as root — pnpm and git operations run as current user
+#
+# Usage:
+#   bash deploy/scripts/update.sh [--skip-validation]
+#
+# What it does (10 steps):
+#   1. Pre-deploy backup (when DB exists)
+#   2. Stop services (reverse dependency order)
+#   3. Pull latest code (smart pull — safe when AI agent has local commits)
+#   4. Install pnpm dependencies
+#   5. Build monorepo
+#   6. Build tenant Docker image
+#   7. Run Prisma migrations
+#   8. Update out-of-repo env file + reload systemd unit files
+#   9. Start services
+#  10. Wait for health checks (+ optional validation)
 
 set -euo pipefail
 
-DEPLOY_DIR="/opt/claw-orchestrator"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEPLOY_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+ENV_FILE="${DEPLOY_DIR}/.env"
+SYSTEM_ENV_FILE="/etc/claw-orchestrator/env"
+SKIP_VALIDATION=false
+RENDERED_SYSTEM_ENV="$(mktemp)"
 
-echo "Pulling latest changes..."
+# shellcheck source=deploy/scripts/runtime-env.sh
+source "${SCRIPT_DIR}/runtime-env.sh"
+
+cleanup() {
+  rm -f "${RENDERED_SYSTEM_ENV}"
+}
+trap cleanup EXIT
+
+for arg in "$@"; do
+  [ "$arg" = "--skip-validation" ] && SKIP_VALIDATION=true
+done
+
+log() { echo "[$(date -u '+%Y-%m-%dT%H:%M:%SZ')] $*"; }
+die() { log "FATAL: $*" >&2; exit 1; }
+
+check_secrets() {
+  [ -f "${ENV_FILE}" ] || die ".env file not found at ${ENV_FILE}"
+  local secret token
+  secret=$(sed -n 's/^SLACK_SIGNING_SECRET=//p' "${ENV_FILE}")
+  token=$(sed -n 's/^SLACK_BOT_TOKEN=//p' "${ENV_FILE}")
+  { [ -z "$secret" ] || [ "$secret" = "replace-with-real-value" ]; } && \
+    die "SLACK_SIGNING_SECRET not set or is placeholder in ${ENV_FILE}"
+  { [ -z "$token" ] || [ "$token" = "replace-with-real-value" ]; } && \
+    die "SLACK_BOT_TOKEN not set or is placeholder in ${ENV_FILE}"
+}
+
+# Render the tracked runtime env template to the out-of-repo systemd env file.
+# Sync supported runtime keys from repo .env without mutating the checked-in template.
+install_system_env() {
+  sudo mkdir -p /etc/claw-orchestrator
+  sudo cp "${RENDERED_SYSTEM_ENV}" "${SYSTEM_ENV_FILE}"
+  sudo chmod 640 "${SYSTEM_ENV_FILE}"
+  sudo chown root:root "${SYSTEM_ENV_FILE}"
+}
+
+render_target_system_env() {
+  render_runtime_env_file \
+    "${DEPLOY_DIR}/deploy/systemd/claw-orchestrator.env" \
+    "${ENV_FILE}" \
+    "${RENDERED_SYSTEM_ENV}" \
+    "${DEPLOY_DIR}"
+}
+
+# Poll :3200/health and :3101/health until both respond ok.
+# Args: max_retries interval_seconds
+wait_healthy() {
+  local retries="${1:-30}" interval="${2:-2}"
+  local i=0 cp_ok rl_ok
+  while [ "$i" -lt "$retries" ]; do
+    cp_ok=0
+    rl_ok=0
+    if curl -sf --max-time 3 http://localhost:3200/health 2>/dev/null | grep -q '"ok":true'; then cp_ok=1; fi
+    if curl -sf --max-time 3 http://localhost:3101/health 2>/dev/null | grep -q '"ok":true'; then rl_ok=1; fi
+    if [ "$cp_ok" -eq 1 ] && [ "$rl_ok" -eq 1 ]; then
+      log "Services healthy (control-plane :3200 + relay :3101)."
+      return 0
+    fi
+    i=$((i + 1))
+    log "  Waiting for services... ($i/$retries)"
+    sleep "$interval"
+  done
+  die "Services did not become healthy after $((retries * interval))s. Check: journalctl -u claw-control-plane -n 50"
+}
+
+# Conditional git pull — handles all git states safely.
+# - Already up-to-date: no-op
+# - Remote ahead (normal update): fast-forward merge
+# - Local ahead (AI agent committed, not yet pushed): skip pull, log warning
+# - Diverged: die with clear message
+smart_pull() {
+  git fetch origin
+  local LOCAL REMOTE BASE
+  LOCAL=$(git rev-parse HEAD)
+  REMOTE=$(git rev-parse "@{u}" 2>/dev/null || die "No upstream branch configured. Run: git branch --set-upstream-to=origin/main main")
+  BASE=$(git merge-base HEAD "@{u}")
+
+  if [ "$LOCAL" = "$REMOTE" ]; then
+    log "Already up to date."
+  elif [ "$LOCAL" = "$BASE" ]; then
+    log "Pulling remote changes..."
+    git merge --ff-only "@{u}"
+  elif [ "$REMOTE" = "$BASE" ]; then
+    log "Local commits present and ahead of remote — skipping pull."
+    log "NOTE: Push local commits to origin so future deployments pick them up."
+  else
+    die "Branches have diverged. Push local commits or resolve manually before redeploying."
+  fi
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+log "=== claw-orchestrator update ==="
+log "DEPLOY_DIR=${DEPLOY_DIR}"
+
+check_secrets
+
+# Step 1/10: Pre-deploy backup
+log "Step 1/10: Pre-deploy backup..."
+if [ -f "${SYSTEM_ENV_FILE}" ]; then
+  DB_PATH="$(read_env_value "${SYSTEM_ENV_FILE}" "DATABASE_URL" | sed -n 's/^file://p')"
+  BACKUP_S3_BUCKET="$(read_env_value "${SYSTEM_ENV_FILE}" "S3_BUCKET")"
+else
+  DB_PATH="$(read_env_value "${ENV_FILE}" "DATABASE_URL" | sed -n 's/^file://p')"
+  BACKUP_S3_BUCKET="$(read_env_value "${ENV_FILE}" "S3_BUCKET")"
+fi
+DB_PATH="${DB_PATH:-/data/claw-orchestrator/db.sqlite}"
+if [ -f "$DB_PATH" ]; then
+  S3_BUCKET="${BACKUP_S3_BUCKET:-}" bash "${DEPLOY_DIR}/deploy/scripts/backup.sh" || \
+    die "Backup failed. Aborting update to protect your data."
+else
+  log "  No DB found at ${DB_PATH} — skipping backup (first run or fresh server)."
+fi
+
+# Step 2/10: Stop services (reverse dependency order: scheduler → relay → control-plane)
+log "Step 2/10: Stopping services..."
+sudo systemctl stop claw-scheduler claw-slack-relay claw-control-plane 2>/dev/null || true
+
+# Step 3/10: Pull latest code
+log "Step 3/10: Pulling latest code..."
 cd "${DEPLOY_DIR}"
-git pull
+smart_pull
+render_target_system_env
 
-echo "Installing dependencies..."
+# Step 4/10: pnpm dependencies
+log "Step 4/10: Installing pnpm dependencies..."
 pnpm install --frozen-lockfile
 
-echo "Building all packages and apps..."
-pnpm build
+# Step 5/10: Build monorepo
+log "Step 5/10: Building monorepo..."
+pnpm -r build
 
-echo "Running database migrations..."
-DATABASE_URL="$(grep '^DATABASE_URL=' .env | cut -d= -f2-)" \
-  npx prisma migrate deploy
+# Step 6/10: Tenant Docker image
+log "Step 6/10: Building tenant Docker image..."
+docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 
-echo "Restarting services..."
-systemctl restart claw-control-plane claw-slack-relay claw-scheduler
+# Step 7/10: Prisma migrations
+log "Step 7/10: Running Prisma migrations..."
+cd "${DEPLOY_DIR}/apps/control-plane"
+BACKUP_HINT="/data/backups/$(date -u +%Y-%m-%d)/db.sqlite"
+RUNTIME_DATABASE_URL="$(read_env_value "${RENDERED_SYSTEM_ENV}" "DATABASE_URL")"
+DATABASE_URL="${RUNTIME_DATABASE_URL}" \
+  npx prisma migrate deploy || \
+  die "Prisma migration failed. Services are stopped. Restore DB from backup at ${BACKUP_HINT} then start services manually."
+cd "${DEPLOY_DIR}"
 
-echo "Update complete."
+# Step 8/10: Update env file + reload systemd
+log "Step 8/10: Updating out-of-repo env file and reloading systemd..."
+install_system_env
+sudo bash "${DEPLOY_DIR}/deploy/scripts/install-services.sh"
+
+# Step 9/10: Start services
+log "Step 9/10: Starting services..."
+sudo systemctl start claw-control-plane claw-slack-relay claw-scheduler
+
+# Step 10/10: Health check
+log "Step 10/10: Waiting for services to become healthy..."
+wait_healthy 30 2
+
+# Optional: smoke test
+if [ "$SKIP_VALIDATION" = false ]; then
+  log "Running deployment validation..."
+  CLAW_RUNTIME_ENV_FILE="${SYSTEM_ENV_FILE}" bash "${DEPLOY_DIR}/scripts/validate-deployment.sh"
+else
+  log "Skipping validate-deployment.sh (--skip-validation passed)."
+fi
+
+log "=== Update complete ==="

@@ -1,5 +1,10 @@
 # Deployment Bug Report — 2026-03-22
 
+> **Historical note (updated 2026-04-02):**
+> This report predates the repeatable deployment work on `feat/repeatable-deployment`.
+> The current deployment path is the systemd-based `deploy/scripts/install.sh` / `deploy/scripts/update.sh` flow.
+> References below to Docker Compose as the recommended deployment model, to systemd **user** services, or to `scripts/install-systemd.sh` are now stale and should be treated as historical debugging context only.
+
 ## What Works ✅
 
 1. **Tenant provisioning** — Slack event → relay → control plane → Docker container created → OpenClaw gateway starts → tenant ACTIVE

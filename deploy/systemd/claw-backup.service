@@ -7,8 +7,9 @@ After=network.target
 [Service]
 Type=oneshot
 User=claw
-EnvironmentFile=-/opt/claw-orchestrator/.env
-ExecStart=/opt/claw-orchestrator/deploy/scripts/backup.sh
+WorkingDirectory=__REPO_DIR__
+EnvironmentFile=-/etc/claw-orchestrator/env
+ExecStart=__REPO_DIR__/deploy/scripts/backup.sh
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=claw-backup

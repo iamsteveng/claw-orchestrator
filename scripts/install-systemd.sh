@@ -16,6 +16,9 @@ BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
 SERVICE_SRC="$BASE/deploy/systemd"
 
+# shellcheck source=deploy/scripts/runtime-env.sh
+source "$BASE/deploy/scripts/runtime-env.sh"
+
 echo "=== Killing any existing zombie/orphan node processes ==="
 pkill -9 -f "apps/control-plane/dist" 2>/dev/null && echo "  Killed control-plane processes" || true
 pkill -9 -f "apps/slack-relay/dist" 2>/dev/null && echo "  Killed slack-relay processes" || true
@@ -32,26 +35,17 @@ echo "=== Installing systemd user service files ==="
 mkdir -p "$SYSTEMD_USER_DIR"
 
 for svc in claw-control-plane claw-slack-relay claw-scheduler; do
-  cp "$SERVICE_SRC/${svc}.service" "$SYSTEMD_USER_DIR/${svc}.service"
+  render_systemd_unit_file "$SERVICE_SRC/${svc}.service" "$SYSTEMD_USER_DIR/${svc}.service" "$BASE"
   echo "  Installed ${svc}.service"
 done
 
 echo "=== Installing environment file ==="
-# Copy env template and merge real secrets from .env if present
-cp "$SERVICE_SRC/claw-orchestrator.env" "$SYSTEMD_USER_DIR/claw-orchestrator.env"
-if [ -f "$BASE/.env" ]; then
-  # Patch in real SLACK_SIGNING_SECRET and SLACK_BOT_TOKEN from .env
-  SLACK_SECRET=$(grep -E '^SLACK_SIGNING_SECRET=' "$BASE/.env" | cut -d= -f2- | head -1)
-  SLACK_TOKEN=$(grep -E '^SLACK_BOT_TOKEN=' "$BASE/.env" | cut -d= -f2- | head -1)
-  if [ -n "$SLACK_SECRET" ]; then
-    sed -i "s|^SLACK_SIGNING_SECRET=.*|SLACK_SIGNING_SECRET=$SLACK_SECRET|" "$SYSTEMD_USER_DIR/claw-orchestrator.env"
-    echo "  Patched SLACK_SIGNING_SECRET from .env"
-  fi
-  if [ -n "$SLACK_TOKEN" ]; then
-    sed -i "s|^SLACK_BOT_TOKEN=.*|SLACK_BOT_TOKEN=$SLACK_TOKEN|" "$SYSTEMD_USER_DIR/claw-orchestrator.env"
-    echo "  Patched SLACK_BOT_TOKEN from .env"
-  fi
-fi
+# Render env template and sync supported runtime keys from .env if present
+render_runtime_env_file \
+  "$SERVICE_SRC/claw-orchestrator.env" \
+  "$BASE/.env" \
+  "$SYSTEMD_USER_DIR/claw-orchestrator.env" \
+  "$BASE"
 
 # Update service files to point to the user-dir env file
 for svc in claw-control-plane claw-slack-relay claw-scheduler; do

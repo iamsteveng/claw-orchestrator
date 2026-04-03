@@ -396,7 +396,7 @@ During provisioning (step 5 above), the control plane copies the workspace templ
 templates/workspace/  →  /data/tenants/<id>/workspace/
 ```
 
-The template directory lives at `templates/workspace/` in the repository and is included in the deployed package at `/opt/claw-orchestrator/templates/workspace/`.
+The template directory lives at `templates/workspace/` in the repository and is included in the deployed package at `<repo-root>/templates/workspace/`.
 
 **Required template files:**
 
@@ -1316,7 +1316,7 @@ Per-tenant sshd adds more processes, more hardening needs, more key management, 
 ## 27. Host-Side Directory Layout
 
 ```text
-/opt/claw-orchestrator/
+<repo-root>/
   apps/
   templates/
     workspace/
@@ -1389,9 +1389,10 @@ Actual sizing depends on concurrency, repo size, install/build frequency, OpenCl
 
 | Data | Location | Method |
 |---|---|---|
-| SQLite database | `/data/claw-orchestrator/db.sqlite` | Daily snapshot |
+| SQLite database | `/data/claw-orchestrator/db.sqlite` | Daily snapshot and pre-update backup |
 | Tenant filesystems | `/data/tenants/` | Daily snapshot |
-| Control plane config/env | `/opt/claw-orchestrator/.env` | Manual; version-controlled template |
+| Runtime systemd env | `/etc/claw-orchestrator/env` | Back up with host config |
+| Deploy-script env input | `<repo-root>/.env` | Manual; used by install/update scripts for validation and migrations |
 
 ### Backup Procedure
 
@@ -1417,6 +1418,8 @@ tar -czf $BACKUP_DIR/tenants.tar.gz \
 aws s3 sync $BACKUP_DIR s3://your-bucket/claw-backups/$(date +%Y-%m-%d)/
 ```
 
+In addition, `deploy/scripts/update.sh` performs the same backup flow immediately before an in-place deployment whenever the configured SQLite DB already exists.
+
 Retention: 7 daily backups locally; 30 daily backups in S3.
 
 ### Recovery Procedure
@@ -1424,8 +1427,9 @@ Retention: 7 daily backups locally; 30 daily backups in S3.
 1. Stop all services.
 2. Restore SQLite: `cp $BACKUP_DIR/db.sqlite /data/claw-orchestrator/db.sqlite`
 3. Restore tenant data: `tar -xzf $BACKUP_DIR/tenants.tar.gz -C /`
-4. Restart services.
-5. Re-run health checks on all tenants.
+4. Restore `/etc/claw-orchestrator/env` if runtime config drifted or the host was rebuilt.
+5. Restart services.
+6. Re-run health checks on all tenants.
 
 ### RPO / RTO Targets (MVP)
 
@@ -1450,6 +1454,12 @@ All three Node.js services are managed by **systemd** on the Linux host. Unit fi
 - `claw-slack-relay.service`
 - `claw-scheduler.service`
 
+Runtime environment for all three services lives in `/etc/claw-orchestrator/env`.
+
+The checked-in deployment assets use a `__REPO_DIR__` placeholder. `deploy/scripts/install.sh`,
+`deploy/scripts/update.sh`, and `deploy/scripts/install-services.sh` render that placeholder to the
+actual repository checkout path during deployment, so the repo no longer has to live at one fixed path.
+
 ### Unit File Template (control plane example)
 
 ```ini
@@ -1460,11 +1470,10 @@ Requires=docker.service
 
 [Service]
 Type=simple
-User=claw
-WorkingDirectory=/opt/claw-orchestrator/apps/control-plane
-EnvironmentFile=/opt/claw-orchestrator/.env
-ExecStart=/usr/bin/node dist/index.js
-Restart=always
+WorkingDirectory=__REPO_DIR__
+EnvironmentFile=/etc/claw-orchestrator/env
+ExecStart=/usr/bin/node apps/control-plane/dist/index.js
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
@@ -1481,18 +1490,41 @@ WantedBy=multi-user.target
 3. `claw-slack-relay.service` — depends on control plane
 4. `claw-scheduler.service` — independent, can start in any order
 
-### Environment Variables (`/opt/claw-orchestrator/.env`)
+### Environment Variables
+
+There are now two config surfaces involved in deployment:
+
+1. **Repo `.env`** at `<repo-root>/.env`
+   - used by `deploy/scripts/install.sh` and `deploy/scripts/update.sh`
+   - validated before deployment
+   - provides operator-supplied overrides for the supported runtime env keys
+2. **Runtime systemd env** at `/etc/claw-orchestrator/env`
+   - loaded by the running systemd services
+   - rendered from `deploy/systemd/claw-orchestrator.env` with the deployment checkout path substituted for `__REPO_DIR__`
+   - synced from repo `.env` for the supported runtime keys (control plane, relay, scheduler, and backup settings)
+   - used as the source of truth for migrations, validation, and subsequent service starts during deploy/update
+
+This removes the old Slack-only sync path and avoids silent drift between repo `.env` and the runtime systemd env.
+
+#### Runtime env file (`/etc/claw-orchestrator/env`)
 
 ```
 # Control Plane
 CONTROL_PLANE_PORT=3200
 DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
 DATA_DIR=/data/tenants
-TENANT_IMAGE=claw-tenant:sha-latest
+HOST_DATA_DIR=
+DATA_MOUNT=/data
+TENANT_IMAGE=claw-tenant:latest
+TEMPLATES_DIR=__REPO_DIR__/templates/workspace
 LOG_LEVEL=info
+NODE_ENV=production
+MAX_ACTIVE_TENANTS=10
+ACTIVE_TENANTS_OVERFLOW_POLICY=queue
+CONTAINER_NETWORK=
 
 # Slack Relay
-SLACK_RELAY_PORT=3000
+SLACK_RELAY_PORT=3101
 SLACK_SIGNING_SECRET=...
 SLACK_BOT_TOKEN=xoxb-...
 CONTROL_PLANE_URL=http://localhost:3200
@@ -1500,6 +1532,7 @@ CONTROL_PLANE_URL=http://localhost:3200
 # Scheduler
 SCHEDULER_INTERVAL_MS=60000
 IDLE_STOP_HOURS=48
+S3_BUCKET=
 
 # Model Auth — NO ANTHROPIC_API_KEY here.
 # OpenClaw model auth is provided via a read-only bind-mount of the host's auth-profiles.json
@@ -1516,26 +1549,30 @@ IDLE_STOP_HOURS=48
 ```bash
 # 1. Install Docker Engine
 # 2. Install Node.js 22 + pnpm
-# 3. Clone repo to /opt/claw-orchestrator
-# 4. pnpm install && pnpm build
-# 5. Create /data/claw-orchestrator/ and /data/tenants/ (owned by 'claw' user)
-# 6. cp .env.example .env && fill in secrets
-# 7. npx prisma migrate deploy
-# 8. cp deploy/systemd/*.service /etc/systemd/system/
-# 9. systemctl daemon-reload
-# 10. systemctl enable --now claw-control-plane claw-slack-relay claw-scheduler
-# 11. Configure Slack app webhook URL to point to relay
+# 3. Clone repo to your preferred checkout path
+# 4. cp .env.example .env && fill in secrets (leave TEMPLATES_DIR unset unless overriding)
+# 5. Verify ~/.openclaw/.../auth-profiles.json and ~/.claude/.credentials.json exist
+# 6. Run: bash deploy/scripts/install.sh
+# 7. Add allowlist entries
+# 8. Configure reverse proxy to localhost:3101
+# 9. Configure Slack app webhook URL to point to relay
 ```
 
 ### Updates
 
 ```bash
-cd /opt/claw-orchestrator
-git pull
-pnpm install && pnpm build
-npx prisma migrate deploy
-systemctl restart claw-control-plane claw-slack-relay claw-scheduler
+cd ~/claw-orchestrator
+bash deploy/scripts/update.sh
 ```
+
+`deploy/scripts/update.sh` performs:
+
+1. pre-deploy backup when the DB exists
+2. stop in reverse dependency order
+3. safe fetch / fast-forward merge when possible
+4. dependency install, rebuild, tenant image rebuild, and Prisma migration
+5. regeneration of `/etc/claw-orchestrator/env` from the tracked template plus the supported matching repo `.env` overrides
+6. systemd reinstall/reload, service start, health checks, and optional validation
 
 ---
 
