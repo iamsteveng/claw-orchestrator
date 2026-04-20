@@ -42,14 +42,55 @@ If you deploy on an EC2 instance, allow inbound TCP ports `22`, `80`, and `443` 
 
 ## Installation guide
 
-This is the fastest path to a fresh deployment on an Ubuntu host.
+### Quick start (one command)
 
-### 1. Install host dependencies
+`bootstrap.sh` handles everything that can be automated on a fresh Ubuntu host: system dependencies, repository clone, `.env` setup, the full installer, and optional HTTPS via Caddy.
+
+**Before you run it**, make sure these host-side auth files exist:
+
+| File | How to create it |
+| --- | --- |
+| `~/.openclaw/agents/main/agent/auth-profiles.json` | Run `openclaw auth` on the host |
+| `~/.claude/.credentials.json` | Run `claude` on the host to log in |
+
+Tenant containers need both at runtime. The script will warn (not block) if they are missing.
+
+```bash
+git clone https://github.com/iamsteveng/claw-orchestrator.git ~/claw-orchestrator
+cd ~/claw-orchestrator
+
+bash deploy/scripts/bootstrap.sh \
+  --signing-secret <your-slack-signing-secret> \
+  --bot-token xoxb-<your-bot-token> \
+  --domain your-domain.example
+```
+
+Omit `--domain` if you are setting up HTTPS separately. Pass `--skip-validation` to skip the post-install smoke test.
+
+What the script does:
+
+1. Installs Docker, Node.js 22, pnpm, sqlite3, git (skips each if already present)
+2. Handles the Docker group activation — re-launches itself under `sg docker` so `docker build` works without a logout/login
+3. Clones the repo (skips if the directory already exists)
+4. Writes `.env` with the provided secrets
+5. Runs `deploy/scripts/install.sh` (see [what install.sh does](#what-installsh-does))
+6. Installs Caddy and writes `/etc/caddy/Caddyfile` if `--domain` is given
+
+After bootstrap completes, continue from [Create the Slack app](#3-create-the-slack-app).
+
+---
+
+### Manual installation
+
+Use this path if you need full control over each step, or if dependencies are already managed by your provisioning tooling.
+
+#### 1. Install host dependencies
 
 ```bash
 # Docker
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
+newgrp docker   # activate group in current session without logout
 
 # Node.js 22 + required packages
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo bash -
@@ -59,74 +100,30 @@ sudo apt-get install -y nodejs sqlite3 git curl
 sudo npm install -g pnpm
 ```
 
-### 2. Clone the repository
+#### 2. Clone the repository and configure `.env`
 
 ```bash
 git clone https://github.com/iamsteveng/claw-orchestrator.git ~/claw-orchestrator
 cd ~/claw-orchestrator
-```
-
-### 3. Create and fill in `.env`
-
-```bash
 cp .env.example .env
 ```
 
-At minimum, configure these values:
+Edit `.env` and set at minimum:
 
 ```env
-# Control Plane
-CONTROL_PLANE_PORT=3200
-DATABASE_URL=file:/data/claw-orchestrator/db.sqlite
-DATA_DIR=/data/tenants
-TENANT_IMAGE=claw-tenant:latest
-LOG_LEVEL=info
-MAX_ACTIVE_TENANTS=10
-ACTIVE_TENANTS_OVERFLOW_POLICY=queue
-
-# Slack Relay
-SLACK_RELAY_PORT=3101
 SLACK_SIGNING_SECRET=<your-slack-signing-secret>
 SLACK_BOT_TOKEN=xoxb-<your-bot-token>
-CONTROL_PLANE_URL=http://localhost:3200
-
-# Scheduler
-SCHEDULER_INTERVAL_MS=60000
-IDLE_STOP_HOURS=48
 ```
 
-Important notes:
+All other values have working defaults. Important notes:
 
-- `deploy/scripts/install.sh` and `deploy/scripts/update.sh` render `/etc/claw-orchestrator/env` from `deploy/systemd/claw-orchestrator.env` plus supported keys from your repo `.env`.
-- Leave `TEMPLATES_DIR` unset unless you intentionally want to override the default checkout-relative `templates/workspace` path.
-- Do **not** put `ANTHROPIC_API_KEY` in `.env`; model auth comes from the host OpenClaw profile file.
+- Leave `TEMPLATES_DIR` unset — `install.sh` sets it to the checkout-relative `templates/workspace` path automatically.
+- Do **not** put `ANTHROPIC_API_KEY` in `.env`; model auth comes from the host OpenClaw profile file (see auth files above).
 
-### 4. Verify host auth files
-
-Tenant containers expect these host-side credentials to exist before first boot:
-
-```bash
-test -f ~/.openclaw/agents/main/agent/auth-profiles.json \
-  && echo "✓ OpenClaw auth OK" \
-  || echo "✗ Missing ~/.openclaw/agents/main/agent/auth-profiles.json"
-
-test -f ~/.claude/.credentials.json \
-  && echo "✓ Claude Code auth OK" \
-  || echo "✗ Missing ~/.claude/.credentials.json"
-```
-
-If they are missing, authenticate OpenClaw and Claude Code on the host first.
-
-### 5. Run the installer
+#### 3. Run the installer {#what-installsh-does}
 
 ```bash
 bash deploy/scripts/install.sh
-```
-
-Optional:
-
-```bash
-bash deploy/scripts/install.sh --skip-validation
 ```
 
 The install script performs the full first-time setup:
@@ -139,9 +136,9 @@ The install script performs the full first-time setup:
 6. runs Prisma migrations
 7. installs and starts the systemd services
 8. waits for `/health` on ports `3200` and `3101`
-9. runs `scripts/validate-deployment.sh` unless skipped
+9. runs `scripts/validate-deployment.sh` unless `--skip-validation` is passed
 
-### 6. Put HTTPS in front of the Slack relay
+#### 4. Put HTTPS in front of the Slack relay
 
 Slack must reach your deployment over HTTPS. Keep `3101` and `3200` internal and publish only your reverse proxy.
 
@@ -168,7 +165,9 @@ sudo systemctl reload caddy
 
 If you do not have DNS yet, `<public-ip>.nip.io` works well for quick setup.
 
-### 7. Create the Slack app
+---
+
+### 3. Create the Slack app
 
 Use Slack's **From a manifest** flow so app creation is repeatable. Replace `your-domain.example` before submitting:
 
@@ -225,14 +224,14 @@ Then:
 sudo systemctl restart claw-slack-relay
 ```
 
-### 8. Allowlist the first user
+### 4. Allowlist the first user
 
 ```bash
 sqlite3 /data/claw-orchestrator/db.sqlite \
   "INSERT INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES (lower(hex(randomblob(8))), 'YOUR_TEAM_ID', 'YOUR_USER_ID', 'admin', unixepoch() * 1000);"
 ```
 
-### 9. Validate the deployment
+### 5. Validate the deployment
 
 Recommended checks:
 
