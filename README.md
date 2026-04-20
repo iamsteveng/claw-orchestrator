@@ -229,7 +229,7 @@ sudo systemctl restart claw-slack-relay
 
 ```bash
 sqlite3 /data/claw-orchestrator/db.sqlite \
-  "INSERT INTO allowlist (id, team_id, user_id, created_at) VALUES (lower(hex(randomblob(8))), 'YOUR_TEAM_ID', 'YOUR_USER_ID', unixepoch() * 1000);"
+  "INSERT INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES (lower(hex(randomblob(8))), 'YOUR_TEAM_ID', 'YOUR_USER_ID', 'admin', unixepoch() * 1000);"
 ```
 
 ### 9. Validate the deployment
