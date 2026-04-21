@@ -45,10 +45,12 @@ check_secrets() {
   local secret token
   secret=$(sed -n 's/^SLACK_SIGNING_SECRET=//p' "${ENV_FILE}")
   token=$(sed -n 's/^SLACK_BOT_TOKEN=//p' "${ENV_FILE}")
-  { [ -z "$secret" ] || [ "$secret" = "replace-with-real-value" ]; } && \
+  if [ -z "$secret" ] || [ "$secret" = "replace-with-real-value" ]; then
     die "SLACK_SIGNING_SECRET not set or is placeholder in ${ENV_FILE}"
-  { [ -z "$token" ] || [ "$token" = "replace-with-real-value" ]; } && \
+  fi
+  if [ -z "$token" ] || [ "$token" = "replace-with-real-value" ]; then
     die "SLACK_BOT_TOKEN not set or is placeholder in ${ENV_FILE}"
+  fi
 }
 
 # Render the tracked runtime env template to the out-of-repo systemd env file.
