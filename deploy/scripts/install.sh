@@ -118,6 +118,18 @@ log "Step 4/9: Installing pnpm dependencies..."
 cd "${DEPLOY_DIR}"
 pnpm install --frozen-lockfile
 
+# Generate Prisma client and symlink into every pnpm store @prisma/client location.
+# pnpm isolates packages so the generated client at node_modules/.prisma/client
+# must be linked into each .pnpm/@prisma+client@*/node_modules/.prisma/client.
+log "  Generating Prisma client..."
+npx prisma generate --schema "${DEPLOY_DIR}/prisma/schema.prisma"
+while IFS= read -r dot_prisma_dir; do
+  rm -rf "${dot_prisma_dir}/client"
+  mkdir -p "${dot_prisma_dir}"
+  ln -s "${DEPLOY_DIR}/node_modules/.prisma/client" "${dot_prisma_dir}/client"
+  log "  Linked ${dot_prisma_dir}/client"
+done < <(find "${DEPLOY_DIR}/node_modules/.pnpm" -maxdepth 4 -type d -name '.prisma' 2>/dev/null)
+
 # Step 5/9: Build monorepo
 log "Step 5/9: Building monorepo..."
 pnpm -r build
