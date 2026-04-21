@@ -128,8 +128,10 @@ docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 
 # Step 7/9: Prisma migrations
 log "Step 7/9: Running Prisma migrations..."
-DATABASE_URL="$(read_env_value "${SYSTEM_ENV_FILE}" "DATABASE_URL")" \
-  npx prisma migrate deploy --schema "${DEPLOY_DIR}/prisma/schema.prisma"
+_db_url="$(read_env_value "${SYSTEM_ENV_FILE}" "DATABASE_URL")"
+sudo env DATABASE_URL="${_db_url}" npx prisma migrate deploy --schema "${DEPLOY_DIR}/prisma/schema.prisma"
+sudo chown claw:claw /data/claw-orchestrator/db.sqlite
+sudo chmod 640 /data/claw-orchestrator/db.sqlite
 
 # Step 8/9: Systemd services
 log "Step 8/9: Installing and enabling systemd services..."
