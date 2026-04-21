@@ -165,13 +165,11 @@ docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 
 # Step 7/10: Prisma migrations
 log "Step 7/10: Running Prisma migrations..."
-cd "${DEPLOY_DIR}/apps/control-plane"
 BACKUP_HINT="/data/backups/$(date -u +%Y-%m-%d)/db.sqlite"
 RUNTIME_DATABASE_URL="$(read_env_value "${RENDERED_SYSTEM_ENV}" "DATABASE_URL")"
 DATABASE_URL="${RUNTIME_DATABASE_URL}" \
-  npx prisma migrate deploy || \
+  npx prisma migrate deploy --schema "${DEPLOY_DIR}/prisma/schema.prisma" || \
   die "Prisma migration failed. Services are stopped. Restore DB from backup at ${BACKUP_HINT} then start services manually."
-cd "${DEPLOY_DIR}"
 
 # Step 8/10: Update env file + reload systemd
 log "Step 8/10: Updating out-of-repo env file and reloading systemd..."

@@ -128,10 +128,8 @@ docker build -t claw-tenant:latest "${DEPLOY_DIR}/docker/tenant-image/"
 
 # Step 7/9: Prisma migrations
 log "Step 7/9: Running Prisma migrations..."
-cd "${DEPLOY_DIR}/apps/control-plane"
 DATABASE_URL="$(read_env_value "${SYSTEM_ENV_FILE}" "DATABASE_URL")" \
-  npx prisma migrate deploy
-cd "${DEPLOY_DIR}"
+  npx prisma migrate deploy --schema "${DEPLOY_DIR}/prisma/schema.prisma"
 
 # Step 8/9: Systemd services
 log "Step 8/9: Installing and enabling systemd services..."
