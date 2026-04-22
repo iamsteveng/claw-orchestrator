@@ -13,14 +13,6 @@
     }
   },
   "models": {
-    "bedrockDiscovery": {
-      "enabled": true,
-      "region": "ap-northeast-1",
-      "providerFilter": ["qwen", "amazon"],
-      "refreshInterval": 3600,
-      "defaultContextWindow": 32000,
-      "defaultMaxTokens": 4096
-    },
     "providers": {
       "amazon-bedrock": {
         "baseUrl": "https://bedrock-runtime.ap-northeast-1.amazonaws.com",
