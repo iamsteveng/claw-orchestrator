@@ -16,6 +16,7 @@ export const controlPlaneConfigSchema = z.object({
   CONTAINER_NETWORK: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
   TENANT_IMAGE: z.string().min(1),
   TEMPLATES_DIR: z.string().min(1).default('/opt/claw-orchestrator/templates/workspace'),
+  OPENCLAW_CONFIG_TEMPLATE: z.string().min(1).default('/opt/claw-orchestrator/docker/tenant-image/openclaw.json'),
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   MAX_ACTIVE_TENANTS: z.coerce.number().int().positive().default(10),
   ACTIVE_TENANTS_OVERFLOW_POLICY: z.enum(['queue', 'reject']).default('queue'),

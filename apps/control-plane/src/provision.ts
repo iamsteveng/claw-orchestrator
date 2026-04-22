@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { seedWorkspace } from './seed-workspace.js';
 import { rollbackProvisioning } from './rollback-provisioning.js';
@@ -82,6 +82,7 @@ export async function provisionTenant(
   try {
     const dirs = [
       `${dataDir}/home`,
+      `${dataDir}/home/.openclaw`,
       `${dataDir}/workspace`,
       `${dataDir}/config`,
       `${dataDir}/logs`,
@@ -93,6 +94,13 @@ export async function provisionTenant(
     }
 
     await writeFile(`${dataDir}/secrets/relay-token`, relayToken, 'utf8');
+
+    // Seed openclaw config so the gateway starts without interactive setup.
+    // The home dir is bind-mounted over /home/agent, hiding the image's baked-in config.
+    await copyFile(
+      controlPlaneConfig.OPENCLAW_CONFIG_TEMPLATE,
+      `${dataDir}/home/.openclaw/openclaw.json`,
+    );
 
     // Seed workspace template files (including AGENTS.md merge logic)
     await seedWorkspace(`${dataDir}/workspace`, controlPlaneConfig.TEMPLATES_DIR);
