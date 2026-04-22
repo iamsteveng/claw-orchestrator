@@ -104,6 +104,8 @@ check "claw-tenant:latest image exists" "$([ "$IMAGE_OK" -ge 1 ] && echo PASS ||
 # Quick container smoke test
 TMPDIR_TEST="/tmp/claw-validate-$$"
 mkdir -p "$TMPDIR_TEST"/{home,workspace,config,logs,secrets}
+mkdir -p "$TMPDIR_TEST/home/.openclaw"
+cp "$BASE/docker/tenant-image/openclaw.json" "$TMPDIR_TEST/home/.openclaw/openclaw.json"
 chmod 777 "$TMPDIR_TEST"/{home,workspace,config,logs,secrets}
 
 CONTAINER_OK="FAIL"
