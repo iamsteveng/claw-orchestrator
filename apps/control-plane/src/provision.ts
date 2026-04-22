@@ -83,6 +83,7 @@ export async function provisionTenant(
     const dirs = [
       `${dataDir}/home`,
       `${dataDir}/home/.openclaw`,
+      `${dataDir}/home/.claude`,
       `${dataDir}/workspace`,
       `${dataDir}/config`,
       `${dataDir}/logs`,
