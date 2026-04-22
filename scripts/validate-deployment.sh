@@ -93,8 +93,8 @@ check "SQLite DB exists" "$([ -f "$DB" ] && echo PASS || echo FAIL)" "$DB"
 
 # Ensure test user is in the allowlist (idempotent — skips if already present).
 # DB is claw:claw 640 so writes require sudo -u claw.
-sudo -u claw sqlite3 "$DB" "INSERT OR IGNORE INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES ('validate-test-user', '$TEST_TEAM', '$TEST_USER', 'validate-deployment.sh', $(date +%s%3N));" 2>/dev/null || true
-check "Allowlist has test user" "$(sqlite3 "$DB" "SELECT COUNT(*) FROM allowlist WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER' AND revoked_at IS NULL;" 2>/dev/null | grep -q "^1$" && echo PASS || echo FAIL)"
+sudo -u claw sudo -u claw sqlite3 "$DB" "INSERT OR IGNORE INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES ('validate-test-user', '$TEST_TEAM', '$TEST_USER', 'validate-deployment.sh', $(date +%s%3N));" 2>/dev/null || true
+check "Allowlist has test user" "$(sudo -u claw sqlite3 "$DB" "SELECT COUNT(*) FROM allowlist WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER' AND revoked_at IS NULL;" 2>/dev/null | grep -q "^1$" && echo PASS || echo FAIL)"
 
 # ── 3. Docker ─────────────────────────────────────────────────────────────────
 section "3. Docker"
@@ -146,10 +146,10 @@ check "Container starts and stays running" "$CONTAINER_OK" "$CONTAINER_DETAIL"
 section "4. Tenant Provisioning (signed Slack event)"
 
 # Clean up any stale test tenant first
-STALE=$(sqlite3 "$DB" "SELECT id FROM tenants WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER';" 2>/dev/null || true)
+STALE=$(sudo -u claw sqlite3 "$DB" "SELECT id FROM tenants WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER';" 2>/dev/null || true)
 if [ -n "$STALE" ]; then
   docker rm -f "claw-tenant-$STALE" > /dev/null 2>&1 || true
-  sqlite3 "$DB" "DELETE FROM tenants WHERE id='$STALE';" 2>/dev/null || true
+  sudo -u claw sqlite3 "$DB" "DELETE FROM tenants WHERE id='$STALE';" 2>/dev/null || true
   rm -rf "$DATA_DIR/$STALE" 2>/dev/null || true
 fi
 
@@ -166,8 +166,8 @@ if [ "$CP_OK" -ge 1 ] && [ "$RELAY_OK" -ge 1 ] && [ -n "$SIGNING_SECRET" ]; then
     TENANT_STATUS=""
     TENANT_ID=""
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-      TENANT_ID=$(sqlite3 "$DB" "SELECT id FROM tenants WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER' ORDER BY created_at DESC LIMIT 1;" 2>/dev/null || true)
-      TENANT_STATUS=$(sqlite3 "$DB" "SELECT status FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null || true)
+      TENANT_ID=$(sudo -u claw sqlite3 "$DB" "SELECT id FROM tenants WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER' ORDER BY created_at DESC LIMIT 1;" 2>/dev/null || true)
+      TENANT_STATUS=$(sudo -u claw sqlite3 "$DB" "SELECT status FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null || true)
       if [ "$TENANT_STATUS" = "ACTIVE" ]; then
         PROV_OK="PASS"
         break
@@ -198,7 +198,7 @@ if [ "$PROV_OK" = "PASS" ] && [ -n "$TENANT_ID" ]; then
   if [ "$HTTP_CODE" = "200" ]; then
     DEADLINE=$(($(date +%s) + 30))
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-      DELIVERED=$(sqlite3 "$DB" "SELECT COUNT(*) FROM message_queue WHERE tenant_id='$TENANT_ID' AND status='DELIVERED';" 2>/dev/null || echo 0)
+      DELIVERED=$(sudo -u claw sqlite3 "$DB" "SELECT COUNT(*) FROM message_queue WHERE tenant_id='$TENANT_ID' AND status='DELIVERED';" 2>/dev/null || echo 0)
       if [ "$DELIVERED" -ge 1 ]; then
         MSG_OK="PASS"
         break
@@ -218,10 +218,10 @@ check "Message delivered to tenant" "$MSG_OK" "$MSG_DETAIL"
 if [ -n "${TENANT_ID:-}" ]; then
   docker stop "claw-tenant-$TENANT_ID" > /dev/null 2>&1 || true
   docker rm -f "claw-tenant-$TENANT_ID" > /dev/null 2>&1 || true
-  sqlite3 "$DB" "DELETE FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null || true
+  sudo -u claw sqlite3 "$DB" "DELETE FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null || true
   rm -rf "$DATA_DIR/$TENANT_ID" 2>/dev/null || true
 fi
-sudo -u claw sqlite3 "$DB" "DELETE FROM allowlist WHERE id='validate-test-user';" 2>/dev/null || true
+sudo -u claw sudo -u claw sqlite3 "$DB" "DELETE FROM allowlist WHERE id='validate-test-user';" 2>/dev/null || true
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
