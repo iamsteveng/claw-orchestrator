@@ -83,6 +83,7 @@ export async function provisionTenant(
     const dirs = [
       `${dataDir}/home`,
       `${dataDir}/home/.openclaw`,
+      `${dataDir}/home/.openclaw/agents/main/agent`,
       `${dataDir}/home/.claude`,
       `${dataDir}/workspace`,
       `${dataDir}/config`,
@@ -102,6 +103,27 @@ export async function provisionTenant(
       controlPlaneConfig.OPENCLAW_CONFIG_TEMPLATE,
       `${dataDir}/home/.openclaw/openclaw.json`,
     );
+
+    // Copy credential files into the tenant home so openclaw can write usage stats
+    // back to auth-profiles.json. Read-only bind mounts cause EBUSY on rename.
+    const hostHome = process.env.HOME ?? '/root';
+    const credFilePairs: [string, string][] = [
+      [
+        `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`,
+        `${dataDir}/home/.openclaw/agents/main/agent/auth-profiles.json`,
+      ],
+      [
+        `${hostHome}/.claude/.credentials.json`,
+        `${dataDir}/home/.claude/.credentials.json`,
+      ],
+    ];
+    for (const [src, dest] of credFilePairs) {
+      try {
+        await copyFile(src, dest);
+      } catch {
+        // Best-effort — container may still work with partial credentials
+      }
+    }
 
     // Seed workspace template files (including AGENTS.md merge logic)
     await seedWorkspace(`${dataDir}/workspace`, controlPlaneConfig.TEMPLATES_DIR);

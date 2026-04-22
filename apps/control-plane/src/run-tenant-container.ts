@@ -50,13 +50,6 @@ export async function runTenantContainer(opts: RunTenantContainerOptions): Promi
   const memory = `${memoryMb}m`;
   const pidsLimit = overrides.pids_limit ?? 256;
 
-  // Host paths for read-only credential files
-  const homeDir = process.env.HOME ?? '/root';
-  const hostAuthProfiles = `${homeDir}/.openclaw/agents/main/agent/auth-profiles.json`;
-  const containerAuthProfiles = '/home/agent/.openclaw/agents/main/agent/auth-profiles.json';
-  const hostCredentials = `${homeDir}/.claude/.credentials.json`;
-  const containerCredentials = '/home/agent/.claude/.credentials.json';
-
   const { DockerClient } = await import('@claw/docker-client');
 
   await DockerClient.run({
@@ -72,10 +65,6 @@ export async function runTenantContainer(opts: RunTenantContainerOptions): Promi
       `${dataDir}/home:/home/agent`,
       `${dataDir}/workspace:/workspace`,
       `${dataDir}/config:/home/agent/.config`,
-    ],
-    readOnlyBindMounts: [
-      `${hostAuthProfiles}:${containerAuthProfiles}`,
-      `${hostCredentials}:${containerCredentials}`,
     ],
     env: [
       'HOME=/home/agent',
