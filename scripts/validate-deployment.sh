@@ -20,6 +20,10 @@ DATA_DIR="${DATA_DIR:-/data/tenants}"
 SIGNING_SECRET="$(read_env_value "$ENV_FILE" "SLACK_SIGNING_SECRET")"
 RELAY_PUBLIC_URL="$(read_env_value "$ENV_FILE" "RELAY_PUBLIC_URL")"
 RELAY_URL="${RELAY_PUBLIC_URL:-https://13.212.162.85.nip.io}/slack/events"
+# Resolve agent home: read from env file first (services set HOME=/home/ubuntu),
+# fall back to the ubuntu user's homedir, then $HOME.
+_ENV_HOME="$(read_env_value "$ENV_FILE" "HOME")"
+AGENT_HOME="${_ENV_HOME:-$(getent passwd ubuntu | cut -d: -f6 2>/dev/null || echo "$HOME")}"
 TEST_TEAM="T0ABHS0G3"
 TEST_USER="U08M34UT0FL"
 
@@ -83,10 +87,10 @@ for VAR in SLACK_SIGNING_SECRET SLACK_BOT_TOKEN DATABASE_URL DATA_DIR; do
   check "env: $VAR set" "$([ -n "$VAL" ] && echo PASS || echo FAIL)"
 done
 
-AUTH_PROFILES="$HOME/.openclaw/agents/main/agent/auth-profiles.json"
+AUTH_PROFILES="$AGENT_HOME/.openclaw/agents/main/agent/auth-profiles.json"
 check "auth-profiles.json exists" "$([ -f "$AUTH_PROFILES" ] && [ -s "$AUTH_PROFILES" ] && echo PASS || echo FAIL)" "$AUTH_PROFILES"
 
-CREDS="$HOME/.claude/.credentials.json"
+CREDS="$AGENT_HOME/.claude/.credentials.json"
 check ".credentials.json exists" "$([ -f "$CREDS" ] && [ -s "$CREDS" ] && echo PASS || echo FAIL)" "$CREDS"
 
 check "SQLite DB exists" "$([ -f "$DB" ] && echo PASS || echo FAIL)" "$DB"
