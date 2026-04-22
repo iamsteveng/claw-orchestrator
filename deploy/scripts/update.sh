@@ -54,6 +54,13 @@ check_secrets() {
   if [ -z "$token" ] || [ "$token" = "replace-with-real-value" ]; then
     die "SLACK_BOT_TOKEN not set or is placeholder in ${ENV_FILE}"
   fi
+  # Ensure credential files are readable by the control plane (running as current user).
+  # Files may be owned by a different uid if copied via scp from another machine.
+  local openclaw_auth="${HOME}/.openclaw/agents/main/agent/auth-profiles.json"
+  local claude_creds="${HOME}/.claude/.credentials.json"
+  for f in "$openclaw_auth" "$claude_creds"; do
+    [ -f "$f" ] && sudo chown "$(id -un):$(id -gn)" "$f" 2>/dev/null || true
+  done
 }
 
 # Render the tracked runtime env template to the out-of-repo systemd env file.

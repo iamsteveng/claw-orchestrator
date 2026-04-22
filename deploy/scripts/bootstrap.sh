@@ -63,12 +63,17 @@ if [ ! -f "$OPENCLAW_AUTH" ]; then
   warn "Missing ${OPENCLAW_AUTH}"
   warn "  Copy it from your local machine: scp ~/.openclaw/agents/main/agent/auth-profiles.json <host>:${OPENCLAW_AUTH}"
   AUTH_MISSING=1
+else
+  # Ensure the control plane (running as ubuntu) can read the file to copy it into tenant dirs
+  sudo chown "$(id -un):$(id -gn)" "$OPENCLAW_AUTH" 2>/dev/null || true
 fi
 
 if [ ! -f "$CLAUDE_CREDS" ]; then
   warn "Missing ${CLAUDE_CREDS}"
   warn "  Copy it from your local machine: scp ~/.claude/.credentials.json <host>:${CLAUDE_CREDS}"
   AUTH_MISSING=1
+else
+  sudo chown "$(id -un):$(id -gn)" "$CLAUDE_CREDS" 2>/dev/null || true
 fi
 
 if [ "$AUTH_MISSING" -eq 1 ]; then

@@ -46,7 +46,8 @@ RUN npm install -g --no-fund --no-audit \
     @anthropic-ai/claude-code \
     @openai/codex \
     vercel \
-    convex
+    convex \
+    && chmod -R a+w /usr/local/lib/node_modules/openclaw/dist/extensions/
 
 # Bake Ralph skills into the OpenClaw skills directory
 COPY skills/ /usr/local/lib/node_modules/openclaw/skills/
@@ -59,10 +60,10 @@ RUN chmod +x /opt/ralph/ralph.sh /opt/ralph/qa-codex-loop.sh
 # Set RALPH_PATH so ralph-codex-loop skill works out of the box
 ENV RALPH_PATH=/opt/ralph/ralph.sh
 
-# Create non-root 'agent' user with uid/gid 1000 to match host ubuntu user
-# This ensures bind-mounted volumes (created by ubuntu on the host) are writable
-RUN useradd --uid 1000 --gid 1000 --create-home --home-dir /home/agent --shell /bin/bash agent 2>/dev/null || \
-    useradd --create-home --home-dir /home/agent --shell /bin/bash agent
+# Create non-root 'agent' user. The base image (node:22-bookworm-slim) already
+# has a 'node' user at uid/gid 1000, so agent gets uid/gid 1001.
+RUN groupadd --gid 1001 agent && \
+    useradd --uid 1001 --gid 1001 --create-home --home-dir /home/agent --shell /bin/bash agent
 
 WORKDIR /home/agent
 
