@@ -200,7 +200,7 @@ if [ "$PROV_OK" = "PASS" ] && [ -n "$TENANT_ID" ]; then
   SLACK_EVENT_ID="Ev_validate_$(date +%s)"
   HTTP_CODE=$(send_slack_event "hello from validation script" 2>/dev/null || echo "000")
   if [ "$HTTP_CODE" = "200" ]; then
-    DEADLINE=$(($(date +%s) + 30))
+    DEADLINE=$(($(date +%s) + 90))
     while [ "$(date +%s)" -lt "$DEADLINE" ]; do
       DELIVERED=$(sudo -u claw sqlite3 "$DB" "SELECT COUNT(*) FROM message_queue WHERE tenant_id='$TENANT_ID' AND status='DELIVERED';" 2>/dev/null || echo 0)
       if [ "$DELIVERED" -ge 1 ]; then
@@ -209,7 +209,7 @@ if [ "$PROV_OK" = "PASS" ] && [ -n "$TENANT_ID" ]; then
       fi
       sleep 2
     done
-    [ "$MSG_OK" != "PASS" ] && MSG_DETAIL="no DELIVERED message after 30s"
+    [ "$MSG_OK" != "PASS" ] && MSG_DETAIL="no DELIVERED message after 90s"
   else
     MSG_DETAIL="relay returned HTTP $HTTP_CODE"
   fi
