@@ -1,7 +1,7 @@
 {
   "wizard": {
     "lastRunAt": "2026-01-01T00:00:00.000Z",
-    "lastRunVersion": "2026.3.13",
+    "lastRunVersion": "2026.4.15",
     "lastRunMode": "local"
   },
   "auth": {
@@ -17,10 +17,12 @@
     "mode": "local",
     "bind": "auto"
   },
-  "agent": {
-    "model": {
-      "primary": "anthropic/claude-sonnet-4-6"
-    },
-    "workspace": "/workspace"
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6"
+      },
+      "workspace": "/workspace"
+    }
   }
 }
