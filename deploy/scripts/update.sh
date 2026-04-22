@@ -48,10 +48,12 @@ check_secrets() {
   local secret token
   secret=$(sed -n 's/^SLACK_SIGNING_SECRET=//p' "${ENV_FILE}")
   token=$(sed -n 's/^SLACK_BOT_TOKEN=//p' "${ENV_FILE}")
-  { [ -z "$secret" ] || [ "$secret" = "replace-with-real-value" ]; } && \
+  if [ -z "$secret" ] || [ "$secret" = "replace-with-real-value" ]; then
     die "SLACK_SIGNING_SECRET not set or is placeholder in ${ENV_FILE}"
-  { [ -z "$token" ] || [ "$token" = "replace-with-real-value" ]; } && \
+  fi
+  if [ -z "$token" ] || [ "$token" = "replace-with-real-value" ]; then
     die "SLACK_BOT_TOKEN not set or is placeholder in ${ENV_FILE}"
+  fi
 }
 
 # Render the tracked runtime env template to the out-of-repo systemd env file.
@@ -154,6 +156,18 @@ render_target_system_env
 # Step 4/10: pnpm dependencies
 log "Step 4/10: Installing pnpm dependencies..."
 pnpm install --frozen-lockfile
+
+# Generate Prisma client and symlink into every pnpm store @prisma/client location.
+# pnpm isolates packages so the generated client at node_modules/.prisma/client
+# must be linked into each .pnpm/@prisma+client@*/node_modules/.prisma/client.
+log "  Generating Prisma client..."
+npx prisma generate --schema "${DEPLOY_DIR}/prisma/schema.prisma"
+while IFS= read -r dot_prisma_dir; do
+  rm -rf "${dot_prisma_dir}/client"
+  mkdir -p "${dot_prisma_dir}"
+  ln -s "${DEPLOY_DIR}/node_modules/.prisma/client" "${dot_prisma_dir}/client"
+  log "  Linked ${dot_prisma_dir}/client"
+done < <(find "${DEPLOY_DIR}/node_modules/.pnpm" -maxdepth 4 -type d -name '.prisma' 2>/dev/null)
 
 # Step 5/10: Build monorepo
 log "Step 5/10: Building monorepo..."

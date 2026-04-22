@@ -15,12 +15,12 @@
 #   SLACK_SIGNING_SECRET=xxx SLACK_BOT_TOKEN=yyy bash deploy/scripts/bootstrap.sh
 #
 # What it does:
+#   0. Pre-flight: checks host auth files (exits immediately if missing)
 #   1. Installs Docker, Node.js 22, pnpm, sqlite3, git
 #   2. Clones the repo (or skips if repo already present)
 #   3. Writes .env with provided secrets
-#   4. Checks host auth files (warns if missing, does not block)
-#   5. Runs deploy/scripts/install.sh
-#   6. Installs Caddy and configures HTTPS (only if --domain is given)
+#   4. Runs deploy/scripts/install.sh
+#   5. Installs Caddy and configures HTTPS (only if --domain is given)
 
 set -euo pipefail
 
@@ -53,10 +53,34 @@ warn() { log "WARNING: $*"; }
 [ -z "$SIGNING_SECRET" ] && die "--signing-secret (or SLACK_SIGNING_SECRET) is required"
 [ -z "$BOT_TOKEN" ]      && die "--bot-token (or SLACK_BOT_TOKEN) is required"
 
+# ── Pre-flight: Auth file check ───────────────────────────────────────────────
+
+OPENCLAW_AUTH="$HOME/.openclaw/agents/main/agent/auth-profiles.json"
+CLAUDE_CREDS="$HOME/.claude/.credentials.json"
+AUTH_MISSING=0
+
+if [ ! -f "$OPENCLAW_AUTH" ]; then
+  warn "Missing ${OPENCLAW_AUTH}"
+  warn "  Copy it from your local machine: scp ~/.openclaw/agents/main/agent/auth-profiles.json <host>:${OPENCLAW_AUTH}"
+  AUTH_MISSING=1
+fi
+
+if [ ! -f "$CLAUDE_CREDS" ]; then
+  warn "Missing ${CLAUDE_CREDS}"
+  warn "  Copy it from your local machine: scp ~/.claude/.credentials.json <host>:${CLAUDE_CREDS}"
+  AUTH_MISSING=1
+fi
+
+if [ "$AUTH_MISSING" -eq 1 ]; then
+  die "Auth files missing — tenant containers will fail to start. Copy the files above, then re-run bootstrap."
+fi
+
+log "Pre-flight: Auth files OK."
+
 # ── Step 1: System dependencies ───────────────────────────────────────────────
 
 log "=== claw-orchestrator bootstrap ==="
-log "Step 1/6: Installing system dependencies..."
+log "Step 1/5: Installing system dependencies..."
 
 if ! command -v docker &>/dev/null; then
   log "  Installing Docker..."
@@ -106,7 +130,7 @@ fi
 
 # ── Step 2: Clone or skip repo ────────────────────────────────────────────────
 
-log "Step 2/6: Setting up repository at ${REPO_DIR}..."
+log "Step 2/5: Setting up repository at ${REPO_DIR}..."
 
 if [ -d "${REPO_DIR}/.git" ]; then
   log "  Repository already exists — skipping clone."
@@ -119,7 +143,7 @@ cd "$REPO_DIR"
 
 # ── Step 3: Write .env ────────────────────────────────────────────────────────
 
-log "Step 3/6: Writing .env..."
+log "Step 3/5: Writing .env..."
 
 if [ ! -f .env ]; then
   cp .env.example .env
@@ -135,43 +159,19 @@ set_env_value .env SLACK_BOT_TOKEN      "$BOT_TOKEN"
 
 log "  Secrets written to .env."
 
-# ── Step 4: Auth file check ───────────────────────────────────────────────────
+# ── Step 4: Run install.sh ────────────────────────────────────────────────────
 
-log "Step 4/6: Checking host auth files..."
-
-AUTH_WARN=0
-OPENCLAW_AUTH="$HOME/.openclaw/agents/main/agent/auth-profiles.json"
-CLAUDE_CREDS="$HOME/.claude/.credentials.json"
-
-if [ ! -f "$OPENCLAW_AUTH" ]; then
-  warn "Missing ${OPENCLAW_AUTH}"
-  warn "  Tenant containers will have no model access until this file exists."
-  warn "  Run 'openclaw auth' on this host to create it, then restart services."
-  AUTH_WARN=1
-fi
-
-if [ ! -f "$CLAUDE_CREDS" ]; then
-  warn "Missing ${CLAUDE_CREDS}"
-  warn "  Claude Code inside containers will not be authenticated."
-  warn "  Run 'claude' on this host to log in, then restart services."
-  AUTH_WARN=1
-fi
-
-[ "$AUTH_WARN" -eq 0 ] && log "  Auth files OK."
-
-# ── Step 5: Run install.sh ────────────────────────────────────────────────────
-
-log "Step 5/6: Running deploy/scripts/install.sh..."
+log "Step 4/5: Running deploy/scripts/install.sh..."
 
 INSTALL_ARGS=()
 [ "$SKIP_VALIDATION" = true ] && INSTALL_ARGS+=(--skip-validation)
 
 bash deploy/scripts/install.sh "${INSTALL_ARGS[@]}"
 
-# ── Step 6: Caddy (optional) ──────────────────────────────────────────────────
+# ── Step 5: Caddy (optional) ──────────────────────────────────────────────────
 
 if [ -n "$DOMAIN" ]; then
-  log "Step 6/6: Installing Caddy and configuring HTTPS for ${DOMAIN}..."
+  log "Step 5/5: Installing Caddy and configuring HTTPS for ${DOMAIN}..."
 
   if ! command -v caddy &>/dev/null; then
     sudo apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
@@ -192,7 +192,7 @@ EOF
   sudo systemctl reload caddy
   log "  Caddy configured — Slack events URL: https://${DOMAIN}/slack/events"
 else
-  log "Step 6/6: Skipping Caddy (no --domain provided)."
+  log "Step 5/5: Skipping Caddy (no --domain provided)."
   log "  Add HTTPS in front of port 3101 before registering the Slack request URL."
 fi
 
