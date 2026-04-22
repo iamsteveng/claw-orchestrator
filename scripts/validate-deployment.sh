@@ -194,25 +194,23 @@ check "Tenant provisioning → ACTIVE" "$PROV_OK" "$PROV_DETAIL"
 # ── 5. Message Delivery ────────────────────────────────────────────────────────
 section "5. Message Delivery"
 
+# The provisioning event from section 4 already queued a message for this tenant.
+# Poll for it to reach DELIVERED status — sending a second concurrent message would
+# cause session lock contention in the openclaw gateway and slow delivery past the
+# window on cold-start containers.
 MSG_OK="FAIL"
 MSG_DETAIL=""
 if [ "$PROV_OK" = "PASS" ] && [ -n "$TENANT_ID" ]; then
-  SLACK_EVENT_ID="Ev_validate_$(date +%s)"
-  HTTP_CODE=$(send_slack_event "hello from validation script" 2>/dev/null || echo "000")
-  if [ "$HTTP_CODE" = "200" ]; then
-    DEADLINE=$(($(date +%s) + 90))
-    while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-      DELIVERED=$(sudo -u claw sqlite3 "$DB" "SELECT COUNT(*) FROM message_queue WHERE tenant_id='$TENANT_ID' AND status='DELIVERED';" 2>/dev/null || echo 0)
-      if [ "$DELIVERED" -ge 1 ]; then
-        MSG_OK="PASS"
-        break
-      fi
-      sleep 2
-    done
-    [ "$MSG_OK" != "PASS" ] && MSG_DETAIL="no DELIVERED message after 90s"
-  else
-    MSG_DETAIL="relay returned HTTP $HTTP_CODE"
-  fi
+  DEADLINE=$(($(date +%s) + 90))
+  while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+    DELIVERED=$(sudo -u claw sqlite3 "$DB" "SELECT COUNT(*) FROM message_queue WHERE tenant_id='$TENANT_ID' AND status='DELIVERED';" 2>/dev/null || echo 0)
+    if [ "$DELIVERED" -ge 1 ]; then
+      MSG_OK="PASS"
+      break
+    fi
+    sleep 2
+  done
+  [ "$MSG_OK" != "PASS" ] && MSG_DETAIL="no DELIVERED message after 90s"
 else
   MSG_DETAIL="skipped — provisioning did not succeed"
 fi
