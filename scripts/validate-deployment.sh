@@ -91,8 +91,9 @@ check ".credentials.json exists" "$([ -f "$CREDS" ] && [ -s "$CREDS" ] && echo P
 
 check "SQLite DB exists" "$([ -f "$DB" ] && echo PASS || echo FAIL)" "$DB"
 
-# Ensure test user is in the allowlist (idempotent — skips if already present)
-sqlite3 "$DB" "INSERT OR IGNORE INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES ('validate-test-user', '$TEST_TEAM', '$TEST_USER', 'validate-deployment.sh', $(date +%s%3N));" 2>/dev/null || true
+# Ensure test user is in the allowlist (idempotent — skips if already present).
+# DB is claw:claw 640 so writes require sudo -u claw.
+sudo -u claw sqlite3 "$DB" "INSERT OR IGNORE INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES ('validate-test-user', '$TEST_TEAM', '$TEST_USER', 'validate-deployment.sh', $(date +%s%3N));" 2>/dev/null || true
 check "Allowlist has test user" "$(sqlite3 "$DB" "SELECT COUNT(*) FROM allowlist WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER' AND revoked_at IS NULL;" 2>/dev/null | grep -q "^1$" && echo PASS || echo FAIL)"
 
 # ── 3. Docker ─────────────────────────────────────────────────────────────────
@@ -220,7 +221,7 @@ if [ -n "${TENANT_ID:-}" ]; then
   sqlite3 "$DB" "DELETE FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null || true
   rm -rf "$DATA_DIR/$TENANT_ID" 2>/dev/null || true
 fi
-sqlite3 "$DB" "DELETE FROM allowlist WHERE id='validate-test-user';" 2>/dev/null || true
+sudo -u claw sqlite3 "$DB" "DELETE FROM allowlist WHERE id='validate-test-user';" 2>/dev/null || true
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
