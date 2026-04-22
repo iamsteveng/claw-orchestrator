@@ -137,7 +137,7 @@ else
 fi
 DB_PATH="${DB_PATH:-/data/claw-orchestrator/db.sqlite}"
 if [ -f "$DB_PATH" ]; then
-  S3_BUCKET="${BACKUP_S3_BUCKET:-}" bash "${DEPLOY_DIR}/deploy/scripts/backup.sh" || \
+  S3_BUCKET="${BACKUP_S3_BUCKET:-}" sudo bash "${DEPLOY_DIR}/deploy/scripts/backup.sh" || \
     die "Backup failed. Aborting update to protect your data."
 else
   log "  No DB found at ${DB_PATH} — skipping backup (first run or fresh server)."
