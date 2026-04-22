@@ -155,7 +155,7 @@ render_target_system_env
 
 # Step 4/10: pnpm dependencies
 log "Step 4/10: Installing pnpm dependencies..."
-pnpm install --frozen-lockfile
+CI=true pnpm install --frozen-lockfile
 
 # Generate Prisma client and symlink into every pnpm store @prisma/client location.
 # pnpm isolates packages so the generated client at node_modules/.prisma/client
