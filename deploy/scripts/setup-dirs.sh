@@ -12,6 +12,12 @@ else
   echo "'claw' user already exists."
 fi
 
+# Add ubuntu to the claw group so it can read claw-owned files (e.g. the SQLite DB).
+# Writes still require sudo -u claw since the DB is 640.
+if id -u ubuntu &>/dev/null; then
+  usermod -aG claw ubuntu
+fi
+
 # Create required directories with correct ownership
 echo "Creating required directories..."
 
