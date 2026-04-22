@@ -16,7 +16,11 @@ fi
 echo "Creating required directories..."
 
 install -d -o claw -g claw -m 0755 /data/claw-orchestrator
-install -d -o claw -g claw -m 0755 /data/tenants
+# /data/tenants is written by the control-plane service (runs as ubuntu) and
+# by the ubuntu shell user during validation — own by ubuntu, not claw.
+install -d -o ubuntu -g ubuntu -m 0755 /data/tenants
+# Repair any prior ownership set to claw or root
+chown ubuntu:ubuntu /data/tenants
 install -d -o claw -g claw -m 0755 /data/tenants-archive
 install -d -o claw -g claw -m 0755 /data/backups
 install -d -o claw -g claw -m 0755 /data/audit-archive

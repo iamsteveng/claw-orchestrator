@@ -79,6 +79,8 @@ export async function runTenantContainer(opts: RunTenantContainerOptions): Promi
       'XDG_CONFIG_HOME=/home/agent/.config',
       'XDG_CACHE_HOME=/home/agent/.cache',
       'XDG_STATE_HOME=/home/agent/.local/state',
+      ...(['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_SESSION_TOKEN'] as const)
+        .flatMap(k => process.env[k] ? [`${k}=${process.env[k]}`] : []),
     ],
   });
 }

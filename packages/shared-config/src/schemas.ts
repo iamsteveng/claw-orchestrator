@@ -20,6 +20,10 @@ export const controlPlaneConfigSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   MAX_ACTIVE_TENANTS: z.coerce.number().int().positive().default(10),
   ACTIVE_TENANTS_OVERFLOW_POLICY: z.enum(['queue', 'reject']).default('queue'),
+  AWS_ACCESS_KEY_ID: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
+  AWS_SECRET_ACCESS_KEY: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
+  AWS_REGION: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
+  AWS_SESSION_TOKEN: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
 });
 
 export type ControlPlaneConfig = z.infer<typeof controlPlaneConfigSchema>;

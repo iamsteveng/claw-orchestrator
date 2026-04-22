@@ -18,7 +18,8 @@ DB="${DB:-/data/claw-orchestrator/db.sqlite}"
 DATA_DIR="$(read_env_value "$ENV_FILE" "DATA_DIR")"
 DATA_DIR="${DATA_DIR:-/data/tenants}"
 SIGNING_SECRET="$(read_env_value "$ENV_FILE" "SLACK_SIGNING_SECRET")"
-RELAY_URL="https://13.212.162.85.nip.io/slack/events"
+RELAY_PUBLIC_URL="$(read_env_value "$ENV_FILE" "RELAY_PUBLIC_URL")"
+RELAY_URL="${RELAY_PUBLIC_URL:-https://13.212.162.85.nip.io}/slack/events"
 TEST_TEAM="T0ABHS0G3"
 TEST_USER="U08M34UT0FL"
 
@@ -90,6 +91,8 @@ check ".credentials.json exists" "$([ -f "$CREDS" ] && [ -s "$CREDS" ] && echo P
 
 check "SQLite DB exists" "$([ -f "$DB" ] && echo PASS || echo FAIL)" "$DB"
 
+# Ensure test user is in the allowlist (idempotent — skips if already present)
+sqlite3 "$DB" "INSERT OR IGNORE INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at) VALUES ('validate-test-user', '$TEST_TEAM', '$TEST_USER', 'validate-deployment.sh', $(date +%s%3N));" 2>/dev/null || true
 check "Allowlist has test user" "$(sqlite3 "$DB" "SELECT COUNT(*) FROM allowlist WHERE slack_team_id='$TEST_TEAM' AND slack_user_id='$TEST_USER' AND revoked_at IS NULL;" 2>/dev/null | grep -q "^1$" && echo PASS || echo FAIL)"
 
 # ── 3. Docker ─────────────────────────────────────────────────────────────────
@@ -217,6 +220,7 @@ if [ -n "${TENANT_ID:-}" ]; then
   sqlite3 "$DB" "DELETE FROM tenants WHERE id='$TENANT_ID';" 2>/dev/null || true
   rm -rf "$DATA_DIR/$TENANT_ID" 2>/dev/null || true
 fi
+sqlite3 "$DB" "DELETE FROM allowlist WHERE id='validate-test-user';" 2>/dev/null || true
 
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
