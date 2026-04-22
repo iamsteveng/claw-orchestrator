@@ -2,7 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile, chmod } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { seedWorkspace } from './seed-workspace.js';
 import { rollbackProvisioning } from './rollback-provisioning.js';
@@ -120,6 +120,7 @@ export async function provisionTenant(
     for (const [src, dest] of credFilePairs) {
       try {
         await copyFile(src, dest);
+        await chmod(dest, 0o644);
       } catch {
         // Best-effort — container may still work with partial credentials
       }
