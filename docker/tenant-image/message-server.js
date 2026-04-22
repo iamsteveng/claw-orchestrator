@@ -21,6 +21,36 @@ function sleep(ms) {
 }
 
 /**
+ * Extract a JSON object containing a `payloads` field from mixed output.
+ * openclaw --json may prefix the JSON payload with log lines on stderr.
+ * Strategy: try the full string first, then scan backward for a line starting
+ * with '{' and attempt to parse from there.
+ * @param {string} raw
+ * @returns {object|null}
+ */
+function extractJsonPayload(raw) {
+  // Fast path: clean JSON output with no leading log lines
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {}
+
+  // Slow path: log lines precede the JSON block. Find the last line that
+  // opens a JSON object and try parsing from that point onward.
+  const lines = raw.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trimStart().startsWith('{')) {
+      try {
+        const candidate = lines.slice(i).join('\n');
+        const parsed = JSON.parse(candidate);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {}
+    }
+  }
+  return null;
+}
+
+/**
  * Forward a message to the openclaw agent via the gateway CLI.
  * @param {string} text - The message text to send
  * @returns {Promise<{response: string, blocks: null}>}
@@ -49,15 +79,15 @@ function forwardToOpenclaw(text) {
 
     child.on('close', (code) => {
       if (code === 0) {
-        // openclaw --json writes output to stderr (stdout may be empty)
+        // openclaw --json writes the JSON payload to stderr; log lines may precede it.
         const raw = stderr.trim() || stdout.trim();
-        try {
-          const parsed = JSON.parse(raw);
+        const parsed = extractJsonPayload(raw);
+        if (parsed) {
           const payloads = parsed.payloads || [];
           const text = payloads.map(p => p.text).filter(Boolean).join('\n').trim();
           // Never send raw JSON meta to the user — only extracted text
           resolve({ response: text || '', blocks: null });
-        } catch {
+        } else {
           // Not JSON — return raw output (plain text response)
           resolve({ response: raw, blocks: null });
         }
