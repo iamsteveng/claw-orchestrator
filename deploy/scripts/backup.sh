@@ -19,7 +19,7 @@ echo "[backup] Starting backup at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 # 1. Checkpoint SQLite WAL to ensure all data is flushed
 echo "[backup] Checkpointing SQLite WAL..."
-sqlite3 "${DB_PATH}" ".checkpoint FULL"
+sqlite3 "${DB_PATH}" "PRAGMA wal_checkpoint(FULL);"
 
 # 2. Create dated snapshot directory
 echo "[backup] Creating snapshot directory: ${BACKUP_DIR}"
