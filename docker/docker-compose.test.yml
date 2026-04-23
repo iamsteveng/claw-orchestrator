@@ -1,24 +1,37 @@
 # docker-compose.test.yml
 # ─────────────────────────────────────────────────────────────────────────────
 # Full-stack test environment for Claw Orchestrator.
-# Brings up control-plane, slack-relay, and scheduler in isolated containers.
+# Recommended usage: bash scripts/local-test.sh (handles env setup automatically)
 #
-# Usage:
-#   Build and start all services:
-#     docker compose -f docker/docker-compose.test.yml up --build
+# Manual usage with env vars:
+#   export CLAW_TEST_DATA_DIR=/tmp/claw-local-test/data
+#   export CLAW_AUTH_PROFILES_HOST=/tmp/claw-local-test/auth/auth-profiles.json
+#   export CLAW_CREDS_HOST=/tmp/claw-local-test/auth/.credentials.json
+#   export CLAW_TEMPLATES_DIR_HOST=$(pwd)/templates
+#   export CLAW_CP_HOST_PORT=13200
+#   export CLAW_RELAY_HOST_PORT=13101
+#   export CLAW_COMPOSE_ENV_FILE=/tmp/claw-local-test/env
+#   docker compose -f docker/docker-compose.test.yml --env-file /tmp/claw-local-test/env up --build
 #
-#   Start in detached mode:
-#     docker compose -f docker/docker-compose.test.yml up --build -d
+# IMPORTANT — Port coexistence:
+#   Host ports default to 13200 (CP) and 13101 (relay) so this stack can run
+#   alongside production systemd claw-* services bound to 3200/3101.
+#   Never bind 3200/3101 in this file.
 #
-#   Tear down (removes containers, network):
-#     docker compose -f docker/docker-compose.test.yml down
+# IMPORTANT — Data isolation:
+#   CLAW_TEST_DATA_DIR defaults to /tmp/claw-local-test/data (not /data/tenants).
+#   Production tenant data at /data/tenants is never touched by this stack.
 #
-#   Tear down and remove the named volume:
-#     docker compose -f docker/docker-compose.test.yml down -v
+# Env vars recognised by this file:
+#   CLAW_AUTH_PROFILES_HOST   host path for auth-profiles.json (default: $HOME/.openclaw/...)
+#   CLAW_CREDS_HOST           host path for .credentials.json  (default: $HOME/.claude/...)
+#   CLAW_TEMPLATES_DIR_HOST   host path for workspace templates (default: ../templates)
+#   CLAW_TEST_DATA_DIR        host data dir (default: /tmp/claw-local-test/data)
+#   CLAW_CP_HOST_PORT         host port for control-plane      (default: 13200)
+#   CLAW_RELAY_HOST_PORT      host port for slack-relay        (default: 13101)
+#   CLAW_COMPOSE_ENV_FILE     env file path for service env_file directive
 #
-# Prerequisites:
-#   - Copy .env.example to .env at the repo root and fill in secrets
-#   - Ensure Docker is running and /var/run/docker.sock is accessible
+# Tear down: docker compose -f docker/docker-compose.test.yml down -v
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: claw-orchestrator-test
@@ -34,30 +47,28 @@ services:
     image: claw-control-plane:test
     container_name: claw-cp-test
     ports:
-      - "13200:3200"
+      - "${CLAW_CP_HOST_PORT:-13200}:3200"
     environment:
       - DATABASE_URL=file:/data/tenants/orchestrator.db
       - DATA_DIR=/data/tenants
-      # HOST_DATA_DIR: set this to the host path if it differs from DATA_DIR
-      # (needed when control plane runs in a container and spawns tenant containers via Docker socket)
-      - HOST_DATA_DIR=/data/tenants
+      - HOST_DATA_DIR=${CLAW_TEST_DATA_DIR:-/tmp/claw-local-test/data}
       # CONTAINER_NETWORK: Docker network tenant containers join (must match this compose network)
-      - CONTAINER_NETWORK=claw-orchestrator-test_default
+      - CONTAINER_NETWORK=claw-orchestrator-test_default # Network name = compose project name + "_default". Verify: docker network inspect claw-orchestrator-test_default
       - CONTROL_PLANE_PORT=3200
       - LOG_LEVEL=info
       - NODE_ENV=production
     env_file:
-      - ../.env
+      - ${CLAW_COMPOSE_ENV_FILE:-../.env}
     volumes:
-      # Named volume for tenant data (containers, workspaces, etc.)
-      - /data/tenants:/data/tenants
+      # Bind-mount for tenant data
+      - ${CLAW_TEST_DATA_DIR:-/tmp/claw-local-test/data}:/data/tenants
       # Bind-mount Docker socket so control-plane can manage tenant containers
       - /var/run/docker.sock:/var/run/docker.sock
       # Auth files for tenant provisioning (read-only)
-      - /home/ubuntu/.openclaw/agents/main/agent/auth-profiles.json:/root/.openclaw/agents/main/agent/auth-profiles.json:ro
-      - /home/ubuntu/.claude/.credentials.json:/root/.claude/.credentials.json:ro
+      - ${CLAW_AUTH_PROFILES_HOST:-${HOME}/.openclaw/agents/main/agent/auth-profiles.json}:/root/.openclaw/agents/main/agent/auth-profiles.json:ro
+      - ${CLAW_CREDS_HOST:-${HOME}/.claude/.credentials.json}:/root/.claude/.credentials.json:ro
       # Workspace templates (read-only)
-      - /opt/claw-orchestrator/templates:/opt/claw-orchestrator/templates:ro
+      - ${CLAW_TEMPLATES_DIR_HOST:-../templates}:/opt/claw-orchestrator/templates:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3200/health"]
       interval: 10s
@@ -75,14 +86,14 @@ services:
     image: claw-slack-relay:test
     container_name: claw-relay-test
     ports:
-      - "13101:3101"
+      - "${CLAW_RELAY_HOST_PORT:-13101}:3101"
     environment:
       - SLACK_RELAY_PORT=3101
       - CONTROL_PLANE_URL=http://control-plane:3200
       - LOG_LEVEL=info
       - NODE_ENV=production
     env_file:
-      - ../.env
+      - ${CLAW_COMPOSE_ENV_FILE:-../.env}
     depends_on:
       control-plane:
         condition: service_healthy
@@ -109,15 +120,10 @@ services:
       - LOG_LEVEL=info
       - NODE_ENV=production
     env_file:
-      - ../.env
+      - ${CLAW_COMPOSE_ENV_FILE:-../.env}
     volumes:
-      - /data/tenants:/data/tenants
+      - ${CLAW_TEST_DATA_DIR:-/tmp/claw-local-test/data}:/data/tenants
     depends_on:
       control-plane:
         condition: service_healthy
     restart: unless-stopped
-
-# ── Volumes ──────────────────────────────────────────────────────────────────
-volumes:
-  tenant-data:
-    name: claw-tenant-data-test

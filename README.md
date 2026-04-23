@@ -274,6 +274,68 @@ bash deploy/scripts/update.sh --skip-validation
 
 If the local branch is ahead of upstream, the script skips the pull and logs a warning instead of overwriting local commits.
 
+## Local Testing with Docker Compose
+
+Run the full validation stack locally without real Slack or LLM credentials.
+
+### Prerequisites
+
+- Docker and `docker compose`
+- `jq`, `sqlite3`, `curl`
+- Host ports **13200** and **13101** free
+
+> **Port coexistence:** The compose test stack publishes to host ports 13200 and 13101 specifically so it can run alongside production systemd services bound to 3200/3101. Do not change these defaults on a deploy host.
+
+> **Data isolation:** Test tenant state lives under `/tmp/claw-local-test/data`, not `/data/tenants`. The compose stack never touches production tenant data.
+
+> **Image isolation:** Local testing builds and uses `claw-tenant:local-test`. It never modifies `claw-tenant:latest` (the production tag).
+
+### Usage
+
+```bash
+# Default: sections 1-4, stub credentials, HTTPS check skipped
+bash scripts/local-test.sh
+
+# Sections 1-5: requires real ~/.openclaw/... and ~/.claude/.credentials.json + LLM access
+bash scripts/local-test.sh --full
+
+# Sections 1-6: requires real Slack signing secret in repo .env
+bash scripts/local-test.sh --slack
+
+# Debugging: stack stays up after run
+bash scripts/local-test.sh --keep
+
+# Force rebuild of tenant image and compose services
+bash scripts/local-test.sh --rebuild
+
+# Strict: abort if claw-* systemd services are active (default is warning-only)
+bash scripts/local-test.sh --check-clean
+
+# Run specific sections only
+bash scripts/local-test.sh --sections "1 2"
+```
+
+### State and cleanup
+
+All test state lives under `/tmp/claw-local-test/` and is automatically removed on exit (unless `--keep`). A `--keep` run persists the compose stack; the next non-`--keep` run tears it down.
+
+### Validator env-override vars
+
+`validate-deployment.sh` accepts these env vars (all optional — defaults match production):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CP_URL` | `http://localhost:3200` | Control-plane base URL |
+| `RELAY_URL` | `http://localhost:3101` | Relay base URL |
+| `RELAY_LOCAL_URL` | `http://localhost:3101/slack/events` | Relay events URL |
+| `SKIP_HTTPS_CHECK` | `0` | Set to `1` to skip the HTTPS reachability probe |
+| `AUTH_PROFILES` | derived from env `HOME` | Path to `auth-profiles.json` |
+| `CREDS` | derived from env `HOME` | Path to `.credentials.json` |
+| `TENANT_IMAGE` | `claw-tenant:latest` | Tenant Docker image tag |
+| `CLAW_RUNTIME_ENV_FILE` | `/etc/claw-orchestrator/env` | Env file for the validator |
+
+---
+
 ## Day-2 operations
 
 ### Service management

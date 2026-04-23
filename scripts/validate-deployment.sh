@@ -15,6 +15,30 @@
 #   bash scripts/validate-deployment.sh 4 5      # sections 4 and 5
 #   bash scripts/validate-deployment.sh 5 6      # sections 5 and 6
 
+# ── Help ──────────────────────────────────────────────────────────────────────
+case "${1:-}" in
+  -h|--help)
+    cat <<'EOF'
+validate-deployment.sh — Claw Orchestrator deployment validation
+
+Usage: bash scripts/validate-deployment.sh [sections...]
+       bash scripts/validate-deployment.sh 3        # section 3 only
+       bash scripts/validate-deployment.sh 4 5      # sections 4 and 5
+
+Env overrides (all optional — defaults match production):
+  CP_URL              Control-plane base URL   (default: http://localhost:3200)
+  RELAY_URL           Relay base URL           (default: http://localhost:3101)
+  RELAY_LOCAL_URL     Relay events URL         (default: http://localhost:3101/slack/events)
+  SKIP_HTTPS_CHECK    Set to 1 to skip the section-1 HTTPS reachability probe (default: 0)
+  AUTH_PROFILES       Path to auth-profiles.json (default: derived from env HOME)
+  CREDS               Path to .credentials.json  (default: derived from env HOME)
+  TENANT_IMAGE        Tenant Docker image tag    (default: claw-tenant with latest tag)
+  CLAW_RUNTIME_ENV_FILE  Env file path (default: /etc/claw-orchestrator/env then repo .env)
+EOF
+    exit 0
+    ;;
+esac
+
 PASS=0
 FAIL=0
 
@@ -42,8 +66,9 @@ DATA_DIR="${DATA_DIR:-/data/tenants}"
 SIGNING_SECRET="$(read_env_value "$ENV_FILE" "SLACK_SIGNING_SECRET")"
 RELAY_PUBLIC_URL="$(read_env_value "$ENV_FILE" "RELAY_PUBLIC_URL")"
 RELAY_HTTPS_URL="${RELAY_PUBLIC_URL:-https://13.212.162.85.nip.io}/slack/events"
-RELAY_LOCAL_URL="http://localhost:3101/slack/events"
-CP_URL="http://localhost:3200"
+CP_URL="${CP_URL:-http://localhost:3200}"
+RELAY_URL="${RELAY_URL:-http://localhost:3101}"
+RELAY_LOCAL_URL="${RELAY_LOCAL_URL:-http://localhost:3101/slack/events}"
 
 _ENV_HOME="$(read_env_value "$ENV_FILE" "HOME")"
 AGENT_HOME="${_ENV_HOME:-$(getent passwd ubuntu | cut -d: -f6 2>/dev/null || echo "$HOME")}"
@@ -100,24 +125,27 @@ send_slack_event() {
 
 # ── Guards (always computed — sections 4/5/6 depend on these) ─────────────
 CP_OK=$(curl -s --max-time 5 "$CP_URL/health" 2>/dev/null | grep -c '"ok":true' || true)
-RELAY_OK=$(curl -s --max-time 5 "http://localhost:3101/health" 2>/dev/null | grep -c '"ok":true' || true)
+RELAY_OK=$(curl -s --max-time 5 "${RELAY_URL}/health" 2>/dev/null | grep -c '"ok":true' || true)
 
 SCHED_OK=0
 if pgrep -f "apps/scheduler" > /dev/null 2>&1 \
     || pm2 list 2>/dev/null | grep -q "claw-scheduler.*online" \
-    || systemctl is-active claw-scheduler 2>/dev/null | grep -q "^active$"; then
+    || systemctl is-active claw-scheduler 2>/dev/null | grep -q "^active$" \
+    || docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^claw-scheduler-test$' || true; then
   SCHED_OK=1
 fi
 
+SKIP_HTTPS_CHECK="${SKIP_HTTPS_CHECK:-0}"
 RELAY_HTTPS_HOST="$(echo "$RELAY_HTTPS_URL" | sed 's|https://\([^/:]*\).*|\1|')"
 HTTPS_OK=$(curl -sk --max-time 10 --resolve "${RELAY_HTTPS_HOST}:443:127.0.0.1" \
   "$RELAY_HTTPS_URL" -X GET 2>/dev/null | head -c 10 | wc -c || true)
 
 DOCKER_OK=$(docker ps > /dev/null 2>&1 && echo PASS || echo FAIL)
-IMAGE_OK=$(docker images claw-tenant:latest --format "{{.Repository}}" 2>/dev/null | grep -c claw-tenant || true)
+TENANT_IMAGE="${TENANT_IMAGE:-claw-tenant:latest}"
+IMAGE_OK=$(docker images "$TENANT_IMAGE" --format "{{.Repository}}" 2>/dev/null | grep -c claw-tenant || true)
 
-AUTH_PROFILES="$AGENT_HOME/.openclaw/agents/main/agent/auth-profiles.json"
-CREDS="$AGENT_HOME/.claude/.credentials.json"
+AUTH_PROFILES="${AUTH_PROFILES:-$AGENT_HOME/.openclaw/agents/main/agent/auth-profiles.json}"
+CREDS="${CREDS:-$AGENT_HOME/.claude/.credentials.json}"
 
 # Ensure test user is in the allowlist (idempotent — needed by sections 5+6)
 sqlite3 "$DB" "INSERT OR IGNORE INTO allowlist (id, slack_team_id, slack_user_id, added_by, created_at)
@@ -129,7 +157,11 @@ if section_enabled 1; then
   check "Control plane (port 3200)" "$([ "$CP_OK" -ge 1 ] && echo PASS || echo FAIL)" "$CP_URL/health"
   check "Slack relay (port 3101)" "$([ "$RELAY_OK" -ge 1 ] && echo PASS || echo FAIL)"
   check "Scheduler process" "$([ "$SCHED_OK" -ge 1 ] && echo PASS || echo FAIL)"
-  check "HTTPS endpoint reachable" "$([ "$HTTPS_OK" -gt 0 ] && echo PASS || echo FAIL)" "$RELAY_HTTPS_URL"
+  if [ "${SKIP_HTTPS_CHECK}" = "1" ]; then
+    echo "  ⚪ HTTPS endpoint reachable — skipped (SKIP_HTTPS_CHECK=1)"
+  else
+    check "HTTPS endpoint reachable" "$([ "$HTTPS_OK" -gt 0 ] && echo PASS || echo FAIL)" "$RELAY_HTTPS_URL"
+  fi
 fi
 
 # ── 2. Config & Auth ───────────────────────────────────────────────────────
@@ -154,7 +186,7 @@ fi
 if section_enabled 3; then
   section "3. Docker Image"
   check "Docker daemon running" "$DOCKER_OK"
-  check "claw-tenant:latest image exists" "$([ "$IMAGE_OK" -ge 1 ] && echo PASS || echo FAIL)"
+  check "$TENANT_IMAGE image exists" "$([ "$IMAGE_OK" -ge 1 ] && echo PASS || echo FAIL)"
 
   # Smoke test: start container; it should stay running for 10s
   SMOKE_DIR="/tmp/claw-validate-smoke-$$"
@@ -162,7 +194,7 @@ if section_enabled 3; then
   mkdir -p "$SMOKE_DIR/home/.openclaw/agents/main/agent"
   mkdir -p "$SMOKE_DIR/home/.claude"
   cat > "$SMOKE_DIR/home/.openclaw/openclaw.json" <<'JSON'
-{"wizard":{"lastRunAt":"2026-01-01T00:00:00.000Z","lastRunVersion":"2026.4.15","lastRunMode":"local"},"auth":{"profiles":{"anthropic:default":{"provider":"anthropic","mode":"token"}}},"gateway":{"port":19001,"mode":"local","bind":"auto"},"agents":{"defaults":{"model":{"primary":"anthropic/claude-sonnet-4-6"},"workspace":"/workspace"}}}
+{"wizard":{"lastRunAt":"2026-01-01T00:00:00.000Z","lastRunVersion":"2026.4.15","lastRunMode":"local"},"auth":{"profiles":{"anthropic:default":{"provider":"anthropic","type":"token"}}},"gateway":{"port":19001,"mode":"local","bind":"auto"},"agents":{"defaults":{"model":{"primary":"anthropic/claude-sonnet-4-6"},"workspace":"/workspace"}}}
 JSON
   # Copy credentials into the smoke dir so the container uses copies, not the
   # real host files. Direct bind-mounts would let the gateway atomically rewrite
@@ -181,7 +213,7 @@ JSON
       -e "HOME=/home/agent" -e "XDG_CONFIG_HOME=/home/agent/.config" \
       -e "XDG_CACHE_HOME=/home/agent/.cache" -e "XDG_STATE_HOME=/home/agent/.local/state" \
       -e "RELAY_TOKEN=smoke-test-token" \
-      claw-tenant:latest 2>/dev/null || true)
+      "$TENANT_IMAGE" 2>/dev/null || true)
 
     if [ -n "$SMOKE_CID" ]; then
       sleep 10
