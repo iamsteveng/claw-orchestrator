@@ -81,7 +81,7 @@ beforeAll(async () => {
 
   await ensureFixtureExists(
     authSrc,
-    JSON.stringify({ profiles: { 'anthropic:default': { provider: 'anthropic', mode: 'token', token: 'fixture-token' } } }, null, 2),
+    JSON.stringify({ profiles: { 'anthropic:default': { provider: 'anthropic', type: 'token', token: 'fixture-token' } } }, null, 2),
   );
   await ensureFixtureExists(
     credsSrc,

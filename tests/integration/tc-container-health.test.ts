@@ -94,7 +94,7 @@ beforeAll(async () => {
   await ensureFixtureExists(
     authSrc,
     JSON.stringify({
-      profiles: { 'anthropic:default': { provider: 'anthropic', mode: 'token', token: 'fixture-token' } },
+      profiles: { 'anthropic:default': { provider: 'anthropic', type: 'token', token: 'fixture-token' } },
     }, null, 2),
   );
   await ensureFixtureExists(
@@ -134,7 +134,7 @@ beforeAll(async () => {
     join(testDir, 'home', '.openclaw', 'openclaw.json'),
     JSON.stringify({
       wizard: { lastRunAt: '2026-01-01T00:00:00.000Z', lastRunVersion: '2026.3.13', lastRunMode: 'local' },
-      auth: { profiles: { 'anthropic:default': { provider: 'anthropic', mode: 'token' } } },
+      auth: { profiles: { 'anthropic:default': { provider: 'anthropic', type: 'token' } } },
       gateway: { port: 19001, mode: 'local', bind: 'auto' },
       agents: { defaults: { model: { primary: 'anthropic/claude-sonnet-4-6' }, workspace: '/workspace' } },
     }, null, 2),
