@@ -145,3 +145,53 @@ Stack: Node.js 22 + TypeScript, Fastify, Prisma + SQLite, Docker (via execa).
 - `reconcile()` was extracted to `startup-reconciliation.ts` for testability. Accepts `(prisma, log)` where `log` is duck-typed `{ info, warn }`.
 - In JavaScript regex, `[^]]*` is a trap: `[^]]` means "any char" (empty negated class), so `[^]]*` does not mean "not `]`". Use `toContain()` for bash script assertions.
 - Always check for pre-existing test files before implementing — many TC test files were committed by prior agent runs.
+
+---
+
+### Auth Files — Two Different Schemas
+
+`openclaw.json` (gateway config, baked into image + written by `app-factory.ts`) and `auth-profiles.json` (credential store, copied from host) use **different key names for the same concept**:
+
+- `openclaw.json` `auth.profiles` section → uses `"mode": "token"` (openclaw gateway internal format)
+- `auth-profiles.json` credential store → uses `"type": "token"` (openclaw agent credential format)
+
+Do NOT conflate these. The files live at different paths and are parsed by different code paths. Changing `"mode"` to `"type"` in `openclaw.json` will break the gateway startup with `Unrecognized key: "type"`.
+
+**Files that use `"mode": "token"` (gateway config format):**
+- `docker/tenant-image/openclaw.json`
+- `apps/control-plane/src/app-factory.ts` (runtime `openclaw.json` writer)
+- `tests/integration/tc-container-health.test.ts` (writes a test `openclaw.json`)
+- `scripts/validate-deployment.sh` (smoke test heredoc writes `openclaw.json`)
+
+**Files that use `"type": "token"` (credential store format):**
+- `scripts/lib/stub-credentials.sh` (generates stub `auth-profiles.json`)
+- `tests/integration/tc-auth-files.test.ts` (test fixture for `auth-profiles.json`)
+
+---
+
+### Local Test Harness (Docker Compose)
+
+`bash scripts/local-test.sh` runs the full validation stack locally. Key facts:
+
+- Uses ports **13200** (CP) and **13101** (relay) to coexist with production systemd services on 3200/3101
+- Test state is isolated under `/tmp/claw-local-test/` — never touches `/data/tenants` or `claw-tenant:latest`
+- `--full` flag runs sections 1-5 (needs real `~/.claude/.credentials.json` and `~/.openclaw/.../auth-profiles.json`)
+- Default (no flags) runs sections 1-4 with stub credentials — no real creds needed
+
+**Compose env vs validator env:** Two separate env files are needed:
+- `$LOCAL_TEST_ROOT/env` — for compose services (container-internal paths, NO `HOME=` line so the CP container uses its natural `/root` home where auth files are bind-mounted)
+- `$LOCAL_TEST_ROOT/env-validator` — for `validate-deployment.sh` running on the HOST (host-side `DATABASE_URL`, `DATA_DIR`, and `HOME` so sqlite3 and directory checks find the right paths)
+
+**Templates dir:** `CLAW_TEMPLATES_DIR_HOST` must point to `templates/workspace/` (not `templates/`). `seedWorkspace` copies files from that directory directly — pointing at the parent causes `EISDIR` errors.
+
+**DB permissions:** The CP container creates `orchestrator.db` as `root:root 644`. The host user can read but not write. Use `docker exec claw-cp-test chmod o+w /data/tenants/orchestrator.db ...` after the CP is healthy to allow the validator's sqlite3 allowlist INSERT.
+
+---
+
+### OAuth / Claude Code Auth in Containers
+
+Claude Code CLI does **not** auto-refresh tokens non-interactively. If `accessToken` is expired or invalid, the CLI sends it as-is to the Anthropic API, receives a `401`, and exits — it does NOT attempt a token refresh using `refreshToken` without the original PKCE session context. Confirmed empirically (Phase 0.5 test, 2026-04-23).
+
+Implication: tenant containers must receive a **currently valid `accessToken`** (not just a `refreshToken`). The current host-copy approach works because it copies the token that was refreshed by the host's interactive Claude Code session.
+
+**Bind-mount shadow:** The tenant container bind-mounts `$dataDir/home` over `/home/agent`, completely shadowing any files baked into the image at `/home/agent/`. Baking credentials into the tenant image at `/home/agent/` has no effect at runtime.
