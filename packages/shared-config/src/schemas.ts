@@ -10,10 +10,10 @@ export const controlPlaneConfigSchema = z.object({
   // Set HOST_DATA_DIR to the actual host path (e.g. /home/ubuntu/data/tenants) when
   // they differ. Defaults to DATA_DIR when not set.
   HOST_DATA_DIR: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
-  // CONTAINER_NETWORK: Docker network to attach tenant containers to.
-  // Required when the control plane runs inside Docker Compose so tenant
-  // containers can reach the control plane (same network) for health checks.
-  CONTAINER_NETWORK: z.preprocess(v => v === '' ? undefined : v, z.string().min(1).optional()),
+  // Required from Phase 2.3 (deployment-convergence plan).
+  // DEPLOY SEQUENCING: ensure CONTAINER_NETWORK=claw-net is set in /etc/claw-orchestrator/env
+  // on ALL production hosts BEFORE deploying this schema change.
+  CONTAINER_NETWORK: z.preprocess(v => v === '' ? undefined : v, z.string().min(1)),
   TENANT_IMAGE: z.string().min(1),
   TEMPLATES_DIR: z.string().min(1).default('/opt/claw-orchestrator/templates/workspace'),
   OPENCLAW_CONFIG_TEMPLATE: z.string().min(1).default('/opt/claw-orchestrator/docker/tenant-image/openclaw.json'),

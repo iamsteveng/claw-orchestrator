@@ -2,10 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { AuditEventType, TenantStatus } from '@claw/shared-types';
 import { controlPlaneConfig } from '@claw/shared-config/control-plane';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, writeFile, copyFile, chmod } from 'node:fs/promises';
+import { mkdir, writeFile, copyFile } from 'node:fs/promises';
 import type { FastifyBaseLogger } from 'fastify';
 import { seedWorkspace } from './seed-workspace.js';
 import { rollbackProvisioning } from './rollback-provisioning.js';
+import { copyAuthFiles } from './copy-auth-files.js';
 
 export interface ProvisionRequest {
   slackTeamId: string;
@@ -106,25 +107,7 @@ export async function provisionTenant(
 
     // Copy credential files into the tenant home so openclaw can write usage stats
     // back to auth-profiles.json. Read-only bind mounts cause EBUSY on rename.
-    const hostHome = process.env.HOME ?? '/root';
-    const credFilePairs: [string, string][] = [
-      [
-        `${hostHome}/.openclaw/agents/main/agent/auth-profiles.json`,
-        `${dataDir}/home/.openclaw/agents/main/agent/auth-profiles.json`,
-      ],
-      [
-        `${hostHome}/.claude/.credentials.json`,
-        `${dataDir}/home/.claude/.credentials.json`,
-      ],
-    ];
-    for (const [src, dest] of credFilePairs) {
-      try {
-        await copyFile(src, dest);
-        await chmod(dest, 0o644);
-      } catch {
-        // Best-effort — container may still work with partial credentials
-      }
-    }
+    await copyAuthFiles(dataDir, log);
 
     // Seed workspace template files (including AGENTS.md merge logic)
     await seedWorkspace(`${dataDir}/workspace`, controlPlaneConfig.TEMPLATES_DIR);

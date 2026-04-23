@@ -23,14 +23,20 @@ async function main(): Promise<void> {
   const app = await buildApp(prisma, { logger: true });
 
   // Run prisma migrate deploy
+  const migrationLenient = process.env.CLAW_MIGRATION_LENIENT === '1';
   try {
     execSync(`npx prisma migrate deploy --schema "${PRISMA_SCHEMA}"`, {
       env: { ...process.env, DATABASE_URL: controlPlaneConfig.DATABASE_URL },
       stdio: 'pipe',
     });
-    app.log.info('Prisma migrations applied');
+    app.log.info('Prisma migrations applied successfully');
   } catch (err) {
-    app.log.warn({ err }, 'prisma migrate deploy failed (may be first run or non-fatal)');
+    if (migrationLenient) {
+      app.log.warn({ err }, 'prisma migrate deploy failed — CLAW_MIGRATION_LENIENT=1 is set, continuing anyway (not recommended for production)');
+    } else {
+      app.log.error({ err }, 'FATAL: prisma migrate deploy failed. Exiting. Set CLAW_MIGRATION_LENIENT=1 in /etc/claw-orchestrator/env to bypass (emergency use only).');
+      process.exit(1);
+    }
   }
 
   await prisma.$connect();
