@@ -194,7 +194,7 @@ if section_enabled 3; then
   mkdir -p "$SMOKE_DIR/home/.openclaw/agents/main/agent"
   mkdir -p "$SMOKE_DIR/home/.claude"
   cat > "$SMOKE_DIR/home/.openclaw/openclaw.json" <<'JSON'
-{"wizard":{"lastRunAt":"2026-01-01T00:00:00.000Z","lastRunVersion":"2026.4.15","lastRunMode":"local"},"auth":{"profiles":{"anthropic:default":{"provider":"anthropic","type":"token"}}},"gateway":{"port":19001,"mode":"local","bind":"auto"},"agents":{"defaults":{"model":{"primary":"anthropic/claude-sonnet-4-6"},"workspace":"/workspace"}}}
+{"wizard":{"lastRunAt":"2026-01-01T00:00:00.000Z","lastRunVersion":"2026.4.15","lastRunMode":"local"},"auth":{"profiles":{"anthropic:default":{"provider":"anthropic","mode":"token"}}},"gateway":{"port":19001,"mode":"local","bind":"auto"},"agents":{"defaults":{"model":{"primary":"anthropic/claude-sonnet-4-6"},"workspace":"/workspace"}}}
 JSON
   # Copy credentials into the smoke dir so the container uses copies, not the
   # real host files. Direct bind-mounts would let the gateway atomically rewrite

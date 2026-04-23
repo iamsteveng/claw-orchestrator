@@ -8,7 +8,7 @@
     "profiles": {
       "anthropic:default": {
         "provider": "anthropic",
-        "type": "token"
+        "mode": "token"
       }
     }
   },

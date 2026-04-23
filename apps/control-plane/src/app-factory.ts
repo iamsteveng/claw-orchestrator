@@ -125,7 +125,7 @@ export async function buildApp(
         `${dataDir}/home/.openclaw/openclaw.json`,
         JSON.stringify({
           wizard: { lastRunAt: '2026-01-01T00:00:00.000Z', lastRunVersion: '2026.3.13', lastRunMode: 'local' },
-          auth: { profiles: { 'anthropic:default': { provider: 'anthropic', type: 'token' } } },
+          auth: { profiles: { 'anthropic:default': { provider: 'anthropic', mode: 'token' } } },
           gateway: { port: 19001, mode: 'local', bind: 'auto' },
           agents: { defaults: { model: { primary: 'anthropic/claude-sonnet-4-6' }, workspace: '/workspace' } },
         }, null, 2),
