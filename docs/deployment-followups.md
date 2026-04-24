@@ -78,9 +78,9 @@ done
 
 **Cause:** The control-plane copies `~/.claude/.credentials.json` and `~/.openclaw/agents/main/agent/auth-profiles.json` from the host into each tenant's home directory at provision time. These files didn't exist on the EC2 host.
 
-**Fix:** `scp` both files from the local machine to the EC2 host before running `install.sh`. The `bootstrap.sh` already warns if these are missing — the warning should be treated as a blocker, not just advisory.
+**Fix:** `scp` both files from the local machine to the EC2 host before running `install.sh`.
 
-**Recommended addition to `bootstrap.sh`:** Check for both auth files and exit with a clear error if either is missing, rather than just warning.
+`bootstrap.sh` checks for both files and exits with `die "Auth files missing — tenant containers will fail to start."` if either is absent. This is a hard blocker, not advisory.
 
 ---
 

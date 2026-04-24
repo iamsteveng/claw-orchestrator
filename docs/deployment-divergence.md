@@ -16,9 +16,9 @@ This register documents every intentional behavioral difference between the **lo
 | 1 | DB file path | `/data/claw-orchestrator/db.sqlite` | `/data/tenants/orchestrator.db` (container-internal) | Intentional — different dirs by design | Schema hash parity verified by `PRAGMA journal_mode` check; validator uses `env-validator` with host-side path |
 | 2 | DB file ownership | `claw:claw 640` — writable only by root/claw | `root:root 644` — created by container root | Intentional — compose has no `claw` user | `local-test.sh` runs `docker exec claw-cp-test chmod o+w /data/tenants/orchestrator.db` after CP health before invoking validator |
 | 3 | DB world-write workaround | N/A — production services run as root and write directly | `local-test.sh` uses `docker exec chmod o+w` so host `ubuntu` can write allowlist entries via `sqlite3` | Intentional compose-only quirk | Test passes in both modes; workaround is documented in `scripts/local-test.sh` comments |
-| 4 | HTTPS / Caddy reverse proxy | Caddy on port 443 with Let's Encrypt TLS | No HTTPS — compose exposes plain HTTP only | Deferred — Phase 6 | Section 1 HTTPS check skipped via `SKIP_HTTPS_CHECK=1`; `local-test.sh` always sets this; deferred to future Phase 6 (`--profile caddy`) |
+| 4 | HTTPS / Caddy reverse proxy | Caddy on port 443 with Let's Encrypt TLS | No HTTPS — compose exposes plain HTTP only | Deferred — Phase 6 | Section 1 HTTPS check skipped via `SKIP_HTTPS_CHECK=1`; `local-test.sh` always sets this. Phase 6 scope: add `--profile caddy` to compose with self-signed cert; add `--caddy` flag to `local-test.sh`; update Section 1 to validate cert (tolerate self-signed) and HTTP→HTTPS redirect. |
 | 5 | Host ports | CP: 3200, relay: 3101 | CP: 13200, relay: 13101 | Intentional — coexists with production on same host | `local-test.sh` exports `CP_URL=http://localhost:13200` and `RELAY_LOCAL_URL=http://localhost:13101/...` before invoking `validate-deployment.sh` |
-| 6 | `CONTAINER_NETWORK` during Phase 2 rollout | `bridge` (existing ACTIVE tenants) → `claw-net` (new tenants, via passive reconcile) | `claw-orchestrator-test_default` (compose-named network with DNS) | Transitional — self-correcting within 48h idle-stop window | CP startup logs WARN for any ACTIVE tenant still on bridge; IP selection prefers named-network IP before fallback |
+| 6 | `CONTAINER_NETWORK` | `claw-net` (all new tenants; legacy ACTIVE tenants migrated passively via 48h idle-stop) | `claw-orchestrator-test_default` (compose-named network with DNS) | Stable — rollout window closed 2026-04-24 | IP selection prefers `networks[CONTAINER_NETWORK]?.IPAddress` before fallback; CP logs WARN if any tenant still on bridge |
 | 7 | Systemd restart semantics | `Restart=on-failure` per service (CP, relay, scheduler restart independently) | `restart: unless-stopped` (compose restarts on any exit including clean exit 0) | Accepted — no production bugs attributed to this difference | No compensating test; documented here; watch for clean-exit bugs if they emerge |
 | 8 | Process entry point | `node apps/control-plane/dist/index.js` run by systemd directly on host | Services run inside Docker containers via multi-stage Dockerfile | Intentional substrate difference | Compose images built from the same source; `pnpm -r build` produces identical dist output |
 
@@ -34,7 +34,9 @@ These divergences were identified and eliminated:
 | Non-deterministic IP selection in health-poll | Phase 2.2 | Prefer `networks[CONTAINER_NETWORK]?.IPAddress` before fallback |
 | Migration failure silently swallowed | Phase 3 | `process.exit(1)` on migrate failure; `CLAW_MIGRATION_LENIENT=1` escape hatch |
 | `user_data.sh` wrong `DATABASE_URL` | Phase 3b | Corrected to production path |
+| WAL mode | Verified 2026-04-24 | `PRAGMA journal_mode` on prod DB confirms `wal`; no code change needed |
+| `bootstrap.sh` auth file check advisory-only | Verified 2026-04-24 | Already a hard `die` after both checks; recommendation in followups.md was already implemented |
 
 ---
 
-*Last updated: 2026-04-23. Maintained by the team working on deployment convergence (plan: `.omc/plans/deployment-convergence.md`).*
+*Last updated: 2026-04-24. Maintained by the team working on deployment convergence (plan: `.omc/plans/deployment-convergence.md`).*
